@@ -313,3 +313,190 @@ export function resolveAutoLinkCandidate(opts: {
   }
   return null;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Claim number correction on a linked check (SQL 167, AWS backend)   */
+/* ------------------------------------------------------------------ */
+// Owner 2026-11-14: "Need to be able to change/correct claim number once edited for ledger to link to existing
+// claim". On the AWS backend a linked check's Save first asks claim_ledger_relink_check (inspect): when a claim of
+// this tenant already has the corrected number, the check moves to it (relink), with its loss draft and signature
+// requests, only before deposit; when no claim has it, the current claim is renamed as before (update_existing).
+// The tenant and the actor come from the signed-in user on the server; the body carries neither.
+
+export const CLAIM_LEDGER_RELINK_RPC = "claim_ledger_relink_check";
+
+export type ClaimLedgerRelinkAction = "inspect" | "relink";
+
+export type LinkedClaimNumberSavePlan =
+  | { mode: "relink_inspect"; claimId: string; claimNumber: string }
+  | Extract<ClaimNumberSavePlan, { mode: "update_existing" }>;
+
+/**
+ * Linked check Save. AWS backend: inspect first (relink_inspect). Legacy backend: today's in-place rename
+ * (update_existing). An unlinked check never reaches here (Find Existing Claim / Start New Claim Ledger).
+ */
+export function planLinkedClaimNumberSave(opts: {
+  awsBackend: boolean;
+  existingClaimId?: string | null;
+  claimNumber: string;
+}): LinkedClaimNumberSavePlan {
+  const plan = planClaimNumberSave({ existingClaimId: opts.existingClaimId, claimNumber: opts.claimNumber });
+  if (plan.mode !== "update_existing") {
+    throw new Error(CLAIM_LEDGER_NOT_LINKED);
+  }
+  if (opts.awsBackend) {
+    return { mode: "relink_inspect", claimId: plan.claimId, claimNumber: plan.claimNumber };
+  }
+  return plan;
+}
+
+export function claimLedgerRelinkArgs(opts: {
+  checkId: string;
+  claimNumber: string;
+  action: ClaimLedgerRelinkAction;
+}) {
+  const claimNumber = String(opts.claimNumber || "").trim();
+  if (!claimNumber) {
+    throw new Error("Enter a claim number");
+  }
+  if (!opts.checkId) {
+    throw new Error("Missing check");
+  }
+  if (opts.action !== "inspect" && opts.action !== "relink") {
+    throw new Error("Invalid claim number action");
+  }
+  return {
+    p_check_id: String(opts.checkId),
+    p_claim_number: claimNumber,
+    p_action: opts.action,
+  };
+}
+
+export type ClaimLedgerRelinkResult = {
+  ok?: boolean;
+  persisted?: boolean;
+  code?: string | null;
+  can_relink?: boolean;
+  claim_id?: string | null;
+  claim_number?: string | null;
+  policyholder_name?: string | null;
+  check_claim_id?: string | null;
+  old_claim_id?: string | null;
+  old_claim_number?: string | null;
+  old_claim_other_check_count?: number;
+  old_claim_remaining_check_count?: number;
+  old_claim_has_settlements?: boolean;
+  loss_draft_rows_to_move?: number;
+  signature_request_rows_to_move?: number;
+  loss_draft_rows_moved?: number;
+  signature_request_rows_moved?: number;
+};
+
+export type ClaimLedgerRelinkNext =
+  | { kind: "confirm_move"; result: ClaimLedgerRelinkResult }
+  | { kind: "rename" }
+  | { kind: "unchanged"; claimNumber: string };
+
+/** What the card does after inspect. Refusals arrive as errors (the API answers them 4xx). */
+export function claimLedgerRelinkNext(result: ClaimLedgerRelinkResult | null | undefined): ClaimLedgerRelinkNext {
+  const code = result?.code;
+  if (code === "relink_available" && result?.can_relink !== false && result?.claim_id) {
+    return { kind: "confirm_move", result: result as ClaimLedgerRelinkResult };
+  }
+  if (code === "no_match") return { kind: "rename" };
+  if (code === "unchanged") return { kind: "unchanged", claimNumber: String(result?.claim_number || "").trim() };
+  throw new Error(claimLedgerRelinkUserMessage(code));
+}
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace("{n}", String(n)));
+
+/** The confirm shown before a move: the target claim, then what changes on the old one. */
+export function claimLedgerRelinkConfirmCopy(result: ClaimLedgerRelinkResult) {
+  const target = String(result.claim_number || "").trim();
+  const oldNumber = String(result.old_claim_number || "").trim();
+  const oldLabel = oldNumber ? `claim #${oldNumber}` : "the current claim";
+  const others = asCount(result.old_claim_other_check_count);
+  const lossDrafts = asCount(result.loss_draft_rows_to_move);
+  const signatures = asCount(result.signature_request_rows_to_move);
+  const lines: string[] = [];
+  if (result.policyholder_name) lines.push(`Claim #${target} is ${String(result.policyholder_name).trim()}'s claim.`);
+  lines.push(others > 0
+    ? plural(others, `1 other check stays on ${oldLabel}.`, `{n} other checks stay on ${oldLabel}.`)
+    : `No other check is on ${oldLabel}; it will have no checks left.`);
+  if (result.old_claim_has_settlements) {
+    lines.push(`The settlement amounts entered on ${oldLabel} stay on it.`);
+  }
+  lines.push(lossDrafts > 0
+    ? plural(lossDrafts, "1 loss draft file moves with this check.", "{n} loss draft files move with this check.")
+    : "This check has no loss draft file to move.");
+  lines.push(signatures > 0
+    ? plural(signatures, "1 signature request moves with this check.", "{n} signature requests move with this check.")
+    : "This check has no signature requests to move.");
+  lines.push("Only checks that are not deposited can move.");
+  return {
+    title: `Claim #${target} exists — move this check (and its loss draft and signature requests) to it?`,
+    lines,
+    confirmLabel: `Move to claim #${target}`,
+  };
+}
+
+/** Toast after a move; old_claim_remaining_check_count is the old claim's checks left behind. */
+export function claimLedgerRelinkedToast(result: ClaimLedgerRelinkResult) {
+  const target = String(result.claim_number || "").trim();
+  const oldNumber = String(result.old_claim_number || "").trim();
+  const oldLabel = oldNumber ? `Claim #${oldNumber}` : "The previous claim";
+  const remaining = asCount(result.old_claim_remaining_check_count);
+  return {
+    title: `Check moved to claim #${target}`,
+    description: remaining > 0
+      ? `${oldLabel} still has ${plural(remaining, "1 check", "{n} checks")}.`
+      : `${oldLabel} has no checks left.`,
+  };
+}
+
+/** No claim has the corrected number: the current claim is renamed (today's Save). Warn when other checks share it. */
+export function claimLedgerRenameWarning(opts: {
+  otherCheckCount: number;
+  currentClaimNumber?: string | null;
+  newClaimNumber: string;
+}) {
+  const others = asCount(opts.otherCheckCount);
+  if (others <= 0) return null;
+  const current = String(opts.currentClaimNumber || "").trim();
+  const next = String(opts.newClaimNumber || "").trim();
+  return {
+    title: `No claim has #${next}. Rename claim${current ? ` #${current}` : ""} instead?`,
+    lines: [
+      plural(others, "1 other check shares this claim and will show the new number too.", "{n} other checks share this claim and will show the new number too."),
+    ],
+    confirmLabel: `Rename claim to #${next}`,
+  };
+}
+
+export function claimLedgerRelinkUserMessage(code: string | null | undefined) {
+  switch (code) {
+    case "locked":
+      return "This check is deposited (or voided or returned), so its claim can no longer be changed.";
+    case "ambiguous":
+      return "More than one claim has this number. The check was not moved.";
+    case "cross_tenant":
+      return "That claim number belongs to another company. The check was not moved.";
+    case "not_linked":
+      return "This check is not linked to a claim yet. Use Find Existing Claim to link it.";
+    case "no_match":
+      return "No claim has that number any more. The check was not moved.";
+    case "check_not_found":
+    case "tenant_mismatch":
+      return "This check was not found or is not writable.";
+    case "invalid_args":
+    case "invalid_field":
+    case "missing_required_field":
+      return "Enter a claim number.";
+    case "claim_ledger_relink_failed":
+      return "The check changed while it was being moved. Nothing was moved; refresh and try again.";
+    case "claim_ledger_relink_unavailable":
+      return "Moving a check to another claim is not available yet.";
+    default:
+      return "The claim number change was rejected. The check was not changed.";
+  }
+}

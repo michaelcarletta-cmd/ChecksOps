@@ -14,16 +14,27 @@ import { fundsReceivedFromScopedIntakeRows } from "@/lib/claimLedgerSync";
 import {
   CLAIM_LEDGER_LINK_RPC,
   CLAIM_LEDGER_NOT_LINKED,
+  CLAIM_LEDGER_RELINK_RPC,
   CLAIM_NUMBER_SAVE_SELECT,
   claimLedgerCreatedSummary,
   claimLedgerDiscoverySummary,
   claimLedgerLinkOrCreateArgs,
+  claimLedgerRelinkArgs,
+  claimLedgerRelinkConfirmCopy,
+  claimLedgerRelinkedToast,
+  claimLedgerRelinkNext,
+  claimLedgerRelinkUserMessage,
+  claimLedgerRenameWarning,
   claimLedgerUserMessage,
   claimLinkUserMessage,
   planClaimNumberSave,
+  planLinkedClaimNumberSave,
   resolveAuthoritativeClaimId,
   type ClaimLedgerLinkAction,
+  type ClaimLedgerRelinkAction,
+  type ClaimLedgerRelinkResult,
 } from "@/lib/checkClaimLinkGuard";
+import { runtimeHostname, shouldUseAwsChecksOpsBackendFor } from "@/lib/backendMode";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { displayCase } from "@/lib/displayCase";
 
@@ -34,6 +45,24 @@ interface Props {
   readOnly?: boolean;
   onLinked?: (claimId: string) => void;
 }
+
+/**
+ * Same backend decision as the data client (integrations/supabase/client): the AWS build, or a ChecksOps host with
+ * Cognito. Only the AWS API has claim_ledger_relink_check (SQL 167); the legacy backend keeps today's rename.
+ */
+const usesAwsBackend = () => import.meta.env.MODE === "aws" || shouldUseAwsChecksOpsBackendFor({
+  hostname: runtimeHostname(),
+  authProvider: String(import.meta.env.VITE_AUTH_PROVIDER || ""),
+});
+
+type RelinkRpcClient = {
+  rpc: (name: string, args: Record<string, unknown>) => Promise<{
+    data: unknown;
+    error: { message?: string; code?: string } | null;
+  }>;
+};
+
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const fmt = (n: number) =>
   `$${(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -46,6 +75,10 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
   const [saving, setSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [inspectResult, setInspectResult] = useState<any>(null);
+  // Linked check Save on the AWS backend: the move the user is asked to confirm, or the rename warning.
+  const [relinkPrompt, setRelinkPrompt] = useState<ClaimLedgerRelinkResult | null>(null);
+  const [renamePrompt, setRenamePrompt] = useState<ReturnType<typeof claimLedgerRenameWarning>>(null);
+  const awsBackend = usesAwsBackend();
 
   // Read-only mode (partner viewing a shared check): fetch via SECURITY
   // DEFINER RPC that validates access through shared_checks, so partner
@@ -234,9 +267,140 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       });
       return;
     }
+    let savePlan;
+    try {
+      savePlan = planLinkedClaimNumberSave({ awsBackend, existingClaimId, claimNumber: input });
+    } catch (e) {
+      toast({ title: "Could not save claim", description: errorMessage(e), variant: "destructive" });
+      return;
+    }
+    setRelinkPrompt(null);
+    setRenamePrompt(null);
+    setSaving(true);
+    if (savePlan.mode === "relink_inspect") {
+      // AWS: does a claim of this tenant already have the corrected number? (claim_ledger_relink_check inspect)
+      relinkRpc.mutate({ action: "inspect", claimNumber: savePlan.claimNumber });
+      return;
+    }
+    linkMutation.mutate({ claimNumber: input, existingClaimId });
+  };
+
+  /** No claim has the corrected number: today's rename of the current claim. */
+  const renameCurrentClaim = () => {
+    const existingClaimId = resolveExistingClaimId();
+    setRenamePrompt(null);
+    if (!existingClaimId) return;
     setSaving(true);
     linkMutation.mutate({ claimNumber: input, existingClaimId });
   };
+
+  const refreshAfterRelink = (newClaimId?: string | null, previousClaimId?: string | null) => {
+    for (const key of [
+      ["intake-check"], ["check-detail"], ["check-detail", checkIntakeItemId], ["claim-ledger"], ["claim-ledger-settlement"],
+      ["claim-ledger-checks"], ["claim-ledger-check-link"], ["check-intake-items"], ["review-settlement-check"],
+      ["loss-draft"], ["loss-drafts"], ["signature-requests"],
+    ]) {
+      qc.invalidateQueries({ queryKey: key });
+    }
+    for (const id of [newClaimId, previousClaimId]) {
+      if (!id) continue;
+      qc.invalidateQueries({ queryKey: ["claim-ledger", id] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-settlement", id] });
+      qc.invalidateQueries({ queryKey: ["claim-ledger-checks", id] });
+    }
+  };
+
+  // Correct a linked check's claim number (owner 2026-11-14; SQL 167 through the API). inspect writes nothing; relink
+  // moves this check, with its loss draft and signature requests, to the same-tenant claim the number names, before
+  // deposit only. Refusals come back as errors whose code is SQL 167's (locked, ambiguous, cross_tenant, ...).
+  const relinkRpc = useMutation({
+    mutationFn: async (vars: { action: ClaimLedgerRelinkAction; claimNumber: string }) => {
+      const args = vars.action === "relink"
+        ? claimLedgerRelinkArgs({ checkId: checkIntakeItemId, claimNumber: vars.claimNumber, action: "relink" })
+        : claimLedgerRelinkArgs({ checkId: checkIntakeItemId, claimNumber: vars.claimNumber, action: "inspect" });
+      const { data, error } = await (supabase as unknown as RelinkRpcClient).rpc(CLAIM_LEDGER_RELINK_RPC, args);
+      if (error) {
+        const err = new Error(error.message || claimLedgerRelinkUserMessage(error.code));
+        (err as Error & { code?: string }).code = error.code;
+        throw err;
+      }
+      const result = (data || {}) as ClaimLedgerRelinkResult;
+      if (vars.action === "inspect") return { action: "inspect" as const, result };
+      if (result.ok === false) {
+        const err = new Error(claimLedgerRelinkUserMessage(result.code));
+        (err as Error & { code?: string }).code = result.code ?? undefined;
+        throw err;
+      }
+      if (result.code === "unchanged") return { action: "relink" as const, result };
+      if (result.code !== "relinked") throw new Error(claimLedgerRelinkUserMessage(result.code));
+      const { data: proof, error: proofErr } = await supabase
+        .from("check_intake_items")
+        .select("id, claim_id")
+        .eq("id", checkIntakeItemId)
+        .maybeSingle();
+      if (proofErr) throw proofErr;
+      if (String(proof?.claim_id || "") !== String(result.claim_id || "")) {
+        throw new Error("Authoritative claim_id did not match the moved claim.");
+      }
+      return { action: "relink" as const, result };
+    },
+    onSuccess: (res) => {
+      if (res.action === "inspect") {
+        let next;
+        try {
+          next = claimLedgerRelinkNext(res.result);
+        } catch (e) {
+          toast({ title: "Could not change claim number", description: errorMessage(e), variant: "destructive" });
+          return;
+        }
+        if (next.kind === "confirm_move") {
+          setRelinkPrompt(next.result);
+          return;
+        }
+        if (next.kind === "unchanged") {
+          setEditing(false);
+          toast({ title: "Claim number unchanged", description: `This check is already on claim #${next.claimNumber}.` });
+          return;
+        }
+        // no_match: rename the current claim as before, after a warning when other checks share it.
+        const warning = claimLedgerRenameWarning({
+          otherCheckCount: siblingChecks.filter((c: { id?: string }) => c.id !== checkIntakeItemId).length,
+          currentClaimNumber: claim?.claim_number ?? null,
+          newClaimNumber: input,
+        });
+        if (warning) {
+          setRenamePrompt(warning);
+          return;
+        }
+        renameCurrentClaim();
+        return;
+      }
+      setRelinkPrompt(null);
+      setEditing(false);
+      if (res.result.code === "unchanged") {
+        toast({ title: "Claim number unchanged", description: `This check is already on claim #${res.result.claim_number ?? ""}.` });
+        return;
+      }
+      refreshAfterRelink(res.result.claim_id, res.result.old_claim_id);
+      if (res.result.claim_id && onLinked) onLinked(res.result.claim_id);
+      toast(claimLedgerRelinkedToast(res.result));
+    },
+    onError: (e: Error & { code?: string }) => {
+      toast({
+        title: e.code === "locked" ? "Check is deposited" : "Could not change claim number",
+        description: e.message || claimLedgerRelinkUserMessage(e.code),
+        variant: "destructive",
+      });
+    },
+    onSettled: () => setSaving(false),
+  });
+
+  const handleConfirmRelink = () => {
+    setSaving(true);
+    relinkRpc.mutate({ action: "relink", claimNumber: input });
+  };
+
+  const busy = saving || relinkRpc.isPending || linkMutation.isPending;
 
   const ledgerRpc = useMutation({
     mutationFn: async (action: ClaimLedgerLinkAction) => {
@@ -600,16 +764,66 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
       </CardHeader>
       <CardContent className="space-y-3">
         {!readOnly && editing && (
-          <div className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Re-link to a different claim number"
-              className="h-8 text-sm"
-            />
-            <Button size="sm" disabled={saving || !input.trim()} onClick={handleLinkedSave}>
-              {saving ? "Saving..." : "Save"}
-            </Button>
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Input
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  setRelinkPrompt(null);
+                  setRenamePrompt(null);
+                }}
+                placeholder="Correct claim number"
+                aria-label="Correct claim number"
+                className="h-8 text-sm"
+              />
+              <Button size="sm" disabled={busy || !input.trim()} onClick={handleLinkedSave}>
+                {busy ? "Saving..." : "Save"}
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {awsBackend
+                ? "If another claim already has this number, this check moves to it (before deposit) with its loss draft and signature requests. Otherwise Saving renames this claim."
+                : "Saving renames this claim for every check on it."}
+            </p>
+            {relinkPrompt && (() => {
+              const copy = claimLedgerRelinkConfirmCopy({
+                ...relinkPrompt,
+                policyholder_name: relinkPrompt.policyholder_name ? displayCase(relinkPrompt.policyholder_name) : null,
+              });
+              return (
+                <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+                  <p className="font-medium text-foreground">{copy.title}</p>
+                  {copy.lines.map((line) => (
+                    <p key={line} className="text-muted-foreground">{line}</p>
+                  ))}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button size="sm" disabled={busy} onClick={handleConfirmRelink}>
+                      {copy.confirmLabel}
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => setRelinkPrompt(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+            {renamePrompt && (
+              <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+                <p className="font-medium text-foreground">{renamePrompt.title}</p>
+                {renamePrompt.lines.map((line) => (
+                  <p key={line} className="text-muted-foreground">{line}</p>
+                ))}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button size="sm" disabled={busy} onClick={renameCurrentClaim}>
+                    {renamePrompt.confirmLabel}
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => setRenamePrompt(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
