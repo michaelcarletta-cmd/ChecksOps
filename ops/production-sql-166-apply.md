@@ -43,7 +43,7 @@ grant, trigger or row is changed by the apply. The db-readonly-validate trigger 
 `set_monitoring_type` and every escrow and draw action are unchanged. No API, Lambda or SPA change is part of this pin:
 the Desk API action and the Desk page's switch and warning ship afterwards through their own guarded paths.
 
-**Status:** applied in staging (wave 58, 2026-11-14, apply run 43627727453); staging acceptance: the staging apply under the owner's run approval ("apply SQL 166 and SQL 167 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `6b4e6de5-3548-4477-927c-bcbda4a11391`). Not applied in production.
+**Status:** applied in staging (wave 58, 2026-11-14, apply run 43627727453); staging acceptance: the staging apply under the owner's run approval ("apply SQL 166 and SQL 167 in staging"; no separate acceptance statement); applied to production (2026-11-14); the production pin is retired (`execute: false`).
 
 **Staging read-live (2026-11-14).** Run 43623201872 (main `3239508c`, after executor inspect run 43622613027 and executor deploy
 run 43622915623 (executor CodeSha256 `BGu9krtX…` -> `4gH9sgaz…`)), under the owner's words "apply SQL 166 and SQL 167 in
@@ -78,6 +78,26 @@ to "Shall I open the pin PR?". The owner merges the pin change; the apply runs o
 under the owner's words for that run (phrase `LET_MORTGAGE_DESK_SWITCH_LOSS_DRAFT_MONITORING`).
 
 Production authorization phrase (pin `authorization_phrase`): `LET_MORTGAGE_DESK_SWITCH_LOSS_DRAFT_MONITORING`.
+
+**Production apply (2026-11-14).** After the pin change (#1909, merged to main as `d8da56bac`), transfer run 43632903546
+(`sql53-temporary-transfer.yml`) staged main `d8da56bac` (tarball sha256
+`b2d3cadcfea1a2c9681de708d4546f5bc3e7506a72395b3c1f3516617c149774`, checked by `sha256sum -c` on the runner; `SOURCE_COMMIT`
+matched). Three AWS-managed SSM commands were listed InProgress on the stopped runner, queued at 18:55Z during the
+production inspect `6b4e6de5`: `d1da09c7` AmazonInspector2-ConfigureInspectorSsmPlugin (Success), `007bb4e8` AWS-ConfigureAWSPackage (Success), `36b774e3` AmazonInspector2-ConfigureInspectorSsmPluginLinux (Failed); on the owner's words "Let them finish first" the runner was started and no SQL
+command was sent until nothing was in progress (60 s). Under the owner's words "apply SQL 166 and SQL 167 in production" (passed verbatim to
+this run and to SQL 167's, in the same runner session), on `i-0c35557c4e5385406` (root volume 39% used): one-shot `--phase inspect`
+(SSM `d82a9d0b-4f11-48cc-b4eb-f46417374112`, Success, exit 0, steps pin, source, inspect and contracts ok, nothing written) read live
+`11a10b33…` (`live_matches_expected` true, `already_applied` false, `precondition_failures` `[]`); the apply command
+was sent only after that. Then `--phase apply` (SSM `a4f2aed0-51ce-4444-8387-1fff041fd4ef`, Success, exit 0, run
+`cca3fb1a-8d24-45b5-838d-5ec0e2e73bfd`, workstream `prod-sql166-desk-set-monitoring-20261114`, one_use_id
+`sql166-prod-9a437e99-306b-46b6-968e-2a0cb7cca1ec`): contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest
+`3cd2a81b…`; receipt `11a10b33…` → `5c8e030f32fdfbaf892a7496a5b5c71c02aca0b6494cf04b9e62ab71e3534e9e` (intended), result `applied`,
+unrelated catalog `35637555…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`,
+`aws_mortgage_desk_set_monitoring(uuid, text)` `intended` with EXECUTE `[checksops EXECUTE, owner EXECUTE]`. The run's whole output arrived (20538 bytes, sha256
+`1f002c3ec60407388070921661f03920bbb48795dfac5a4051e4529768d43d83`; read back in compact form and re-serialized to that same size and
+sha256; the copy on the runner was removed afterwards). A process check after each apply found no one-shot running and the runner
+was stopped afterwards. Recorded in the pin's `applied` and `production_evidence`; `execute` is false again. Production
+acceptance (a Mortgage Desk user switching loss-draft monitoring) had not been reported by the owner when this record was written; this record does not claim it.
 
 ## Fingerprint
 
