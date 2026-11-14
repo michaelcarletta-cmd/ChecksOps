@@ -215,12 +215,14 @@ test('pay: a vendor recipient in the Funds tab and the payroll dialog, nowhere e
     'src/components/payroll/RunPayrollDialog.tsx',
     // Read-only: Tax & 1099 uses the list to recognise vendor sends; nothing is paid from there.
     'src/components/ledger/TaxSummary.tsx',
+    // A partner's send from a check shared with it pays its own vendor payees (partnerSend.ts).
+    'src/components/payments/PartnerSendPanel.tsx',
   ]);
   const users = srcFiles.filter((f) => /useVendorPayees\b/.test(read(f)));
   assert.deepEqual(users.filter((f) => !allowed.has(f)), []);
   assert.doesNotMatch(read('src/components/ledger/TaxSummary.tsx'), /sendPayment|sendPayrollPayment|kind: "vendor"/);
   const vendorSends = srcFiles.filter((f) => /kind: "vendor"/.test(read(f)));
-  assert.deepEqual(vendorSends.sort(), ['src/components/disbursement/DisbursementConsole.tsx', 'src/lib/payments/sends.ts']);
+  assert.deepEqual(vendorSends.sort(), ['src/components/disbursement/DisbursementConsole.tsx', 'src/lib/payments/partnerSend.ts', 'src/lib/payments/sends.ts']);
 });
 
 test('two-factor: vendor sends reuse the existing wallet.fund step-up and retry', () => {

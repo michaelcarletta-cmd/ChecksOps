@@ -14,6 +14,7 @@ import { InlineErrorBoundary } from "@/components/InlineErrorBoundary";
 import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeownerBankLinkDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { ProjectPlanCard } from "@/components/homeowner-ledger/ProjectPlanCard";
+import { PartnerSendPanel } from "@/components/payments/PartnerSendPanel";
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
@@ -480,6 +481,17 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         checkIntakeItemId={checkIntakeItemId}
         claimId={claimId ?? null}
       />
+      )}
+
+      {/* A check shared with this organization: send onward from what it received on it (partnerSend.ts). */}
+      {readOnly && (
+        <InlineErrorBoundary label="Send from this check">
+          <PartnerSendPanel
+            checkIntakeItemId={checkIntakeItemId}
+            checkNumber={checkNumber}
+            settledRecordedCents={Math.round(receivedFromPayments * 100)}
+          />
+        </InlineErrorBoundary>
       )}
 
       {/* Disburse buttons */}
