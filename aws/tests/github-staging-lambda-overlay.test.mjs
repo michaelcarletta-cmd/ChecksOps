@@ -535,8 +535,12 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // (the Starter Package, 2026-11-10, which needs SQL 152) is such a SQL now: tenant-billing-engine.mjs and
   // tenant-billing-handlers.mjs waited for it in both environments. SQL 154 (2026-11-11) replaces SQL 151, never
   // applied, so the hold was SQL 154's until its record change (staging run 43063499920, production 2026-11-11). No SQL
-  // is pending everywhere now.
-  const pendingEverywhere = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
+  // is pending everywhere now. SQL 167 (the Claim Ledger relink, 2026-11-14, which holds workflow-rpc.mjs) is staging
+  // first: applied in staging (run 43628481801, recorded below and in its production pin's staging_acceptance), its
+  // production apply not yet recorded, so production refuses workflow-rpc.mjs until its record change.
+  const pendingInProduction = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
+  assert.deepEqual(pendingInProduction, ['aws/workflows/sql/167_claim_ledger_relink_check.sql']);
+  const pendingEverywhere = pendingInProduction.filter((file) => STAGING_SQL.sql[file]?.verified_live !== true);
   assert.deepEqual(pendingEverywhere, []);
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !pendingEverywhere.includes(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
@@ -609,9 +613,13 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
   // run 43510673897), shown the same way.
   const SQL165 = 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql';
   stagingSqlLive.sql[SQL165] = { verified_live: false, evidence: null };
+  // The Claim Ledger relink plan (2026-11-14) moved workflow-rpc.mjs on to SQL 167 (live in staging, run 43628481801),
+  // shown the same way.
+  const SQL167 = 'aws/workflows/sql/167_claim_ledger_relink_check.sql';
+  stagingSqlLive.sql[SQL167] = { verified_live: false, evidence: null };
   assert.equal(STAGING_SQL.sql[SQL148].verified_live, true);
   const PENDING = new Set([]);
-  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL165], ['providers/production/moov-send.mjs', SQL165], ['tenant-billing-engine.mjs', SQL154], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL154]]) {
+  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL167], ['providers/production/moov-send.mjs', SQL165], ['tenant-billing-engine.mjs', SQL154], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL154]]) {
     assert.equal(PLAN.members[member].sql_before, sqlBefore, member);
     assert.equal(stagingSqlBefore(member).verified_live_in_staging, !PENDING.has(sqlBefore), `${member}: released by the committed record unless pending`);
     assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: sqlBefore, verified_live_in_staging: false, evidence: null }, member);

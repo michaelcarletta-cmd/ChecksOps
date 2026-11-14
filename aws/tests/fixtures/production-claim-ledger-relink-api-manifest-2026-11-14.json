@@ -1,0 +1,15 @@
+{
+  "workstream_id": "claim-ledger-relink-api",
+  "authorization": "Pending owner review (2026-11-14). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Claim Ledger: correct a linked check's claim number so the check joins the claim that number names (owner 2026-11-14: \"Need to be able to change/correct claim number once edited for ledger to link to existing claim\"; decisions: correctable only before deposit, the loss draft and signature requests move with the check, a number that matches no claim keeps today's rename). workflow-rpc.mjs adds the safe write RPC claim_ledger_relink_check (POST /data/rpc), which calls SQL 167's public.claim_ledger_relink_check with the check's own tenant and the verified caller as actor (p_tenant_id and p_actor_id in the body are ignored), the same tenant member gate as claim_ledger_link_or_create, p_action inspect or relink only, and SQL 167's refusals answered as 4xx with a message (locked 409: deposited, voided or returned). It needs SQL 167 live: held on SQL 167. One REPLACE from its recorded applied bytes (the vendor payments API applied record; the eighth production rebuild, apply 43606264549, counted workflow-rpc.mjs as same, so those bytes are still live), with its own guarded overlay run (staging, then production). REPLACE workflow-rpc.mjs 6ec0fd5a -> 961a1866. No member is added; no import changes. index.mjs is untouched. Planning only.",
+  "members": {
+    "workflow-rpc.mjs": {
+      "live_sha256": "6ec0fd5a6c37e99db60b16d0b3349a5b96994fad3600db5030db17eac67d17dd",
+      "accepted_sha256": "961a1866892ec6d3494c2fc21d7ac3248ec8884ade62c33987245e0f7143400e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-vendor-payments-api-applied-manifest-2026-11-14.json"
+    }
+  }
+}
