@@ -31,6 +31,8 @@ import {
 const SHOW_VENDOR_PAYMENTS = PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS;
 
 type Speed = PayrollSpeed;
+/** Who the payment is for: a stakeholder (ACH to its bank) or a vendor payee (its ChecksOps wallet). */
+type PayeeKind = "stakeholder" | "vendor";
 
 // Moov pricing — same schedule used by the claim-check disbursement console. One source,
 // shared with Revenue & Profit, which counts the fee of each paid run as an expense.
@@ -56,8 +58,10 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const [speed, setSpeed] = useState<Speed>("next_day");
   const [memo, setMemo] = useState<string>("");
   const [step, setStep] = useState<"form" | "confirm">("form");
+  const [payeeKind, setPayeeKind] = useState<PayeeKind>("stakeholder");
 
   const resetForm = () => {
+    setPayeeKind("stakeholder");
     setStakeholderId("");
     setAmountStr("");
     setSpeed("next_day");
@@ -77,7 +81,19 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   );
   // A vendor payee (Settings → Bank Account/Stakeholders → Vendors) is an allowed single recipient,
   // paid to its ChecksOps wallet only. Its select value is "vendor:<vendor_tenant_id>".
-  const { data: vendorPayees = [] } = useVendorPayees(tenant?.id, open);
+  const {
+    data: vendorPayees = [],
+    isLoading: vendorsLoading,
+    error: vendorsError,
+  } = useVendorPayees(tenant?.id, open);
+  // The payee list is one kind at a time. Before, vendors were a group after every stakeholder in a
+  // 300px list whose scrollbar Radix hides, so with a few stakeholders they were out of sight.
+  const showingVendors = SHOW_VENDOR_PAYMENTS && payeeKind === "vendor";
+  const choosePayeeKind = (kind: PayeeKind) => {
+    if (kind === payeeKind) return;
+    setPayeeKind(kind);
+    setStakeholderId("");
+  };
   const selectedVendor = useMemo(() => {
     const vendorTenantId = SHOW_VENDOR_PAYMENTS ? vendorTenantIdFromKey(stakeholderId) : null;
     return vendorTenantId ? vendorPayees.find((v) => v.vendor_tenant_id === vendorTenantId && v.vendor_active) ?? null : null;
@@ -202,24 +218,41 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>Payee</Label>
-              <Select value={stakeholderId} onValueChange={setStakeholderId} disabled={isLoading}>
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoading ? "Loading..." : payees.length ? "Choose a stakeholder" : "No active stakeholders"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {payees.map((p) => {
-                    const payable = isPayableStakeholder(p);
+              {SHOW_VENDOR_PAYMENTS && (
+                <div role="radiogroup" aria-label="Pay a" className="grid grid-cols-2 gap-2" data-testid="payroll-payee-kind">
+                  {([
+                    { choice: "stakeholder" as PayeeKind, label: "Stakeholder", hint: "ACH to their bank" },
+                    { choice: "vendor" as PayeeKind, label: "Vendor", hint: "ChecksOps wallet" },
+                  ]).map(({ choice, label, hint }) => {
+                    const checked = payeeKind === choice;
                     return (
-                      <SelectItem key={p.id} value={p.id} disabled={!payable}>
-                        {activeStakeholderName(p)}
-                        {p.custname && p.custname !== activeStakeholderName(p) && (
-                          <span className="text-muted-foreground text-xs"> · {p.custname}</span>
+                      <button
+                        key={choice}
+                        type="button"
+                        role="radio"
+                        aria-checked={checked}
+                        data-testid={`payroll-payee-kind-${choice}`}
+                        onClick={() => choosePayeeKind(choice)}
+                        className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                          checked ? "border-primary bg-primary/10 font-medium" : "border-border hover:bg-accent"
+                        }`}
+                      >
+                        {label}
+                        {choice === "vendor" && vendorPayees.length > 0 && (
+                          <span className="text-muted-foreground text-xs"> ({vendorPayees.length})</span>
                         )}
-                        {!payable && <span className="text-muted-foreground text-xs"> · Bank setup pending</span>}
-                      </SelectItem>
+                        <span className="block text-[11px] font-normal text-muted-foreground">{hint}</span>
+                      </button>
                     );
                   })}
-                  {SHOW_VENDOR_PAYMENTS && vendorPayees.length > 0 && (
+                </div>
+              )}
+              {showingVendors ? (
+                <Select value={stakeholderId} onValueChange={setStakeholderId} disabled={vendorsLoading || vendorPayees.length === 0}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={vendorsLoading ? "Loading..." : vendorPayees.length ? "Choose a vendor" : "No vendors yet"} />
+                  </SelectTrigger>
+                  <SelectContent>
                     <SelectGroup>
                       <SelectLabel className="text-xs">Vendors (ChecksOps wallet)</SelectLabel>
                       {vendorPayees.map((v) => (
@@ -229,13 +262,49 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
                         </SelectItem>
                       ))}
                     </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select value={stakeholderId} onValueChange={setStakeholderId} disabled={isLoading}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={isLoading ? "Loading..." : payees.length ? "Choose a stakeholder" : "No active stakeholders"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {payees.map((p) => {
+                      const payable = isPayableStakeholder(p);
+                      return (
+                        <SelectItem key={p.id} value={p.id} disabled={!payable}>
+                          {activeStakeholderName(p)}
+                          {p.custname && p.custname !== activeStakeholderName(p) && (
+                            <span className="text-muted-foreground text-xs"> · {p.custname}</span>
+                          )}
+                          {!payable && <span className="text-muted-foreground text-xs"> · Bank setup pending</span>}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              )}
               {selectedVendor && (
                 <p className="text-[11px] text-muted-foreground">{VENDOR_WALLET_ONLY_NOTE} The normal send fee applies.</p>
               )}
-              {payees.length === 0 && !isLoading && vendorPayees.length === 0 && (
+              {showingVendors && vendorsError && (
+                <Alert variant="destructive" className="mt-2" data-testid="payroll-vendors-error">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    {vendorsError instanceof Error ? vendorsError.message : "Vendors could not be loaded"}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {showingVendors && !vendorsLoading && !vendorsError && vendorPayees.length === 0 && (
+                <Alert variant="default" className="mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    No vendors yet. Add a vendor by its Partner Code in <strong>Settings → Bank Account/Stakeholders → Vendors</strong>.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {!showingVendors && payees.length === 0 && !isLoading && (
                 <Alert variant="default" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
@@ -243,7 +312,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
                   </AlertDescription>
                 </Alert>
               )}
-              {payees.length > 0 && payableCount === 0 && !isLoading && !selectedVendor && (
+              {!showingVendors && payees.length > 0 && payableCount === 0 && !isLoading && (
                 <Alert variant="default" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">

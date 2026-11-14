@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Send, Lock } from "lucide-react";
 import { RunPayrollDialog } from "@/components/payroll/RunPayrollDialog";
 import { PayrollHistoryTable } from "@/components/payroll/PayrollHistoryTable";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 
 export function PayrollTab() {
   // Owner policy: every member of the tenant is a user with the same rights.
@@ -28,7 +29,11 @@ export function PayrollTab() {
         <div>
           <h2 className="text-lg font-semibold">Payroll</h2>
           <p className="text-sm text-muted-foreground">
-            Send ACH payments to assistants, sales reps, vendors, or anyone else not tied to a specific claim check. Payees are the <strong>Active Stakeholders</strong> added in Settings.
+            Send ACH payments to assistants, sales reps, vendors, or anyone else not tied to a specific claim check. Payees are the <strong>Active Stakeholders</strong> added in Settings
+            {PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS && (
+              <>, and the <strong>Vendors</strong> added in Settings, paid to their ChecksOps wallet</>
+            )}
+            .
           </p>
         </div>
         <Button onClick={() => setOpen(true)} className="gap-2">

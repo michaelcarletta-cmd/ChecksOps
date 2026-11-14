@@ -72,7 +72,10 @@ test('flag: SHOW_VENDOR_PAYMENTS is true, typed, and not read from the environme
   assert.match(funds, /const SHOW_VENDOR_PAYMENTS = PAYMENT_FLAGS\.SHOW_VENDOR_PAYMENTS;/);
   assert.match(funds, /\{SHOW_VENDOR_PAYMENTS && checkIntakeItemId && \(/);
   assert.match(payroll, /const SHOW_VENDOR_PAYMENTS = PAYMENT_FLAGS\.SHOW_VENDOR_PAYMENTS;/);
-  assert.match(payroll, /\{SHOW_VENDOR_PAYMENTS && vendorPayees\.length > 0 && \(/);
+  // Payroll: a "Pay a: Stakeholder / Vendor" choice behind the flag, then one list per kind
+  // (aws/tests/payroll-vendor-picker.test.mjs renders it).
+  assert.match(payroll, /const showingVendors = SHOW_VENDOR_PAYMENTS && payeeKind === "vendor";/);
+  assert.match(payroll, /\{SHOW_VENDOR_PAYMENTS && \(\s*<div role="radiogroup" aria-label="Pay a"/);
   assert.match(hook, /enabled: PAYMENT_FLAGS\.SHOW_VENDOR_PAYMENTS && !!tenantId && enabled,/);
 });
 
