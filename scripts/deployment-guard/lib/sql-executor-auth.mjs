@@ -3828,8 +3828,9 @@ export const AUTHORIZED_SQL165_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR = Object.f
 // claim from monitor to not monitored, so the tenants see that type of update"). One new SECURITY DEFINER function behind
 // SQL 122's aws_mortgage_desk_working_request (the assigned mortgage agent or the platform owner, request in progress):
 // sets the request's loss draft monitoring_type, writes the audit row and one check-thread message for the tenant, and
-// returns escrow_or_draws_recorded for the Desk warning; EXECUTE for checksops and the owner. No predecessor. Pending until
-// a reviewed pin change records a staging read-live (wave 58 when approved; ops/production-sql-166-apply.md).
+// returns escrow_or_draws_recorded for the Desk warning; EXECUTE for checksops and the owner. No predecessor. Staging apply
+// authorized (wave 58) from staging read-live run 43623201872: the function absent, equal to the derived pre-state
+// (ops/production-sql-166-apply.md).
 export const AUTHORIZED_SQL166_MORTGAGE_DESK_SET_MONITORING = Object.freeze({
   key: 'sql166',
   filename: 'aws/workflows/sql/166_mortgage_desk_set_monitoring.sql',
@@ -3837,9 +3838,11 @@ export const AUTHORIZED_SQL166_MORTGAGE_DESK_SET_MONITORING = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '864d41dc646145a4af11e933e0a708c31dd07ad2',
   source_sha256: '632a258a90742fc6f30c206533624e72b295c5d0d87ad8d85d1a5a920d3e71d5',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-14: staging apply (wave 58) from staging read-live run 43623201872',
+  execute: true,
+  // Staging read-live run 43623201872 (main 3239508c, executor deploy run 43622915623): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: '11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608',
   // Code-derived: releaseIntendedHash('sql166', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '5c8e030f32fdfbaf892a7496a5b5c71c02aca0b6494cf04b9e62ab71e3534e9e',
   function_identities: Object.freeze([
@@ -3851,8 +3854,8 @@ export const AUTHORIZED_SQL166_MORTGAGE_DESK_SET_MONITORING = Object.freeze({
 // edited for ledger to link to existing claim"). Creates public.claim_ledger_relink_check(uuid, uuid, text, text, uuid),
 // a SECURITY DEFINER inspect / relink that moves a not-yet-deposited check (SQL 43's lock rule), its loss draft and its
 // signature requests to the existing same-tenant claim the corrected number names (SQL 44's match; never creates a
-// claim), with one check_audit_log row. No predecessor (release-sql-specs.mjs). Pending until a reviewed pin change
-// records a staging read-live; staging wave 59 when approved (ops/production-sql-167-apply.md).
+// claim), with one check_audit_log row. No predecessor (release-sql-specs.mjs). Staging apply authorized (wave 59) from
+// staging read-live run 43623494491: the function absent, equal to the derived pre-state (ops/production-sql-167-apply.md).
 export const AUTHORIZED_SQL167_CLAIM_LEDGER_RELINK_CHECK = Object.freeze({
   key: 'sql167',
   filename: 'aws/workflows/sql/167_claim_ledger_relink_check.sql',
@@ -3860,9 +3863,11 @@ export const AUTHORIZED_SQL167_CLAIM_LEDGER_RELINK_CHECK = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '254932308e387e00214522f590cef5082eba3a02',
   source_sha256: '72bd9ae6a3d336b049d6e7d11ae28da061bf052a5516912ac690a2276b288c6d',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-14: staging apply (wave 59) from staging read-live run 43623494491',
+  execute: true,
+  // Staging read-live run 43623494491 (main 3239508c, executor deploy run 43622915623): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: '45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343',
   // Code-derived: releaseIntendedHash('sql167', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c',
   function_identities: Object.freeze([

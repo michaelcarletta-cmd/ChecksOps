@@ -297,6 +297,16 @@ export const STAGING_WAVE1 = Object.freeze({
   // (deploy run 43506159674, CodeSha256 cE42JmZv...): already_applied false, precondition_failures [], prerequisites_missing [].
   // Equal to the derived pre-state.
   sql165: Object.freeze({ wave: 57, approved: '2026-11-13', run: '43506600170', live: '3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248' }),
+  // Wave 58 (owner approved 2026-11-14, "apply SQL 166 and SQL 167 in staging"): SQL 166, the Mortgage Desk agent switches
+  // the loss draft between Monitored and Not Monitored. Read at main 3239508c with the executor current (inspect run
+  // 43622613027, deploy run 43622915623, CodeSha256 BGu9krtX... -> 4gH9sgaz...): already_applied false, precondition_failures
+  // [], prerequisites_missing [], the function absent. Equal to the derived pre-state.
+  sql166: Object.freeze({ wave: 58, approved: '2026-11-14', run: '43623201872', live: '11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608' }),
+  // Wave 59 (owner approved 2026-11-14, "apply SQL 166 and SQL 167 in staging"): SQL 167, claim_ledger_relink_check moves a
+  // not-yet-deposited check to the existing claim its corrected number names. Read at main 3239508c with the executor
+  // current (deploy run 43622915623): already_applied false, precondition_failures [], prerequisites_missing [], the
+  // function absent. Equal to the derived pre-state.
+  sql167: Object.freeze({ wave: 59, approved: '2026-11-14', run: '43623494491', live: '45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -308,7 +318,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-57 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-59 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */
