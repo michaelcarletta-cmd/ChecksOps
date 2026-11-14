@@ -239,7 +239,37 @@ const vendorApiRecordPre = (row) => {
 // (vendorApiPre, which reads further back, applies it first). The eighth sections (staging inspect 43602853354, applied
 // 43604345243; production inspect 43604759009, applied 43606264549) list both with these bytes; no earlier section does.
 const NO_ADDITIONAL_MANIFEST = 'aws/tests/fixtures/production-no-additional-check-api-manifest-2026-11-14.json';
-const noAdditionalPre = (row) => {
+// Mortgage Desk set monitoring API (2026-11-14, owner 2026-11-14 "Mortgage agent needs to be able to change the claim from
+// monitor to not monitored, so the tenants see that type of update"; SQL 166): mortgage-desk-return.mjs (its row moves from
+// the SQL 122 ADD to a REPLACE) and workflow-rpc.mjs REPLACE their applied bytes through the production overlay plan, both
+// held on SQL 166, planning only. Not a member of any recorded rebuild section: the eighth sections count both as same (live
+// with their applied bytes). deskMonitoringPre reads a row as it stood before that plan; noAdditionalPre applies it first.
+const DESK_MONITORING_MANIFEST = 'aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json';
+const DESK_MONITORING_PREVIOUS_ROWS = Object.freeze({
+  'mortgage-desk-return.mjs': Object.freeze({
+    operation: 'add', expected_live_sha256: null, sql_before: 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql',
+    manifest: 'aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json',
+  }),
+  'workflow-rpc.mjs': Object.freeze({
+    operation: 'replace', sql_before: 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql', manifest: VENDOR_API_APPLIED_MANIFEST,
+  }),
+});
+const deskMonitoringPre = (row) => {
+  if (!row || row.manifest !== DESK_MONITORING_MANIFEST) return row;
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, DESK_MONITORING_MANIFEST), 'utf8')).members;
+  const [name, entry] = Object.entries(planned).find(([, e]) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256) || [];
+  assert.ok(entry, 'a desk set monitoring row names its manifest entry');
+  const previous = DESK_MONITORING_PREVIOUS_ROWS[name];
+  return {
+    operation: previous.operation,
+    accepted_sha256: entry.live_sha256,
+    expected_live_sha256: 'expected_live_sha256' in previous ? previous.expected_live_sha256 : entry.live_sha256,
+    sql_before: previous.sql_before,
+    manifest: previous.manifest,
+  };
+};
+const noAdditionalPre = (row0) => {
+  const row = deskMonitoringPre(row0);
   if (!row || row.manifest !== NO_ADDITIONAL_MANIFEST) return row;
   const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, NO_ADDITIONAL_MANIFEST), 'utf8')).members;
   const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
@@ -1977,14 +2007,17 @@ test('vendor payments API (2026-11-13): its three REPLACEs went through the prod
   const REPLACES = ['providers/production/moov-send.mjs', 'workflow-rpc.mjs', 'tenant-billing-handlers.mjs'];
   assert.deepEqual(Object.keys(manifest.members), REPLACES);
   assert.equal(manifest.deploy_authorized, false);
+  const deskMonitoring = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, DESK_MONITORING_MANIFEST), 'utf8')).members;
   for (const [name, entry] of Object.entries(manifest.members)) {
     // Main's bytes accepted; each starts from the bytes its overlay row recorded live (an applied record), never main's.
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    // (workflow-rpc.mjs has moved on since, to the desk set monitoring REPLACE, planning only: its applied vendor bytes
+    // stand for main's, and its row is read as it stood before that plan.)
+    assert.equal(deskMonitoring[name]?.live_sha256 ?? sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
     assert.equal(entry.operation, 'replace', name);
     assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
     // Applied 2026-11-14: the row expects main's bytes and names the applied record; read before the applies, it is the
     // planning row (the bytes it recorded live expected, the planning manifest named).
-    const row = overlay.members[name];
+    const row = deskMonitoringPre(overlay.members[name]);
     assert.deepEqual([row.accepted_sha256, row.expected_live_sha256, row.manifest], [entry.accepted_sha256, entry.accepted_sha256, VENDOR_API_APPLIED_MANIFEST], name);
     const planningRow = vendorApiRecordPre(row);
     assert.deepEqual([planningRow.accepted_sha256, planningRow.expected_live_sha256, planningRow.manifest], [entry.accepted_sha256, entry.live_sha256, VENDOR_API_MANIFEST], name);
@@ -2006,6 +2039,37 @@ test('vendor payments API (2026-11-13): its three REPLACEs went through the prod
     for (const name of REPLACES) {
       assert.equal(section.members[name], undefined, `${environment} ${name}`);
       assert.equal(section.added[name], undefined, `${environment} ${name}`);
+    }
+  }
+});
+
+test('desk set monitoring API (2026-11-14, SQL 166, planning only): its two REPLACEs go through the production overlay plan from their applied bytes; no recorded rebuild section lists either member', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, DESK_MONITORING_MANIFEST), 'utf8'));
+  const overlay = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  const REPLACES = ['mortgage-desk-return.mjs', 'workflow-rpc.mjs'];
+  assert.deepEqual(Object.keys(manifest.members), REPLACES);
+  assert.equal(manifest.deploy_authorized, false);
+  for (const [name, entry] of Object.entries(manifest.members)) {
+    // Main's bytes accepted; each starts from the bytes its applied record put live, never main's.
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assert.equal(entry.operation, 'replace', name);
+    assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
+    const row = overlay.members[name];
+    assert.deepEqual([row.operation, row.accepted_sha256, row.expected_live_sha256, row.manifest], ['replace', entry.accepted_sha256, entry.live_sha256, DESK_MONITORING_MANIFEST], name);
+    const before = deskMonitoringPre(row);
+    assert.deepEqual([before.operation, before.accepted_sha256, before.manifest], [DESK_MONITORING_PREVIOUS_ROWS[name].operation, entry.live_sha256, DESK_MONITORING_PREVIOUS_ROWS[name].manifest], name);
+  }
+  // No section, applied or in history, in either environment lists them: every rebuild inspect (the eighth production one,
+  // 43604759009 at main 49f34426e, applied 43606264549 at aa107d30) counted them as same, so production runs the applied
+  // bytes each REPLACE expects.
+  for (const environment of ['staging', 'production']) {
+    const sections = [...(raw.environments[environment].history || []), raw.environments[environment]];
+    for (const [index, section] of sections.entries()) {
+      for (const name of REPLACES) {
+        for (const key of ['members', 'added', 'removed']) assert.equal(section[key]?.[name], undefined, `${environment} ${index} ${key} ${name}`);
+      }
     }
   }
 });

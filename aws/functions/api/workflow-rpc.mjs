@@ -127,6 +127,9 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   mortgage_desk_post_message: 'safe_now',
   mortgage_desk_attach_file: 'safe_now',
   mortgage_desk_update_shipping: 'safe_now',
+  // SQL 166 (owner 2026-11-14): the same agent (or the platform owner) switches the request's loss draft between
+  // Monitored and Not Monitored; the tenant sees a check-thread message. No money, no provider.
+  mortgage_desk_set_monitoring: 'safe_now',
   log_audit: 'safe_now',
   init_loss_draft_documents: 'safe_now',
   loss_draft_set_lender: 'safe_now',
@@ -1934,6 +1937,7 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
     case 'mortgage_desk_post_message':
     case 'mortgage_desk_attach_file':
     case 'mortgage_desk_update_shipping':
+    case 'mortgage_desk_set_monitoring':
       return executeMortgageDeskRpc({ client, mapping, name, args });
     case 'init_loss_draft_documents':
       return executeInitLossDraftDocuments();

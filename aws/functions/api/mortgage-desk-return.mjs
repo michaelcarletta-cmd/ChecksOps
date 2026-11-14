@@ -14,6 +14,14 @@
  *   mortgage_desk_post_message     -> aws_mortgage_desk_post_message
  *   mortgage_desk_attach_file      -> aws_mortgage_desk_attach_file
  *   mortgage_desk_update_shipping  -> aws_mortgage_desk_update_shipping
+ *   mortgage_desk_set_monitoring   -> aws_mortgage_desk_set_monitoring (SQL 166)
+ *
+ * SQL 166 (owner 2026-11-14): the agent switches the request's loss draft
+ * between Monitored and Not Monitored while the request is in progress; the
+ * tenant sees a message on the check thread. A check with no loss draft is
+ * refused, a closed loss draft too; switching to Not Monitored when escrow or
+ * draws are recorded is allowed (the result's escrow_or_draws_recorded lets
+ * the Desk page warn).
  *
  * The caller is checked here first (clear refusals, no database write for a
  * refused caller) and again inside every function (auth.uid() against
@@ -52,12 +60,17 @@ const isUuid = (value) => UUID_RE.test(String(value || ''));
 export const MORTGAGE_DESK_POST_MESSAGE = 'mortgage_desk_post_message';
 export const MORTGAGE_DESK_ATTACH_FILE = 'mortgage_desk_attach_file';
 export const MORTGAGE_DESK_UPDATE_SHIPPING = 'mortgage_desk_update_shipping';
+export const MORTGAGE_DESK_SET_MONITORING = 'mortgage_desk_set_monitoring';
 
 export const MORTGAGE_DESK_RPCS = Object.freeze(new Set([
   MORTGAGE_DESK_POST_MESSAGE,
   MORTGAGE_DESK_ATTACH_FILE,
   MORTGAGE_DESK_UPDATE_SHIPPING,
+  MORTGAGE_DESK_SET_MONITORING,
 ]));
+
+/** The loss draft monitoring types aws_mortgage_desk_set_monitoring accepts. */
+export const MORTGAGE_DESK_MONITORING_TYPES = Object.freeze(['monitored', 'not_monitored']);
 
 export const MORTGAGE_DESK_FILE_CATEGORIES = Object.freeze([
   'mortgage_ops',
@@ -88,6 +101,7 @@ export const POST_MESSAGE_SQL = 'SELECT * FROM public.aws_mortgage_desk_post_mes
 export const ATTACH_FILE_SQL = `SELECT * FROM public.aws_mortgage_desk_attach_file(
   $1::uuid, $2::text, $3::text, $4::text, $5::bigint, $6::text, $7::text)`;
 export const UPDATE_SHIPPING_SQL = 'SELECT * FROM public.aws_mortgage_desk_update_shipping($1::uuid, $2::jsonb)';
+export const SET_MONITORING_SQL = 'SELECT public.aws_mortgage_desk_set_monitoring($1::uuid, $2::text) AS result';
 export const COMPLETION_TIMELINE_SQL = 'SELECT public.aws_mortgage_desk_completion_timeline($1::uuid) AS id';
 export const RETURN_EMAIL_CLAIM_SQL = 'SELECT public.aws_mortgage_desk_return_email_claim($1::uuid) AS claim';
 
@@ -251,6 +265,61 @@ const executeUpdateShipping = async ({ client, mapping, args }) => {
   return { data: row || null };
 };
 
+/**
+ * SQL 166's refusals as Desk errors. The gate below refuses most callers before the
+ * call; these cover the loss draft (known only inside the function, under its row
+ * lock) and a request that changed between the gate and the call. Anything else is
+ * not a refusal and is rethrown.
+ */
+export const SET_MONITORING_REFUSALS = Object.freeze({
+  invalid_monitoring_type: {
+    error: 'invalid_field', field: '_monitoring_type', statusCode: 400,
+    message: 'Monitoring type must be monitored or not_monitored',
+  },
+  request_has_no_loss_draft: {
+    error: 'request_has_no_loss_draft', statusCode: 409,
+    message: 'This check has no loss draft file, so there is nothing to monitor',
+  },
+  loss_draft_closed: {
+    error: 'loss_draft_closed', statusCode: 409,
+    message: 'The loss draft is closed (endorsing or final release complete); its monitoring can no longer change',
+  },
+  // The gate's own refusals, as loadMortgageDeskWorkingRequest words them (403 like the sibling actions).
+  not_assigned_to_you: { error: 'not_assigned_to_you', message: 'not_assigned_to_you' },
+  not_authorized: { error: 'not_authorized', message: 'not_authorized' },
+  request_not_in_status: { error: 'request_not_in_progress', message: 'The request is no longer in progress' },
+  request_has_no_check: { error: 'request_has_no_check', message: 'This request has no linked check' },
+});
+
+const setMonitoringRefusal = (error) => {
+  const message = String(error?.message || '');
+  for (const [token, refusal] of Object.entries(SET_MONITORING_REFUSALS)) {
+    if (new RegExp(`\\b${token}\\b`).test(message)) return refusal;
+  }
+  return null;
+};
+
+const executeSetMonitoring = async ({ client, mapping, args }) => {
+  const requestId = arg(args, '_request_id', 'request_id');
+  const type = String(arg(args, '_monitoring_type', 'monitoring_type') ?? '').trim().toLowerCase();
+  if (!MORTGAGE_DESK_MONITORING_TYPES.includes(type)) {
+    return { ...SET_MONITORING_REFUSALS.invalid_monitoring_type };
+  }
+  const gate = await loadMortgageDeskWorkingRequest(client, mapping.application_user_id, requestId);
+  if (gate.error) return gate;
+  // A refusal raised inside the function aborts the transaction; the caller's
+  // write wrapper rolls back every non-2xx result, so nothing is written.
+  let row;
+  try {
+    row = (await client.query(SET_MONITORING_SQL, [gate.request.id, type])).rows[0];
+  } catch (error) {
+    const refusal = setMonitoringRefusal(error);
+    if (refusal) return { ...refusal };
+    throw error;
+  }
+  return { data: row?.result || null };
+};
+
 export const executeMortgageDeskRpc = async ({ client, mapping, name, args = {} }) => {
   switch (name) {
     case MORTGAGE_DESK_POST_MESSAGE:
@@ -259,6 +328,8 @@ export const executeMortgageDeskRpc = async ({ client, mapping, name, args = {} 
       return executeAttachFile({ client, mapping, args });
     case MORTGAGE_DESK_UPDATE_SHIPPING:
       return executeUpdateShipping({ client, mapping, args });
+    case MORTGAGE_DESK_SET_MONITORING:
+      return executeSetMonitoring({ client, mapping, args });
     default:
       return { error: 'rpc_disabled', name };
   }

@@ -300,8 +300,9 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 58 (owner approved 2026-11-14, "apply SQL 166 and SQL 167 in staging"): SQL 166, the Mortgage Desk agent switches
   // the loss draft between Monitored and Not Monitored. Read at main 3239508c with the executor current (inspect run
   // 43622613027, deploy run 43622915623, CodeSha256 BGu9krtX... -> 4gH9sgaz...): already_applied false, precondition_failures
-  // [], prerequisites_missing [], the function absent. Equal to the derived pre-state.
-  sql166: Object.freeze({ wave: 58, approved: '2026-11-14', run: '43623201872', live: '11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608' }),
+  // [], prerequisites_missing [], the function absent. Equal to the derived pre-state. Applied by run 43627727453 (main
+  // 84dd7e549; receipt before 11a10b33..., after 5c8e030f... = intended; the production pin's staging_acceptance, #1909).
+  sql166: Object.freeze({ wave: 58, approved: '2026-11-14', run: '43623201872', live: '11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608', apply_run: '43627727453' }),
   // Wave 59 (owner approved 2026-11-14, "apply SQL 166 and SQL 167 in staging"): SQL 167, claim_ledger_relink_check moves a
   // not-yet-deposited check to the existing claim its corrected number names. Read at main 3239508c with the executor
   // current (deploy run 43622915623): already_applied false, precondition_failures [], prerequisites_missing [], the
