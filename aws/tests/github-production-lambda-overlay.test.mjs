@@ -519,10 +519,33 @@ const laterPlan = (member) => {
 // bytes before that plan: its live_sha256 for a member it moved on, else main's. noAdditionalPre restates the plan as it stood
 // before it (the row back on its applied record: accepted and expected live, the previous manifest named); the history checks
 // below (and the vendor payments API restatement, which came earlier) read the row through it.
+// Claim Ledger relink API (owner 2026-11-14, "Need to be able to change/correct claim number once edited for ledger to link
+// to existing claim"; SQL 167): workflow-rpc.mjs REPLACEs the bytes its row records live (the vendor payments API applied
+// record, still live after the eighth production rebuild), held on SQL 167, planning only; its own test is at the end.
+// relinkApplied is a member's bytes before that plan: its live_sha256 for a member it moved on, else main's. relinkPre restates
+// the plan as it stood before it (the row back on its applied record: accepted and expected live, the SQL 165 hold and the
+// previous manifest named); the no additional-check restatement below, and through it every older one, reads the row through it.
+const RELINK_API_REL = 'aws/tests/fixtures/production-claim-ledger-relink-api-manifest-2026-11-14.json';
+const RELINK_API = JSON.parse(fs.readFileSync(path.join(ROOT, RELINK_API_REL), 'utf8'));
+const SQL167_FILE = 'aws/workflows/sql/167_claim_ledger_relink_check.sql';
+const RELINK_API_PREVIOUS_HOLDS = Object.freeze({ 'workflow-rpc.mjs': 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql' });
+const relinkApplied = (member) => RELINK_API.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+const relinkPre = (plan) => {
+  for (const [name, entry] of Object.entries(RELINK_API.members)) {
+    plan.members[name] = {
+      ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256,
+      sql_before: RELINK_API_PREVIOUS_HOLDS[name], manifest: entry.previous_manifest,
+    };
+  }
+  delete plan.sql_prerequisites[SQL167_FILE];
+  return plan;
+};
 const NO_ADDITIONAL_REL = 'aws/tests/fixtures/production-no-additional-check-api-manifest-2026-11-14.json';
 const NO_ADDITIONAL = JSON.parse(fs.readFileSync(path.join(ROOT, NO_ADDITIONAL_REL), 'utf8'));
-const noAdditionalApplied = (member) => NO_ADDITIONAL.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
-const noAdditionalPre = (plan) => {
+// (Read with the Claim Ledger relink plan, which came later, also undone: relinkApplied, relinkPre.)
+const noAdditionalApplied = (member) => NO_ADDITIONAL.members[member]?.live_sha256 ?? relinkApplied(member);
+const noAdditionalPre = (plan0) => {
+  const plan = relinkPre(plan0);
   for (const [name, entry] of Object.entries(NO_ADDITIONAL.members)) {
     plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
   }
@@ -4000,6 +4023,8 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   const replayPlan = () => {
     const plan = mortgageDeskPre(structuredClone(PLAN_SQL98_LIVE));
     plan.sql_prerequisites[SQL148_FILE] = { verified_live: true, evidence: 'test' };
+    // (Held on SQL 167 since the Claim Ledger relink plan, 2026-11-14, not yet recorded live: stated live the same way.)
+    plan.sql_prerequisites[SQL167_FILE] = { verified_live: true, evidence: 'test' };
     return plan;
   };
   for (const member of REPLACES) {
@@ -9327,16 +9352,19 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
     assert.ok(record.notes.includes(text), text);
   }
   assert.ok(PLAN.notes.includes(`Recorded in ${VENDOR_API_APPLIED_REL}. The three rows expect the applied bytes and name the vendor payments API applied record; their holds (SQL 165, SQL 165, SQL 154) are unchanged.`));
-  const preApply = vendorApiRecordPre(structuredClone(PLAN));
+  // (Read with the Claim Ledger relink plan, which came later and moved workflow-rpc.mjs on from the applied bytes, undone:
+  // relinkPre, relinkApplied; its own test is at the end.)
+  const planNow = relinkPre(structuredClone(PLAN));
+  const preApply = vendorApiRecordPre(relinkPre(structuredClone(PLAN)));
   for (const name of REPLACES) {
     const entry = VENDOR_API.members[name];
     const before = PLAN_PRE_VENDOR_API.members[name];
     assert.deepEqual(record.members[name], { live_sha256: entry.accepted_sha256, accepted_sha256: entry.accepted_sha256, operation: 'replace', previous_manifest: VENDOR_API_REL }, name);
     assert.equal(before.expected_live_sha256, before.accepted_sha256, name);
-    assert.deepEqual(entry, { live_sha256: before.accepted_sha256, accepted_sha256: sha(`aws/functions/api/${name}`), operation: 'replace', previous_manifest: before.manifest }, name);
+    assert.deepEqual(entry, { live_sha256: before.accepted_sha256, accepted_sha256: relinkApplied(name), operation: 'replace', previous_manifest: before.manifest }, name);
     const previous = JSON.parse(fs.readFileSync(path.join(ROOT, entry.previous_manifest), 'utf8')).members[name];
     assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [entry.live_sha256, entry.live_sha256], `${name}: the previous manifest is an applied record`);
-    assert.deepEqual(PLAN.members[name], {
+    assert.deepEqual(planNow.members[name], {
       operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.accepted_sha256, sql_before: VENDOR_API_HOLDS[name], manifest: VENDOR_API_APPLIED_REL,
     }, name);
     assert.deepEqual(preApply.members[name], {
@@ -9347,6 +9375,7 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
     assert.ok(VENDOR_API.notes.includes(evidence), evidence);
     assert.ok(PLAN.notes.includes(evidence), evidence);
     // No new local import: the bytes import exactly what the applied bytes did (no ADD needed, order unchanged).
+    // (On today's plan: main's bytes are the Claim Ledger relink plan's accepted bytes for workflow-rpc.mjs.)
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
     assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
   }
@@ -9392,13 +9421,29 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
   // a reconciliation stop.
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
   for (const name of REPLACES) {
+    if (RELINK_API.members[name]) {
+      // The Claim Ledger relink plan (planning only) REPLACEs these applied bytes: on today's plan they are the expected
+      // live bytes, READY for that REPLACE, and main's are ALREADY_ACCEPTED (the plans as they stood before it, with main's
+      // bytes no longer their accepted bytes, cannot be replayed here; the row is checked by the relink plan's own test).
+      assert.equal(RELINK_API.members[name].live_sha256, VENDOR_API.members[name].accepted_sha256, name);
+      assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: VENDOR_API.members[name].accepted_sha256 }) })).state, 'READY', name);
+      assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: sha(`aws/functions/api/${name}`) }) })).state, 'ALREADY_ACCEPTED', name);
+      for (const other of [VENDOR_API.members[name].live_sha256, 'c'.repeat(64)]) {
+        await assert.rejects(
+          run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: other }) }),
+          (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+          `${name} ${other}`,
+        );
+      }
+      continue;
+    }
     const ready = await run(inspect(name), { root: ROOT, plan: preApply, inspectLive: liveFor(name, { sha256: VENDOR_API.members[name].live_sha256, plan: preApply }) });
     assert.equal(ready.state, 'READY', name);
     assert.equal(ready.mutation, false, name);
-    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: VENDOR_API.members[name].accepted_sha256 }) })).state, 'ALREADY_ACCEPTED', name);
+    assert.equal((await run(inspect(name), { root: ROOT, plan: planNow, inspectLive: liveFor(name, { sha256: VENDOR_API.members[name].accepted_sha256, plan: planNow }) })).state, 'ALREADY_ACCEPTED', name);
     for (const other of [VENDOR_API.members[name].live_sha256, 'c'.repeat(64)]) {
       await assert.rejects(
-        run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: other }) }),
+        run(inspect(name), { root: ROOT, plan: planNow, inspectLive: liveFor(name, { sha256: other, plan: planNow }) }),
         (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
         `${name} ${other}`,
       );
@@ -9407,6 +9452,7 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
   // Apply as it stood (dry, the pre-apply plan): refused while its SQL is not recorded live; with it recorded, passes the
   // gates from the recorded live bytes with no mutation and one receipt each.
   for (const name of REPLACES) {
+    if (RELINK_API.members[name]) continue; // (main's bytes moved on: the relink plan's own test runs its apply.)
     const live = VENDOR_API.members[name].live_sha256;
     const pending = structuredClone(preApply);
     pending.sql_prerequisites[VENDOR_API_HOLDS[name]] = { verified_live: false, evidence: null };
@@ -9500,5 +9546,90 @@ test('No additional-check charge in the API (owner 2026-11-12, SQL 160 live): te
   const result = await run(applyEnv(ENGINE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: entry.live_sha256 }), { ...deps, plan });
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [ENGINE], add: [] });
+  assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
+});
+
+test('Claim Ledger relink API (owner 2026-11-14, SQL 167): workflow-rpc.mjs REPLACEs its applied bytes, held on SQL 167 until its production record; planning only', async () => {
+  const RPC = 'workflow-rpc.mjs';
+  const SQL165 = 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql';
+  assert.equal(RELINK_API.workstream_id, 'claim-ledger-relink-api');
+  assert.equal(RELINK_API.deploy_authorized, false);
+  assert.match(RELINK_API.authorization, /^Pending owner review \(2026-11-14\)\. Planning only/);
+  assert.equal(RELINK_API.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(RELINK_API.members), [RPC]);
+  for (const text of ['Need to be able to change/correct claim number once edited for ledger to link to existing claim',
+    'claim_ledger_relink_check', 'p_tenant_id and p_actor_id in the body are ignored', 'p_action inspect or relink only',
+    'held on SQL 167', 'apply 43606264549', 'No member is added', 'index.mjs is untouched', 'Planning only']) {
+    assert.ok(RELINK_API.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes('Claim Ledger relink API (2026-11-14, owner 2026-11-14'));
+  assert.ok(PLAN.notes.includes(`Manifest ${RELINK_API_REL}. Planning only.`));
+  // The REPLACE: from the bytes the row recorded live (the vendor payments API applied record, named as previous_manifest),
+  // to main's; the hold moves from SQL 165 to SQL 167 and the order is unchanged.
+  const entry = RELINK_API.members[RPC];
+  const before = relinkPre(structuredClone(PLAN)).members[RPC];
+  assert.deepEqual(before, {
+    operation: 'replace', accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, sql_before: SQL165, manifest: VENDOR_API_APPLIED_REL,
+  });
+  assert.deepEqual(entry, { live_sha256: before.accepted_sha256, accepted_sha256: sha(`aws/functions/api/${RPC}`), operation: 'replace', previous_manifest: VENDOR_API_APPLIED_REL });
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, entry.previous_manifest), 'utf8')).members[RPC];
+  assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [entry.live_sha256, entry.live_sha256], 'the previous manifest is an applied record');
+  assert.deepEqual(PLAN.members[RPC], {
+    operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: SQL167_FILE, manifest: RELINK_API_REL,
+  });
+  assert.notEqual(entry.accepted_sha256, entry.live_sha256);
+  const evidence = `${RPC} ${entry.live_sha256.slice(0, 8)} -> ${entry.accepted_sha256.slice(0, 8)}`;
+  assert.ok(RELINK_API.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(evidence), evidence);
+  // Still live after the eighth production rebuild (apply 43606264549): it changed only mortgage-ops-usage.mjs and
+  // tenant-billing-engine.mjs, so its inspect counted workflow-rpc.mjs as same; no reconcile is needed for this row.
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  assert.equal(rebuild.applied.run_id, '43606264549');
+  assert.equal(rebuild.applied.state, 'VERIFIED');
+  assert.deepEqual(Object.keys(rebuild.members).sort(), ['mortgage-ops-usage.mjs', 'tenant-billing-engine.mjs']);
+  assert.equal(rebuild.members[RPC], undefined);
+  // SQL 167: applied in staging (recorded in its production pin's staging_acceptance and the staging SQL record); its
+  // production apply is not recorded on main yet, so the hold is not verified live and the apply is refused until then.
+  const pin = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/sql167-claim-ledger-relink-check-production-apply.json'), 'utf8'));
+  assert.equal(pin.source_sha256, sha(SQL167_FILE));
+  assert.equal(pin.staging_acceptance.ok, true);
+  assert.ok(pin.staging_acceptance.reference.endsWith('/runs/43628481801'));
+  const staging = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/staging-sql-live.json'), 'utf8')).sql[SQL167_FILE];
+  assert.equal(staging.verified_live, true);
+  assert.ok(staging.evidence.includes('run 43628481801'));
+  assert.ok(staging.evidence.includes(`after ${pin.intended_replacement_sha256.slice(0, 8)}…`));
+  if (pin.applied == null) assert.deepEqual(PLAN.sql_prerequisites[SQL167_FILE], { verified_live: false, evidence: null });
+  else assert.equal(pin.applied.result, 'applied');
+  // What the bytes need from SQL 167: its function, with the check's tenant and the caller as actor.
+  const source = fs.readFileSync(path.join(API, RPC), 'utf8');
+  assert.match(source, /public\.claim_ledger_relink_check\(\$1::uuid, \$2::uuid, \$3::text, \$4::text, \$5::uuid\)/);
+  // No new local import (no ADD needed, order unchanged); the overlay resolves the member.
+  assert.equal(resolvePlannedMember(RPC, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(RPC), `DEPLOY ${RPC} TO PRODUCTION`);
+  assert.deepEqual(PLAN.order, relinkPre(structuredClone(PLAN)).order);
+  // Inspect: READY on the recorded live bytes; main's ALREADY_ACCEPTED; anything else a reconciliation stop.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: RPC };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(RPC, { sha256: entry.live_sha256 }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(RPC, { sha256: entry.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(RPC, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // Apply (dry): refused while SQL 167 is not recorded live (today's plan); with it recorded, passes the gates from the
+  // recorded live bytes with no mutation and one receipt.
+  const pending = structuredClone(PLAN);
+  pending.sql_prerequisites[SQL167_FILE] = { verified_live: false, evidence: null };
+  await assert.rejects(
+    run(applyEnv(RPC, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: entry.live_sha256 }), { ...applyDeps(RPC, { sha256: entry.live_sha256, plan: pending }).deps, plan: pending }),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL167_FILE,
+  );
+  const plan = structuredClone(PLAN);
+  plan.sql_prerequisites[SQL167_FILE] = { verified_live: true, evidence: 'test: SQL 167 production record' };
+  const { deps, calls } = applyDeps(RPC, { sha256: entry.live_sha256, plan });
+  const result = await run(applyEnv(RPC, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: entry.live_sha256 }), { ...deps, plan });
+  assert.equal(result.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [RPC], add: [] });
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
 });
