@@ -1,8 +1,8 @@
 {
   "id": "sql167-claim-ledger-relink-check-production-apply",
   "migration": "sql167",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-14 (the owner's words of 2026-11-14: \"apply SQL 166 and SQL 167 in staging\", \"merge #1908\", \"run the SQL 166 and SQL 167 production inspect\" and \"Yes\" to \"Shall I open the pin PR?\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 167 after the staging apply below (production 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343 -> 3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.claim_ledger_relink_check(uuid, uuid, text, text, uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343",
   "intended_replacement_sha256": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
   "authorization_phrase": "RELINK_CHECK_TO_CORRECTED_EXISTING_CLAIM",
   "predecessors": [],
@@ -41,24 +41,24 @@
     "note": "Guarded tooling for SQL 167: sql167-claim-ledger-relink-check-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql167-claim-ledger-relink-check); production-sql-one-shot.mjs --migration sql167. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with its attributes, body, result and ACL. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-14",
+    "ssm_command_id": "6b4e6de5-3548-4477-927c-bcbda4a11391",
+    "source_commit": "84dd7e5492e911aee336282a6262888965fd6659",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 167 yet. Expected: prerequisites_missing [], the function absent, definer_writes ok on check_intake_items, claims, loss_draft_tracking, signature_requests, check_audit_log and claim_settlements, already_applied false. Expected release-engine fingerprint of that pre-state under sql167: 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343 (releaseStateHash('sql167', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-14 (SSM command 6b4e6de5-3548-4477-927c-bcbda4a11391, AWS-RunShellScript, status Success, 18:54:51Z to 18:55:02Z, node scripts/deployment-guard/sql167-claim-ledger-relink-check-production-apply.mjs --inspect (exit 0) in the same command as SQL 166's --inspect, under the owner's words \"run the SQL 166 and SQL 167 production inspect\", on the SQL53 runner i-0c35557c4e5385406 (started from stopped with no SSM command in progress and stopped again afterwards, both by user/claude-code) from main 84dd7e549 (tarball source-84dd7e5492e911aee336282a6262888965fd6659.tar.gz sha256 f7965818d5b9d95284f125c9fded2fde1c50f3702d24a036e03e5aac68767c03, checked by sha256sum -c on the runner, SOURCE_COMMIT matched, staged by the transfer workflow sql53-temporary-transfer.yml run 43629060749), sha256 of the tool's printed output as computed on the runner 0db0c0abc74b215e0d6c301a4262856ea021f5f6a63eaef90d4b39718952f7e5 (2383 bytes)): ok true, read_only true, source_ok true, current_user and session_user checksops_admin, pin_execute false, missing_dependencies [], prerequisites_missing [], predecessors {} (none), successors_applied [], precondition_failures []; claim_ledger_relink_check(uuid, uuid, text, text, uuid) absent (function_acl []); definer_writes ok true on check_intake_items, claims, loss_draft_tracking, signature_requests, check_audit_log, claim_settlements. live_definition_sha256 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343 (not the intended 3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c: already_applied false), the derived pre-state the earlier note below names (releaseStateHash('sql167', {})), equal to staging's before its apply (read-live runs 43623494491 and 43628253879). live_matches_expected false and apply_preconditions_met false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, prerequisites_missing is not [] or precondition_failures is not [], stop: that needs its own reviewed change. Not covered by this inspect (not verified): the live-only trigger touch_claim_on_signature on signature_requests (public.touch_claim_updated_at, AFTER INSERT, UPDATE or DELETE; listed in the live trigger inventory aws/db-copy/analysis/triggers_classified.json, defined by no migration under aws/). It fires when the relink moves this check's signature_requests rows and touches the claims row they point to; it matters only when a moved check's signature requests point to a target claim with no org_id (SQL 155's claim owner stamp, trg_aws_stamp_claim_org_id, BEFORE INSERT OR UPDATE on claims, keeps an existing org_id and acts only on an UPDATE of a claims row whose org_id is NULL). The release inspect does not read triggers outside the spec, and the PostgreSQL test does not carry this trigger. Earlier: Pending: no release-engine production inspect has been run for SQL 167 yet. Expected: prerequisites_missing [], the function absent, definer_writes ok on check_intake_items, claims, loss_draft_tracking, signature_requests, check_audit_log and claim_settlements, already_applied false. Expected release-engine fingerprint of that pre-state under sql167: 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343 (releaseStateHash('sql167', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
     "note": "public.claim_ledger_relink_check(uuid, uuid, text, text, uuid) (plpgsql, VOLATILE, RETURNS jsonb), owned by checksops_admin, SECURITY DEFINER, SET search_path = public, SET row_security = off, EXECUTE checksops and the owner, nothing for PUBLIC, anon, authenticated or service_role. No other function, table, column, policy, grant or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql167', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 167 (choice sql167-claim-ledger-relink-check) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql167-claim-ledger-relink-check-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43628481801",
+    "basis": "Guarded staging SQL executor apply of sql167-claim-ledger-relink-check, run 43628481801 (2026-11-14, main 84dd7e5492e911aee336282a6262888965fd6659, wave 59, staging pin PR #1908), under the owner's words \"apply SQL 166 and SQL 167 in staging\", on the executor deployed by deploy run 43626936092 (CodeSha256 4gH9sgaz... -> 0KNPXGrb...), from the staging pre-state read by read-live run 43628253879 (45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343; first recorded by read-live run 43623494491, main 3239508c, in the staging pin): receipt before 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343, after 3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c == intended. Read-live run 43628751159 then reported already_applied true. The owner gave the run approval \"apply SQL 166 and SQL 167 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-167-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql167-claim-ledger-relink-check-pg.test.mjs and through the executor by aws/tests/release-sql167-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so staging accepted exactly the production transition. The same file bytes (source_sha256) are pinned in both."
   }
 }
