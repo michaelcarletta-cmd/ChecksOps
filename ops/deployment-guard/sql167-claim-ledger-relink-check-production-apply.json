@@ -1,8 +1,8 @@
 {
   "id": "sql167-claim-ledger-relink-check-production-apply",
   "migration": "sql167",
-  "authorization": "Owner approved 2026-11-14 (the owner's words of 2026-11-14: \"apply SQL 166 and SQL 167 in staging\", \"merge #1908\", \"run the SQL 166 and SQL 167 production inspect\" and \"Yes\" to \"Shall I open the pin PR?\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 167 after the staging apply below (production 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343 -> 3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-14; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 167 production pin change on 2026-11-14 in the words \"apply SQL 166 and SQL 167 in staging\", \"merge #1908\", \"run the SQL 166 and SQL 167 production inspect\" and \"Yes\" to \"Shall I open the pin PR?\" (on the staging apply run 43628481801; 45b7f3a9 -> 3aebf662, #1909, merged to main as d8da56bac) and the one apply run recorded in applied (workstream prod-sql167-claim-ledger-relink-20261114) in the words \"apply SQL 166 and SQL 167 in production\", passed to it verbatim (the same words were passed to SQL 166's run). That approval covered those two runs only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,307 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43628481801",
     "basis": "Guarded staging SQL executor apply of sql167-claim-ledger-relink-check, run 43628481801 (2026-11-14, main 84dd7e5492e911aee336282a6262888965fd6659, wave 59, staging pin PR #1908), under the owner's words \"apply SQL 166 and SQL 167 in staging\", on the executor deployed by deploy run 43626936092 (CodeSha256 4gH9sgaz... -> 0KNPXGrb...), from the staging pre-state read by read-live run 43628253879 (45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343; first recorded by read-live run 43623494491, main 3239508c, in the staging pin): receipt before 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343, after 3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c == intended. Read-live run 43628751159 then reported already_applied true. The owner gave the run approval \"apply SQL 166 and SQL 167 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-167-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql167-claim-ledger-relink-check-pg.test.mjs and through the executor by aws/tests/release-sql167-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so staging accepted exactly the production transition. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-14",
+    "result": "applied",
+    "source_commit": "d8da56bac34ab8f24195dbb9d28adb8b690d920e",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-d8da56bac34ab8f24195dbb9d28adb8b690d920e.tar.gz",
+      "sha256": "b2d3cadcfea1a2c9681de708d4546f5bc3e7506a72395b3c1f3516617c149774"
+    },
+    "source_staged_by": "sql53-temporary-transfer.yml run 43632903546 (staged main d8da56bac34ab8f24195dbb9d28adb8b690d920e; TARBALL_SHA256 b2d3cadcfea1a2c9681de708d4546f5bc3e7506a72395b3c1f3516617c149774, checked by sha256sum -c on the runner before each command; SOURCE_COMMIT matched)",
+    "migration_source_sha256": "72bd9ae6a3d336b049d6e7d11ae28da061bf052a5516912ac690a2276b288c6d",
+    "migration_source_sha256_note": "The one-shot source step checked the pinned migration file in the tarball against source_sha256 (step source ok).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql167-claim-ledger-relink-20261114",
+    "one_use_id": "sql167-prod-a0a99ec5-74aa-472f-ad05-d8922b4d240e",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 166 and SQL 167 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql167; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "inspect_ssm_command_id": "fe8d233a-0624-464e-adb7-c3165e8c1e3f",
+    "apply_ssm_command_id": "83892c35-edaf-404f-b9cd-d14cecf50a55",
+    "one_shot_run_id": "f2e0b482-129c-44fa-9597-b0cdc404d9b3",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql167_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. Recorded from the run's own output, which arrived whole through SSM: the one-shot's JSON output (21654 bytes as printed, sha256 0e7c11dc570cd76979df901e8716b95159397fcad7298f3ce0d572998dce217a as computed on the runner) was read back in compact form (14808 bytes) and, re-serialized, reproduces exactly that size and sha256; the copy on the runner was removed afterwards. Pre-apply inspect: one-shot --phase inspect SSM fe8d233a-0624-464e-adb7-c3165e8c1e3f (Success, 2026-11-14T19:40:05.079Z to 2026-11-14T19:40:14.079Z, EXIT=0, run_id 22f18064-2ea7-40cf-b831-b04aa28b1935, steps pin, source, inspect and contracts ok, nothing written, output 5129 bytes, sha256 23122deb696b369eaae68fa003b29c3a35e0f09469348201c62603ae43ce44e4, read back whole the same way) read live 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures []); the apply command (SSM 83892c35-edaf-404f-b9cd-d14cecf50a55, Success, 2026-11-14T19:40:26.371Z to 2026-11-14T19:40:38.371Z, EXIT=0) was sent only after that output showed this pre-state. Source staged by transfer run 43632903546 (main d8da56bac34ab8f24195dbb9d28adb8b690d920e; the tarball passed sha256sum -c on the runner before each command and SOURCE_COMMIT matched). The same owner words were passed verbatim to SQL 166's run, in the same runner session (SQL 166's inspect and apply first, then SQL 167's). Before these runs three AWS-managed SSM commands were listed InProgress on the stopped runner, queued at 18:55Z during the earlier read-only inspect SSM 6b4e6de5-3548-4477-927c-bcbda4a11391 (d1da09c7-f7a7-4dde-bbe4-29557b498625 AmazonInspector2-ConfigureInspectorSsmPlugin, 007bb4e8-f782-450c-bf67-cdbd8ad2b4b1 AWS-ConfigureAWSPackage, 36b774e3-f596-42c9-9f6d-dfaeb923f94b AmazonInspector2-ConfigureInspectorSsmPluginLinux); they are not ChecksOps runs. They were reported to the owner, who answered \"Let them finish first\": the runner was started and no SQL command was sent until nothing was in progress (60 s); they ended d1da09c7 Success, 007bb4e8 Success, 36b774e3 Failed. Root volume 39% used. A process check (pgrep) after each apply found no one-shot running, and the runner was stopped afterwards (end state stopped). Production acceptance: not yet reported by the owner when this was recorded.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d8da56bac34ab8f24195dbb9d28adb8b690d920e (production-sql-one-shot f2e0b482-129c-44fa-9597-b0cdc404d9b3, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d8da56bac34ab8f24195dbb9d28adb8b690d920e (production-sql-one-shot f2e0b482-129c-44fa-9597-b0cdc404d9b3, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d8da56bac34ab8f24195dbb9d28adb8b690d920e (production-sql-one-shot f2e0b482-129c-44fa-9597-b0cdc404d9b3, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "claim_ledger_relink_check(uuid, uuid, text, text, uuid)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "claim_ledger_relink_check(uuid, uuid, text, text, uuid)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "claims",
+            "ok": true
+          },
+          {
+            "name": "loss_draft_tracking",
+            "ok": true
+          },
+          {
+            "name": "signature_requests",
+            "ok": true
+          },
+          {
+            "name": "check_audit_log",
+            "ok": true
+          },
+          {
+            "name": "claim_settlements",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "310a2adc781e90f71bdbe9bca4e799afa44d04131f4b0208aadf66db59b50ab0",
+    "receipt": {
+      "migration": "sql167",
+      "workstream": "prod-sql167-claim-ledger-relink-20261114",
+      "commit": "d8da56bac34ab8f24195dbb9d28adb8b690d920e",
+      "sql_file": "aws/workflows/sql/167_claim_ledger_relink_check.sql",
+      "before_hash": "45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343",
+      "after_hash": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
+      "release_sql_inspect": {
+        "live_definition_sha256": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "claim_ledger_relink_check(uuid, uuid, text, text, uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "claim_ledger_relink_check(uuid, uuid, text, text, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "claims",
+            "ok": true
+          },
+          {
+            "name": "loss_draft_tracking",
+            "ok": true
+          },
+          {
+            "name": "signature_requests",
+            "ok": true
+          },
+          {
+            "name": "check_audit_log",
+            "ok": true
+          },
+          {
+            "name": "claim_settlements",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "8c5639f5a2b11b9f3dbf5c87d24616d24c316b1ce30f09d4bf67de0021b482c9",
+      "unrelated_catalog_counts": {
+        "relations": 906,
+        "columns": 3586,
+        "constraints": 2279,
+        "policies": 481,
+        "functions": 1392,
+        "indexes": 665,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43628481801",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "claim_ledger_relink_check(uuid, uuid, text, text, uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "claim_ledger_relink_check(uuid, uuid, text, text, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "claims",
+            "ok": true
+          },
+          {
+            "name": "loss_draft_tracking",
+            "ok": true
+          },
+          {
+            "name": "signature_requests",
+            "ok": true
+          },
+          {
+            "name": "check_audit_log",
+            "ok": true
+          },
+          {
+            "name": "claim_settlements",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-14 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql167-claim-ledger-relink-20261114, main d8da56bac (tarball b2d3cadc…, transfer run 43632903546, migration source 72bd9ae6… == pin), owner-approved run (\"apply SQL 166 and SQL 167 in production\"), pre-apply --phase inspect SSM fe8d233a-0624-464e-adb7-c3165e8c1e3f (live 45b7f3a9…, live_matches_expected true, precondition_failures []), apply SSM 83892c35-edaf-404f-b9cd-d14cecf50a55, run_id f2e0b482-129c-44fa-9597-b0cdc404d9b3, one_use_id sql167-prod-a0a99ec5-74aa-472f-ad05-d8922b4d240e: every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest 310a2adc…; 45b7f3a9… -> 3aebf662…, result applied, unrelated catalog 8c5639f5…; post-apply inspect already_applied true, precondition_failures [], claim_ledger_relink_check(uuid, uuid, text, text, uuid) intended with EXECUTE [checksops, owner]. The whole one-shot output arrived (21654 bytes, sha256 0e7c11dc…). Three AWS-managed SSM commands in progress on the runner were let finish first on the owner's words before any SQL command (see applied.one_shot_note). The runner was stopped after a check that no one-shot process remained. Production acceptance (a check relinked to a corrected existing claim through claim_ledger_relink_check) was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

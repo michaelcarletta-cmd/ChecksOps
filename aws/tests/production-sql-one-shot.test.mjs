@@ -731,10 +731,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // "Open the SQL 165 production pin PR", #1888: the read-only production inspect SSM 55b0c2ac recorded as its pre-state, the guarded
 // staging apply run 43510673897 from the same pre-state) until its record-and-retire change after its 2026-11-13 apply
 // ("apply SQL 165 in production").
-// SQL 166's and SQL 167's pins are execute-authorized (owner-approved pin change of 2026-11-14, "run the SQL 166 and SQL 167
-// production inspect" / "Yes" to "Shall I open the pin PR?": the read-only production inspect SSM 6b4e6de5 recorded as their
-// pre-states, the guarded staging apply runs 43627727453 and 43628481801 from the same pre-states) until their record-and-retire changes.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql166', 'sql167']);
+// SQL 166's and SQL 167's pins were execute-authorized (owner-approved pin change of 2026-11-14, "run the SQL 166 and SQL 167
+// production inspect" / "Yes" to "Shall I open the pin PR?", #1909: the read-only production inspect SSM 6b4e6de5 recorded as their
+// pre-states, the guarded staging apply runs 43627727453 and 43628481801 from the same pre-states) until their record-and-retire
+// change after their 2026-11-14 applies ("apply SQL 166 and SQL 167 in production").
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -832,6 +833,10 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql165: Object.freeze({ ssm: '2e31f0c1-23d2-4947-8296-d6d66eaefdf8', run: '01fe9718-5448-4aab-b72f-07bb146cfcdf', one_use_id: 'sql165-prod-a2cab179-a04f-4f91-bba7-0f22b07e946c', workstream: 'prod-sql165-vendor-lookup-payroll-vendor-20261113', approval: 'apply SQL 165 in production' }),
   // SQL 160's production apply of 2026-11-14 (main 394e0349e), on the owner's "apply SQL 160 in production".
   sql160: Object.freeze({ ssm: '3d189bad-52e1-4d49-adae-c5e59b4c98de', run: '8278c975-b6d9-47c3-ad4b-b8c959e0dd88', one_use_id: 'sql160-prod-2d7a7cac-3d44-4393-813b-f96a6c2ec9e2', workstream: 'prod-sql160-no-additional-check-fee-20261114', approval: 'apply SQL 160 in production' }),
+  // SQL 166's production apply of 2026-11-14 (main d8da56bac), on the owner's "apply SQL 166 and SQL 167 in production".
+  sql166: Object.freeze({ ssm: 'a4f2aed0-51ce-4444-8387-1fff041fd4ef', run: 'cca3fb1a-8d24-45b5-838d-5ec0e2e73bfd', one_use_id: 'sql166-prod-9a437e99-306b-46b6-968e-2a0cb7cca1ec', workstream: 'prod-sql166-desk-set-monitoring-20261114', approval: 'apply SQL 166 and SQL 167 in production' }),
+  // SQL 167's production apply of 2026-11-14 (main d8da56bac), on the owner's "apply SQL 166 and SQL 167 in production".
+  sql167: Object.freeze({ ssm: '83892c35-edaf-404f-b9cd-d14cecf50a55', run: 'f2e0b482-129c-44fa-9597-b0cdc404d9b3', one_use_id: 'sql167-prod-a0a99ec5-74aa-472f-ad05-d8922b4d240e', workstream: 'prod-sql167-claim-ledger-relink-20261114', approval: 'apply SQL 166 and SQL 167 in production' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb), on the owner's "apply SQL 136 in production".
   sql136: Object.freeze({ ssm: 'd52b099a-56c7-4148-828c-2530b48c40fb', run: 'b47f4c29-c5bf-4288-82ff-870f057489d9', one_use_id: 'sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673', workstream: 'prod-sql136-money-write-restrictive-20261102', approval: 'apply SQL 136 in production' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).
