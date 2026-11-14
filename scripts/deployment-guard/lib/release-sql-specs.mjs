@@ -9898,6 +9898,79 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.payroll_runs"
     ]
   },
+  // SQL 167 (owner 2026-11-14: "Need to be able to change/correct claim number once edited for ledger to link to
+  // existing claim"): a linked check whose claim number was wrong moves to the existing claim the corrected number
+  // names, before deposit only (SQL 43's lock rule), with its loss draft file and signature requests. One new SECURITY
+  // DEFINER function, public.claim_ledger_relink_check(uuid, uuid, text, text, uuid) (plpgsql, VOLATILE, search_path
+  // public, row_security off, RETURNS jsonb as SQL 44): action inspect or relink; the check locked FOR UPDATE; SQL 44's
+  // same-tenant claim match copied exactly (ambiguous, cross_tenant, no_match; never creates, renames or deletes a
+  // claim); relink moves this check's claim_id and its loss_draft_tracking and signature_requests rows still on the old
+  // claim, and writes one check_audit_log row. EXECUTE checksops and the owner (PUBLIC, anon, authenticated and
+  // service_role revoked, as SQL 162). definer_writes: the six relations the file's sql167_definer_cannot_reach check
+  // names. No predecessor (SQL 41's ocr_claim_number_key is a prerequisite); SQL 41, 43 and 44 are not touched. No
+  // table, column, policy, grant or trigger change.
+  sql167: {
+    "key": "sql167",
+    "label": "SQL 167",
+    "choice": "sql167-claim-ledger-relink-check",
+    "production_pin_rel": "ops/deployment-guard/sql167-claim-ledger-relink-check-production-apply.json",
+    "script": "sql167-claim-ledger-relink-check-production-apply",
+    "prerequisites": [
+      "public.check_intake_items",
+      "public.claims",
+      "public.loss_draft_tracking",
+      "public.signature_requests",
+      "public.check_audit_log",
+      "public.claim_settlements",
+      "public.ocr_claim_number_key(text)",
+      "role checksops",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.check_stage",
+      "column public.check_intake_items.deposited_at",
+      "column public.check_intake_items.updated_at",
+      "column public.claims.id",
+      "column public.claims.claim_number",
+      "column public.claims.org_id",
+      "column public.claims.policyholder_name",
+      "column public.loss_draft_tracking.check_intake_item_id",
+      "column public.loss_draft_tracking.claim_id",
+      "column public.signature_requests.check_intake_item_id",
+      "column public.signature_requests.claim_id",
+      "column public.check_audit_log.check_id",
+      "column public.check_audit_log.tenant_id",
+      "column public.check_audit_log.actor_id",
+      "column public.check_audit_log.event_type",
+      "column public.check_audit_log.event_description",
+      "column public.check_audit_log.event_data",
+      "column public.claim_settlements.claim_id"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.claim_ledger_relink_check(uuid, uuid, text, text, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_intake_items",
+      "public.claims",
+      "public.loss_draft_tracking",
+      "public.signature_requests",
+      "public.check_audit_log",
+      "public.claim_settlements"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
