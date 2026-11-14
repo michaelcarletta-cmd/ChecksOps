@@ -250,8 +250,10 @@ const DESK_MONITORING_PREVIOUS_ROWS = Object.freeze({
     operation: 'add', expected_live_sha256: null, sql_before: 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql',
     manifest: 'aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json',
   }),
+  // workflow-rpc.mjs moved on from the Claim Ledger relink row (#1911, held on SQL 167): its accepted bytes carry both RPCs.
   'workflow-rpc.mjs': Object.freeze({
-    operation: 'replace', sql_before: 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql', manifest: VENDOR_API_APPLIED_MANIFEST,
+    operation: 'replace', sql_before: 'aws/workflows/sql/167_claim_ledger_relink_check.sql',
+    manifest: 'aws/tests/fixtures/production-claim-ledger-relink-api-manifest-2026-11-14.json', accepted_from_manifest: true,
   }),
 });
 const deskMonitoringPre = (row) => {
@@ -262,7 +264,10 @@ const deskMonitoringPre = (row) => {
   const previous = DESK_MONITORING_PREVIOUS_ROWS[name];
   return {
     operation: previous.operation,
-    accepted_sha256: entry.live_sha256,
+    // The previous row's accepted bytes: its own manifest's (a planning row that moved on), else the applied bytes.
+    accepted_sha256: previous.accepted_from_manifest
+      ? JSON.parse(fs.readFileSync(path.join(REPO_ROOT, previous.manifest), 'utf8')).members[name].accepted_sha256
+      : entry.live_sha256,
     expected_live_sha256: 'expected_live_sha256' in previous ? previous.expected_live_sha256 : entry.live_sha256,
     sql_before: previous.sql_before,
     manifest: previous.manifest,
@@ -282,8 +287,23 @@ const CHANGED_SINCE_FIFTH_SECTION = new Set([
   // No additional-check charge (2026-11-14, planning only): an additional check's accept records nothing.
   'mortgage-ops-usage.mjs',
 ]);
+// Claim Ledger relink API (2026-11-14, owner "Need to be able to change/correct claim number once edited for ledger to link
+// to existing claim"; SQL 167): workflow-rpc.mjs REPLACEs its vendor payments API applied bytes through the production overlay
+// plan (held on SQL 167), planning only. The eighth sections count workflow-rpc.mjs as same (those applied bytes); no
+// section lists it. relinkPre reads a row as it stood before that plan (vendorApiPre, which reads further back, applies it first).
+const RELINK_API_MANIFEST = 'aws/tests/fixtures/production-claim-ledger-relink-api-manifest-2026-11-14.json';
+const RELINK_API_PREVIOUS_HOLD = 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql';
+const relinkPre = (row0) => {
+  // The desk set monitoring plan moved workflow-rpc.mjs on from this plan's row: read it back first.
+  const row = deskMonitoringPre(row0);
+  if (!row || row.manifest !== RELINK_API_MANIFEST) return row;
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, RELINK_API_MANIFEST), 'utf8')).members;
+  const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
+  assert.ok(entry, 'a Claim Ledger relink row names its manifest entry');
+  return { ...row, accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, sql_before: RELINK_API_PREVIOUS_HOLD, manifest: entry.previous_manifest };
+};
 const vendorApiPre = (row0) => {
-  const row = vendorApiRecordPre(noAdditionalPre(row0));
+  const row = vendorApiRecordPre(noAdditionalPre(relinkPre(row0)));
   if (!row || row.manifest !== VENDOR_API_MANIFEST) return row;
   const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_MANIFEST), 'utf8')).members;
   const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
@@ -667,9 +687,19 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     // from its external disbursement applied bytes: the checks below read the row as it stood before that plan, and those
     // applied bytes stand for main's.
     let mainBytes = sha256(fs.readFileSync(path.join(apiRoot, name)));
-    // (Likewise the vendor payments API plan: the applied bytes it starts from stand for main's.)
-    if (vendorApiRecordPre(overlay.members[name])?.manifest === VENDOR_API_MANIFEST) {
+    // (And the desk set monitoring plan, planning only: the row it moved on from stands for main's.)
+    if (overlay.members[name]?.manifest === DESK_MONITORING_MANIFEST) {
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
+      mainBytes = deskMonitoringPre(overlay.members[name]).accepted_sha256;
+    }
+    // (And the Claim Ledger relink plan, planning only: the applied bytes it starts from stand for main's.)
+    if (deskMonitoringPre(overlay.members[name])?.manifest === RELINK_API_MANIFEST) {
+      assert.equal(deskMonitoringPre(overlay.members[name]).accepted_sha256, mainBytes, name);
+      mainBytes = relinkPre(overlay.members[name]).accepted_sha256;
+    }
+    // (Likewise the vendor payments API plan: the applied bytes it starts from stand for main's.)
+    if (vendorApiRecordPre(relinkPre(overlay.members[name]))?.manifest === VENDOR_API_MANIFEST) {
+      assert.equal(relinkPre(overlay.members[name]).accepted_sha256, mainBytes, name);
       mainBytes = vendorApiPre(overlay.members[name]).accepted_sha256;
     }
     // (And the no additional-check charge plan, planning only: the applied bytes it starts from stand for main's.)
@@ -2009,15 +2039,16 @@ test('vendor payments API (2026-11-13): its three REPLACEs went through the prod
   assert.equal(manifest.deploy_authorized, false);
   const deskMonitoring = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, DESK_MONITORING_MANIFEST), 'utf8')).members;
   for (const [name, entry] of Object.entries(manifest.members)) {
-    // Main's bytes accepted; each starts from the bytes its overlay row recorded live (an applied record), never main's.
-    // (workflow-rpc.mjs has moved on since, to the desk set monitoring REPLACE, planning only: its applied vendor bytes
-    // stand for main's, and its row is read as it stood before that plan.)
-    assert.equal(deskMonitoring[name]?.live_sha256 ?? sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    // Main's bytes accepted (for workflow-rpc.mjs, until the Claim Ledger relink and then the desk set monitoring plans moved
+    // it on: the applied bytes those plans start from); each starts from the bytes its overlay row recorded live (an applied
+    // record), never main's.
+    const relinkEntry = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, RELINK_API_MANIFEST), 'utf8')).members[name];
+    assert.equal(deskMonitoring[name]?.live_sha256 ?? relinkEntry?.live_sha256 ?? sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
     assert.equal(entry.operation, 'replace', name);
     assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
     // Applied 2026-11-14: the row expects main's bytes and names the applied record; read before the applies, it is the
     // planning row (the bytes it recorded live expected, the planning manifest named).
-    const row = deskMonitoringPre(overlay.members[name]);
+    const row = relinkPre(overlay.members[name]);
     assert.deepEqual([row.accepted_sha256, row.expected_live_sha256, row.manifest], [entry.accepted_sha256, entry.accepted_sha256, VENDOR_API_APPLIED_MANIFEST], name);
     const planningRow = vendorApiRecordPre(row);
     assert.deepEqual([planningRow.accepted_sha256, planningRow.expected_live_sha256, planningRow.manifest], [entry.accepted_sha256, entry.live_sha256, VENDOR_API_MANIFEST], name);
@@ -2059,7 +2090,13 @@ test('desk set monitoring API (2026-11-14, SQL 166, planning only): its two REPL
     const row = overlay.members[name];
     assert.deepEqual([row.operation, row.accepted_sha256, row.expected_live_sha256, row.manifest], ['replace', entry.accepted_sha256, entry.live_sha256, DESK_MONITORING_MANIFEST], name);
     const before = deskMonitoringPre(row);
-    assert.deepEqual([before.operation, before.accepted_sha256, before.manifest], [DESK_MONITORING_PREVIOUS_ROWS[name].operation, entry.live_sha256, DESK_MONITORING_PREVIOUS_ROWS[name].manifest], name);
+    // Before this plan: mortgage-desk-return.mjs's SQL 122 ADD (its applied bytes); workflow-rpc.mjs's Claim Ledger relink row
+    // (#1911, its planning bytes, which these accepted bytes include), itself starting from the applied bytes.
+    const previousAccepted = DESK_MONITORING_PREVIOUS_ROWS[name].accepted_from_manifest
+      ? JSON.parse(fs.readFileSync(path.join(REPO_ROOT, RELINK_API_MANIFEST), 'utf8')).members[name].accepted_sha256
+      : entry.live_sha256;
+    assert.deepEqual([before.operation, before.accepted_sha256, before.manifest], [DESK_MONITORING_PREVIOUS_ROWS[name].operation, previousAccepted, DESK_MONITORING_PREVIOUS_ROWS[name].manifest], name);
+    assert.equal(relinkPre(row).accepted_sha256, entry.live_sha256, name);
   }
   // No section, applied or in history, in either environment lists them: every rebuild inspect (the eighth production one,
   // 43604759009 at main 49f34426e, applied 43606264549 at aa107d30) counted them as same, so production runs the applied

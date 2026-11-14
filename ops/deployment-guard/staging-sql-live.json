@@ -131,6 +131,10 @@
     "aws/workflows/sql/166_mortgage_desk_set_monitoring.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql166-mortgage-desk-set-monitoring on 2026-11-14 (run 43627727453, main 84dd7e549, wave 58, executor deploy run 43626936092, staging pin PR #1908; pre-apply read-live run 43627497816 precondition_failures [], read-live run 43627956591 already_applied true; recorded in the production pin's staging_acceptance, #1909): receipt before 11a10b33…, after 5c8e030f… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/167_claim_ledger_relink_check.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql167-claim-ledger-relink-check on 2026-11-14 (run 43628481801, main 84dd7e549, wave 59, executor deploy run 43626936092; read-live run 43628751159 already_applied true): receipt before 45b7f3a9…, after 3aebf662… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }
