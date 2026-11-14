@@ -2,9 +2,19 @@ import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { mortgageSupabase as supabase, mortgageUsesAwsBackend } from "@/integrations/supabase/mortgageClient";
 import {
   attachMortgageDeskFile,
+  MORTGAGE_DESK_LOSS_DRAFT_SELECT,
+  MORTGAGE_DESK_MONITORING_LABEL,
   mortgageDeskFilePath,
+  mortgageDeskLossDraftClosed,
+  mortgageDeskMonitoringConfirm,
+  mortgageDeskMonitoringToast,
+  mortgageDeskMonitoringType,
   postMortgageDeskMessage,
+  setMortgageDeskMonitoring,
+  showMortgageDeskMonitoringControl,
   updateMortgageDeskShipping,
+  type MortgageDeskLossDraft,
+  type MortgageDeskMonitoringType,
   type MortgageDeskWriteClient,
 } from "@/lib/mortgageDeskWrites";
 import {
@@ -299,6 +309,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [homeownerTimeline, setHomeownerTimeline] = useState<MortgageDeskTimelineEntry[]>([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [lossDraftId, setLossDraftId] = useState<string | null>(null);
+  // SQL 166: the loss draft's monitoring type and the escrow / draw fields the switch warns with (AWS only).
+  const [lossDraft, setLossDraft] = useState<MortgageDeskLossDraft | null>(null);
+  const [monitoringTarget, setMonitoringTarget] = useState<MortgageDeskMonitoringType | null>(null);
+  const [settingMonitoring, setSettingMonitoring] = useState(false);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [sigRequests, setSigRequests] = useState<SigRequest[]>([]);
   const [siblings, setSiblings] = useState<SiblingRequestRow[]>([]);
@@ -364,6 +378,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         .maybeSingle();
       if (rErr || !r) throw rErr || new Error("not found");
       setReq(r as RequestRow);
+      // Re-read below when the request has a check; never another request's loss draft.
+      if (!r.check_intake_item_id) setLossDraft(null);
 
       // Check for other billed requests on the same claim to determine fee
       const { count: siblingCount } = await supabase
@@ -464,9 +480,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         // Loss draft docs
         const { data: ldt } = await supabase
           .from("loss_draft_tracking")
-          .select("id")
+          .select(MORTGAGE_DESK_LOSS_DRAFT_SELECT)
           .eq("check_intake_item_id", r.check_intake_item_id)
           .maybeSingle();
+        setLossDraft(ldt?.id ? (ldt as unknown as MortgageDeskLossDraft) : null);
         if (ldt?.id) {
           setLossDraftId(ldt.id);
           const { data: docs } = await supabase
@@ -1037,6 +1054,32 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
   // SQL 122 / 124 working rule: in progress, and the assigned agent or the platform owner.
   const canWork = canWorkMortgageDeskRequest(req, user?.id, platformOwner);
+  // SQL 166: Monitored / Not Monitored, only on AWS, while the request is workable and has a loss draft.
+  const showMonitoring = showMortgageDeskMonitoringControl(mortgageUsesAwsBackend, canWork, lossDraft);
+  const currentMonitoring = mortgageDeskMonitoringType(lossDraft);
+  const monitoringConfirm = monitoringTarget ? mortgageDeskMonitoringConfirm(monitoringTarget, lossDraft) : null;
+
+  const confirmSetMonitoring = async () => {
+    if (!req || !monitoringTarget) return;
+    setSettingMonitoring(true);
+    try {
+      const { data, error } = await setMortgageDeskMonitoring(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        monitoringType: monitoringTarget,
+      });
+      if (error) {
+        toast.error(error.message || "Could not change monitoring");
+        return;
+      }
+      const shown = mortgageDeskMonitoringToast(data);
+      toast.success(shown.title, shown.description ? { description: shown.description } : undefined);
+      setMonitoringTarget(null);
+      onAction?.();
+      await load();
+    } finally {
+      setSettingMonitoring(false);
+    }
+  };
   const homeownerName = req?.homeowner_name || claim?.policyholder_name || "";
   const homeownerEmail = req?.homeowner_email || claim?.policyholder_email || "";
 
@@ -1396,6 +1439,35 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
               </Card>
             )}
 
+
+            {/* Loss draft monitoring (SQL 166): the tenant sees the change on the check thread */}
+            {showMonitoring && lossDraft && (
+              <Card>
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold">Loss draft monitoring</div>
+                    <Badge variant="secondary">{MORTGAGE_DESK_MONITORING_LABEL[currentMonitoring]}</Badge>
+                  </div>
+                  {mortgageDeskLossDraftClosed(lossDraft) ? (
+                    <p className="text-xs text-muted-foreground">The loss draft is closed; its monitoring can no longer change.</p>
+                  ) : (
+                    <div className="flex gap-2">
+                      {(["monitored", "not_monitored"] as const).map((type) => (
+                        <Button
+                          key={type}
+                          size="sm"
+                          variant={currentMonitoring === type ? "default" : "outline"}
+                          disabled={currentMonitoring === type || settingMonitoring}
+                          onClick={() => setMonitoringTarget(type)}
+                        >
+                          {MORTGAGE_DESK_MONITORING_LABEL[type]}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Loss draft documents — add/generate/upload/send */}
             {lossDraftId && (
@@ -1903,6 +1975,26 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         )}
       </SheetContent>
     </Sheet>
+
+    {/* Loss draft monitoring confirm (SQL 166): the escrow warning when escrow or draws are already recorded. */}
+    <Dialog open={!!monitoringTarget} onOpenChange={(v) => { if (!v && !settingMonitoring) setMonitoringTarget(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{monitoringConfirm?.title}</DialogTitle>
+          <DialogDescription>{monitoringConfirm?.description}</DialogDescription>
+        </DialogHeader>
+        {monitoringConfirm?.warning && (
+          <p className="text-sm rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">{monitoringConfirm.warning}</p>
+        )}
+        <DialogFooter>
+          <Button variant="outline" disabled={settingMonitoring} onClick={() => setMonitoringTarget(null)}>Cancel</Button>
+          <Button disabled={settingMonitoring} onClick={() => void confirmSetMonitoring()}>
+            {settingMonitoring && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            {monitoringTarget ? `Set to ${MORTGAGE_DESK_MONITORING_LABEL[monitoringTarget]}` : "Confirm"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     {/* Desk e-sign (AWS, SQL 124): signers, fields, send from ChecksOps. */}
     {req && (
