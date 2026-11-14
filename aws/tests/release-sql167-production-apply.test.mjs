@@ -246,10 +246,13 @@ test('order: no predecessor; one new SECURITY DEFINER function with its ACL, not
     'no API, Lambda or SPA change is part of this pin', releaseStateHash(KEY, {})]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // No API member waits on SQL 167 yet.
+  // The Claim Ledger relink API (2026-11-14, planning only) holds workflow-rpc.mjs on SQL 167; production records it
+  // verified live only from this pin's applied record, so until then the hold is not live and the overlay apply refuses.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL167_FILE], undefined);
-  assert.doesNotMatch(JSON.stringify(plan), /claim_ledger_relink_check|167_claim_ledger_relink_check/);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL167_FILE), ['workflow-rpc.mjs']);
+  assert.equal(plan.members['workflow-rpc.mjs'].manifest, 'aws/tests/fixtures/production-claim-ledger-relink-api-manifest-2026-11-14.json');
+  if (COMMITTED.applied == null) assert.deepEqual(plan.sql_prerequisites[SQL167_FILE], { verified_live: false, evidence: null });
+  else assert.ok(plan.sql_prerequisites[SQL167_FILE].evidence?.includes(COMMITTED.applied.apply_ssm_command_id));
   // The file: the prerequisite DO block, one function, the REVOKE from PUBLIC, the role REVOKE DO block and the GRANT to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL167_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');
