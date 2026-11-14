@@ -51,7 +51,7 @@ column, policy, table grant, trigger or row. The db-readonly-validate trigger co
 SPA change is part of this pin: the API (`claim_ledger_relink_check` in the RPC route) and the Review screen ship
 afterwards through their own guarded paths.
 
-**Status:** applied in staging (wave 59, 2026-11-14, apply run 43628481801); staging acceptance: the staging apply under the owner's run approval ("apply SQL 166 and SQL 167 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `6b4e6de5-3548-4477-927c-bcbda4a11391`). Not applied in production.
+**Status:** applied in staging (wave 59, 2026-11-14, apply run 43628481801); staging acceptance: the staging apply under the owner's run approval ("apply SQL 166 and SQL 167 in staging"; no separate acceptance statement); applied to production (2026-11-14); the production pin is retired (`execute: false`).
 
 **Staging read-live (2026-11-14).** Run 43623494491 (main `3239508c`, after executor inspect run 43622613027 and executor deploy
 run 43622915623 (executor CodeSha256 `BGu9krtX…` -> `4gH9sgaz…`)), under the owner's words "apply SQL 166 and SQL 167 in
@@ -93,6 +93,26 @@ check's `signature_requests` rows and touches the `claims` row they point to. It
 requests point to a target claim with no `org_id`: SQL 155's claim owner stamp (`trg_aws_stamp_claim_org_id`, BEFORE INSERT
 OR UPDATE on `claims`) keeps an existing `org_id` and acts only on an UPDATE of a claims row whose `org_id` is NULL. The
 release inspect does not read triggers outside the spec, and the PostgreSQL test does not carry this trigger.
+
+**Production apply (2026-11-14).** After the pin change (#1909, merged to main as `d8da56bac`), transfer run 43632903546
+(`sql53-temporary-transfer.yml`) staged main `d8da56bac` (tarball sha256
+`b2d3cadcfea1a2c9681de708d4546f5bc3e7506a72395b3c1f3516617c149774`, checked by `sha256sum -c` on the runner; `SOURCE_COMMIT`
+matched). Three AWS-managed SSM commands were listed InProgress on the stopped runner, queued at 18:55Z during the
+production inspect `6b4e6de5`: `d1da09c7` AmazonInspector2-ConfigureInspectorSsmPlugin (Success), `007bb4e8` AWS-ConfigureAWSPackage (Success), `36b774e3` AmazonInspector2-ConfigureInspectorSsmPluginLinux (Failed); on the owner's words "Let them finish first" the runner was started and no SQL
+command was sent until nothing was in progress (60 s). Under the owner's words "apply SQL 166 and SQL 167 in production" (passed verbatim to
+this run and to SQL 166's, in the same runner session), on `i-0c35557c4e5385406` (root volume 39% used): one-shot `--phase inspect`
+(SSM `fe8d233a-0624-464e-adb7-c3165e8c1e3f`, Success, exit 0, steps pin, source, inspect and contracts ok, nothing written) read live
+`45b7f3a9…` (`live_matches_expected` true, `already_applied` false, `precondition_failures` `[]`); the apply command
+was sent only after that. Then `--phase apply` (SSM `83892c35-edaf-404f-b9cd-d14cecf50a55`, Success, exit 0, run
+`f2e0b482-129c-44fa-9597-b0cdc404d9b3`, workstream `prod-sql167-claim-ledger-relink-20261114`, one_use_id
+`sql167-prod-a0a99ec5-74aa-472f-ad05-d8922b4d240e`): contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest
+`310a2adc…`; receipt `45b7f3a9…` → `3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c` (intended), result `applied`,
+unrelated catalog `8c5639f5…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`,
+`claim_ledger_relink_check(uuid, uuid, text, text, uuid)` `intended` with EXECUTE `[checksops EXECUTE, owner EXECUTE]`. The run's whole output arrived (21654 bytes, sha256
+`0e7c11dc570cd76979df901e8716b95159397fcad7298f3ce0d572998dce217a`; read back in compact form and re-serialized to that same size and
+sha256; the copy on the runner was removed afterwards). A process check after each apply found no one-shot running and the runner
+was stopped afterwards. Recorded in the pin's `applied` and `production_evidence`; `execute` is false again. Production
+acceptance (a check relinked to a corrected existing claim) had not been reported by the owner when this record was written; this record does not claim it.
 
 ## Fingerprint
 

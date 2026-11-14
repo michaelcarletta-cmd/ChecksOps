@@ -179,6 +179,11 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   save_checkalt_settings: 'safe_now',
   save_checkalt_tenant_auto_deposit: 'safe_now',
   save_claim_settlement_breakdown: 'safe_now',
+  // SQL 167 (owner 2026-11-14, "Need to be able to change/correct claim number once edited for ledger to link
+  // to existing claim"): claim_ledger_relink_check (SECURITY DEFINER, EXECUTE for checksops only) moves one
+  // linked, not yet deposited check, with its loss draft and signature request rows, to the same-tenant claim
+  // the corrected number names. No money, no provider; the tenant and actor come from the verified sign-in.
+  claim_ledger_relink_check: 'safe_now',
 };
 
 /** RPCs executed via POST /data/rpc write path. */
@@ -203,6 +208,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'save_checkalt_settings',
   'save_checkalt_tenant_auto_deposit',
   'claim_ledger_link_or_create',
+  'claim_ledger_relink_check',
   'admin_override_check_status',
   'apply_referral_code',
   SAVE_CLAIM_SETTLEMENT_BREAKDOWN,
@@ -1797,7 +1803,115 @@ const executeClaimLedgerLinkOrCreate = async ({ client, mapping, args }) => {
   return { data: result };
 };
 
-export const APPLY_REFERRAL_CODE_SQL = 'SELECT public.aws_apply_referral_code($1::uuid, $2::text) AS result';
+export const CLAIM_LEDGER_RELINK_CHECK_SQL =
+  'SELECT public.claim_ledger_relink_check($1::uuid, $2::uuid, $3::text, $4::text, $5::uuid) AS result';
+
+export const CLAIM_LEDGER_RELINK_ACTIONS = Object.freeze(['inspect', 'relink']);
+
+/**
+ * SQL 167's refusals ({ok: false, code}) as the API answers them: an HTTP status and a message the
+ * Claim Ledger card shows as is. The function's own result rides along as `result`.
+ */
+export const CLAIM_LEDGER_RELINK_REFUSALS = Object.freeze({
+  invalid_args: { statusCode: 400, message: 'Enter a claim number.' },
+  invalid_action: { statusCode: 400, message: 'Unknown claim number action.' },
+  actor_required: { statusCode: 403, message: 'Sign in again to move this check.' },
+  check_not_found: { statusCode: 404, message: 'Check not found.' },
+  tenant_mismatch: { statusCode: 403, message: 'This check belongs to another company.' },
+  locked: {
+    statusCode: 409,
+    message: 'This check is deposited (or voided or returned), so its claim can no longer be changed.',
+  },
+  not_linked: {
+    statusCode: 409,
+    message: 'This check is not linked to a claim yet. Use Find Existing Claim to link it.',
+  },
+  ambiguous: {
+    statusCode: 409,
+    message: 'More than one claim has this number. Ask an administrator to merge them before moving the check.',
+  },
+  cross_tenant: { statusCode: 409, message: 'This claim number belongs to another company.' },
+  no_match: {
+    statusCode: 409,
+    message: 'No claim has this number. Rename the current claim instead.',
+  },
+});
+
+/** SQL 167 not applied in this environment yet (undefined function): nothing was changed. */
+const CLAIM_LEDGER_RELINK_UNAVAILABLE = {
+  error: 'claim_ledger_relink_unavailable',
+  statusCode: 503,
+  message: 'Moving a check to another claim is not available yet.',
+};
+
+/**
+ * Correct a linked check's claim number so the check joins the claim that number names (owner
+ * 2026-11-14; SQL 167). The same gate as claim_ledger_link_or_create: the check is read FOR UPDATE,
+ * must have a tenant, and the verified caller must be a member of that tenant. The tenant passed to
+ * the function is the check's own and the actor is the verified caller: a tenant or actor id in the
+ * body is ignored. p_action is inspect (writes nothing) or relink (moves this check, its
+ * loss_draft_tracking and signature_requests rows, and writes one check_audit_log row). A refusal
+ * ({ok: false, code}) is answered with its own status and message; no_match on inspect is ok
+ * (the screen renames the current claim as before).
+ */
+const executeClaimLedgerRelinkCheck = async ({ client, mapping, args }) => {
+  const checkId = arg(args, 'p_check_id', 'check_id');
+  const action = String(arg(args, 'p_action', 'action') || '').trim().toLowerCase();
+  const claimNumber = arg(args, 'p_claim_number', 'claim_number');
+  if (!isUuid(checkId)) return { error: 'invalid_uuid', field: 'p_check_id' };
+  if (!CLAIM_LEDGER_RELINK_ACTIONS.includes(action)) {
+    return { error: 'invalid_field', field: 'p_action', message: 'p_action must be inspect or relink' };
+  }
+  if (typeof claimNumber !== 'string' || !claimNumber.trim()) {
+    return { error: 'missing_required_field', field: 'p_claim_number', message: 'Enter a claim number.' };
+  }
+  const actorId = mapping.application_user_id;
+  if (!isUuid(actorId)) return { error: 'not_authorized', message: 'Sign in again to move this check.' };
+  const check = (await client.query(
+    `SELECT id, tenant_id, claim_id, deposited_at, check_stage::text AS check_stage
+     FROM public.check_intake_items
+     WHERE id = $1::uuid
+     FOR UPDATE`,
+    [checkId],
+  )).rows[0];
+  if (!check) return { error: 'rls_denied', message: 'check not found or not writable' };
+  if (!isUuid(check.tenant_id)) {
+    return { error: 'not_authorized', message: 'This check has no tenant, so its claim cannot be changed.' };
+  }
+  if (!(await isTenantMember(client, actorId, check.tenant_id))) {
+    return { error: 'not_authorized', message: 'Not authorized to change this check\'s claim' };
+  }
+  let result;
+  try {
+    result = (await client.query(CLAIM_LEDGER_RELINK_CHECK_SQL, [
+      checkId,
+      check.tenant_id,
+      claimNumber.trim(),
+      action,
+      actorId,
+    ])).rows?.[0]?.result;
+  } catch (error) {
+    if (error?.code === '42883') return CLAIM_LEDGER_RELINK_UNAVAILABLE;
+    if (/claim_ledger_relink_failed/.test(String(error?.message || ''))) {
+      // The guarded UPDATE matched no row: the check changed under us. The transaction rolls back.
+      return {
+        error: 'claim_ledger_relink_failed',
+        statusCode: 409,
+        message: 'The check changed while it was being moved. Nothing was moved; refresh and try again.',
+      };
+    }
+    throw error;
+  }
+  if (!result || typeof result !== 'object') return { error: 'claim_ledger_relink_failed' };
+  if (result.ok === false) {
+    const code = String(result.code || 'claim_ledger_relink_failed');
+    const refusal = CLAIM_LEDGER_RELINK_REFUSALS[code] || { statusCode: 409, message: `Claim number change failed (${code})` };
+    return { error: code, statusCode: refusal.statusCode, message: refusal.message, result };
+  }
+  return { data: result };
+};
+
+export const APPLY_REFERRAL_CODE_SQL ='SELECT public.aws_apply_referral_code($1::uuid, $2::text) AS result';
 
 /**
  * Refer & Earn redeem (owner decisions 2026-10-22, SQL 111). The function checks that the
@@ -1961,6 +2075,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeDepositAction({ client, mapping, args });
     case 'claim_ledger_link_or_create':
       return executeClaimLedgerLinkOrCreate({ client, mapping, args });
+    case 'claim_ledger_relink_check':
+      return executeClaimLedgerRelinkCheck({ client, mapping, args });
     case SAVE_CLAIM_SETTLEMENT_BREAKDOWN:
     case 'save_claim_settlement_breakdown':
       return executeClaimSettlementBreakdownWrite({ client, mapping, args });

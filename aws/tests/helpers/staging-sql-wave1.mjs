@@ -306,7 +306,9 @@ export const STAGING_WAVE1 = Object.freeze({
   // not-yet-deposited check to the existing claim its corrected number names. Read at main 3239508c with the executor
   // current (deploy run 43622915623): already_applied false, precondition_failures [], prerequisites_missing [], the
   // function absent. Equal to the derived pre-state.
-  sql167: Object.freeze({ wave: 59, approved: '2026-11-14', run: '43623494491', live: '45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343' }),
+  // Applied in staging by run 43628481801 (receipt 45b7f3a9... -> 3aebf662... = intended; read-live 43628751159 already_applied
+  // true; recorded as staging_acceptance in ops/deployment-guard/sql167-claim-ledger-relink-check-production-apply.json).
+  sql167: Object.freeze({ wave: 59, approved: '2026-11-14', run: '43623494491', live: '45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343', apply_run: '43628481801' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 

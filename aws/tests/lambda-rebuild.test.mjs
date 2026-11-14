@@ -252,8 +252,21 @@ const CHANGED_SINCE_FIFTH_SECTION = new Set([
   // No additional-check charge (2026-11-14, planning only): an additional check's accept records nothing.
   'mortgage-ops-usage.mjs',
 ]);
+// Claim Ledger relink API (2026-11-14, owner "Need to be able to change/correct claim number once edited for ledger to link
+// to existing claim"; SQL 167): workflow-rpc.mjs REPLACEs its vendor payments API applied bytes through the production overlay
+// plan (held on SQL 167), planning only. The eighth sections count workflow-rpc.mjs as same (those applied bytes); no
+// section lists it. relinkPre reads a row as it stood before that plan (vendorApiPre, which reads further back, applies it first).
+const RELINK_API_MANIFEST = 'aws/tests/fixtures/production-claim-ledger-relink-api-manifest-2026-11-14.json';
+const RELINK_API_PREVIOUS_HOLD = 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql';
+const relinkPre = (row) => {
+  if (!row || row.manifest !== RELINK_API_MANIFEST) return row;
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, RELINK_API_MANIFEST), 'utf8')).members;
+  const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
+  assert.ok(entry, 'a Claim Ledger relink row names its manifest entry');
+  return { ...row, accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, sql_before: RELINK_API_PREVIOUS_HOLD, manifest: entry.previous_manifest };
+};
 const vendorApiPre = (row0) => {
-  const row = vendorApiRecordPre(noAdditionalPre(row0));
+  const row = vendorApiRecordPre(noAdditionalPre(relinkPre(row0)));
   if (!row || row.manifest !== VENDOR_API_MANIFEST) return row;
   const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_MANIFEST), 'utf8')).members;
   const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
@@ -637,9 +650,14 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     // from its external disbursement applied bytes: the checks below read the row as it stood before that plan, and those
     // applied bytes stand for main's.
     let mainBytes = sha256(fs.readFileSync(path.join(apiRoot, name)));
-    // (Likewise the vendor payments API plan: the applied bytes it starts from stand for main's.)
-    if (vendorApiRecordPre(overlay.members[name])?.manifest === VENDOR_API_MANIFEST) {
+    // (And the Claim Ledger relink plan, planning only: the applied bytes it starts from stand for main's.)
+    if (overlay.members[name]?.manifest === RELINK_API_MANIFEST) {
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
+      mainBytes = relinkPre(overlay.members[name]).accepted_sha256;
+    }
+    // (Likewise the vendor payments API plan: the applied bytes it starts from stand for main's.)
+    if (vendorApiRecordPre(relinkPre(overlay.members[name]))?.manifest === VENDOR_API_MANIFEST) {
+      assert.equal(relinkPre(overlay.members[name]).accepted_sha256, mainBytes, name);
       mainBytes = vendorApiPre(overlay.members[name]).accepted_sha256;
     }
     // (And the no additional-check charge plan, planning only: the applied bytes it starts from stand for main's.)
@@ -1978,13 +1996,15 @@ test('vendor payments API (2026-11-13): its three REPLACEs went through the prod
   assert.deepEqual(Object.keys(manifest.members), REPLACES);
   assert.equal(manifest.deploy_authorized, false);
   for (const [name, entry] of Object.entries(manifest.members)) {
-    // Main's bytes accepted; each starts from the bytes its overlay row recorded live (an applied record), never main's.
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    // Main's bytes accepted (for workflow-rpc.mjs, until the Claim Ledger relink plan moved it on: the bytes that plan
+    // starts from); each starts from the bytes its overlay row recorded live (an applied record), never main's.
+    const relinkEntry = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, RELINK_API_MANIFEST), 'utf8')).members[name];
+    assert.equal(relinkEntry?.live_sha256 ?? sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
     assert.equal(entry.operation, 'replace', name);
     assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
     // Applied 2026-11-14: the row expects main's bytes and names the applied record; read before the applies, it is the
     // planning row (the bytes it recorded live expected, the planning manifest named).
-    const row = overlay.members[name];
+    const row = relinkPre(overlay.members[name]);
     assert.deepEqual([row.accepted_sha256, row.expected_live_sha256, row.manifest], [entry.accepted_sha256, entry.accepted_sha256, VENDOR_API_APPLIED_MANIFEST], name);
     const planningRow = vendorApiRecordPre(row);
     assert.deepEqual([planningRow.accepted_sha256, planningRow.expected_live_sha256, planningRow.manifest], [entry.accepted_sha256, entry.live_sha256, VENDOR_API_MANIFEST], name);
