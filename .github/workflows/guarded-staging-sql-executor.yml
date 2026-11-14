@@ -110,6 +110,7 @@ on:
           - sql163-mortgage-desk-check-timeline-homeowner-link
           - sql164-wallet-withdrawal-leg-and-limits
           - sql165-vendor-payee-lookup-and-payroll-vendor
+          - sql166-mortgage-desk-set-monitoring
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -276,6 +277,7 @@ jobs:
           node --test aws/tests/release-sql163-executor.test.mjs
           node --test aws/tests/release-sql164-executor.test.mjs
           node --test aws/tests/release-sql165-executor.test.mjs
+          node --test aws/tests/release-sql166-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

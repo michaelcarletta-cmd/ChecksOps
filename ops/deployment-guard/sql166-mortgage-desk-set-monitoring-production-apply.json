@@ -1,0 +1,64 @@
+{
+  "id": "sql166-mortgage-desk-set-monitoring-production-apply",
+  "migration": "sql166",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/166_mortgage_desk_set_monitoring.sql",
+  "migration_id": "166_mortgage_desk_set_monitoring",
+  "staging_pin_commit": "864d41dc646145a4af11e933e0a708c31dd07ad2",
+  "source_sha256": "632a258a90742fc6f30c206533624e72b295c5d0d87ad8d85d1a5a920d3e71d5",
+  "function_identities": [
+    "public.aws_mortgage_desk_set_monitoring(uuid, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "5c8e030f32fdfbaf892a7496a5b5c71c02aca0b6494cf04b9e62ab71e3534e9e",
+  "authorization_phrase": "LET_MORTGAGE_DESK_SWITCH_LOSS_DRAFT_MONITORING",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 166 adds one SECURITY DEFINER function and replaces nothing (owner 2026-11-14: \"Mortgage agent needs to be able to change the claim from monitor to not monitored, so the tenants see that type of update.\"; only while the request is in progress; switching to Not Monitored with escrow or draws recorded is allowed with a warning; the tenant sees a check-thread message; a check with no loss-draft file is refused). public.aws_mortgage_desk_set_monitoring(uuid, text) is gated by SQL 122's aws_mortgage_desk_working_request(_request_id, ARRAY['in_progress']) (the assigned mortgage agent holding mortgage_agent, or the platform owner; the request in_progress with a check, locked; 42501 / 22023 otherwise); it validates the type (22023 invalid_monitoring_type), locks the loss_draft_tracking row of the request's check (22023 request_has_no_loss_draft; 42501 loss_draft_closed for escrow_status endorsing or final_release_complete), writes nothing when the type is unchanged, and otherwise sets monitoring_type and updated_at, inserts one loss_draft_audit_log row (action set_monitoring_type, loss_draft_action's old/new shape) and one check_messages row on the check from the caller, and returns escrow_or_draws_recorded for the Desk page's warning. EXECUTE checksops and the owner only. The spec prerequisites are the file's own (55000 sql166_prerequisite_missing); the applying login must reach check_messages, loss_draft_audit_log, loss_draft_tracking and mortgage_handling_requests as the definer past RLS (definer_can_write_relations; the file refuses otherwise, sql166_definer_cannot_reach). No table, column, policy, table grant, trigger or row changes, so the db-readonly-validate trigger count is not affected. Expected pre-state in both environments: the function absent (release sql166 v1: 11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608, releaseStateHash('sql166', {})). The API (the Mortgage Desk set-monitoring action) and the Desk page ship after this through their own guarded paths; no API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql166-mortgage-desk-set-monitoring-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql166-mortgage-desk-set-monitoring",
+    "one_shot_migration": "sql166",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-166-apply.md",
+    "tests": [
+      "aws/tests/release-sql166-executor.test.mjs",
+      "aws/tests/release-sql166-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql166-mortgage-desk-set-monitoring-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 166: sql166-mortgage-desk-set-monitoring-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql166-mortgage-desk-set-monitoring); production-sql-one-shot.mjs --migration sql166. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with its attributes, body, result and ACL. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 166 yet. Expected: prerequisites_missing [], the function absent, definer_writes ok on check_messages, loss_draft_audit_log, loss_draft_tracking and mortgage_handling_requests, already_applied false. Expected release-engine fingerprint of that pre-state under sql166: 11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608 (releaseStateHash('sql166', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "5c8e030f32fdfbaf892a7496a5b5c71c02aca0b6494cf04b9e62ab71e3534e9e",
+    "note": "public.aws_mortgage_desk_set_monitoring(uuid, text) (plpgsql, VOLATILE, RETURNS jsonb, owned by checksops_admin, SECURITY DEFINER, SET search_path = public, pg_temp, EXECUTE checksops and the owner, nothing for PUBLIC, anon, authenticated or service_role). No other function, table, column, policy, grant or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql166', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 5c8e030f32fdfbaf892a7496a5b5c71c02aca0b6494cf04b9e62ab71e3534e9e."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 166 (choice sql166-mortgage-desk-set-monitoring) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql166-mortgage-desk-set-monitoring-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

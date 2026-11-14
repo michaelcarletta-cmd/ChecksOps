@@ -9898,6 +9898,78 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.payroll_runs"
     ]
   },
+  // SQL 166 (owner 2026-11-14: "Mortgage agent needs to be able to change the claim from monitor to not monitored, so
+  // the tenants see that type of update"; only while in progress, allowed with a warning when escrow or draws are
+  // recorded, a check-thread message for the tenant, refused without a loss-draft file). One new SECURITY DEFINER
+  // function behind SQL 122's aws_mortgage_desk_working_request (assigned mortgage agent or platform owner; in_progress;
+  // the request has a check): aws_mortgage_desk_set_monitoring(uuid, text) sets loss_draft_tracking.monitoring_type of
+  // the request's check, writes the loss_draft_audit_log row and one check_messages row, and returns
+  // escrow_or_draws_recorded. EXECUTE checksops and the owner (PUBLIC, anon, authenticated and service_role revoked).
+  // definer_writes lists the relations the DEFINER function reaches past RLS as its owner. No predecessor. No table,
+  // column, policy, grant, trigger or row change.
+  sql166: {
+    "key": "sql166",
+    "label": "SQL 166",
+    "choice": "sql166-mortgage-desk-set-monitoring",
+    "production_pin_rel": "ops/deployment-guard/sql166-mortgage-desk-set-monitoring-production-apply.json",
+    "script": "sql166-mortgage-desk-set-monitoring-production-apply",
+    "prerequisites": [
+      "public.mortgage_handling_requests",
+      "public.loss_draft_tracking",
+      "public.loss_draft_audit_log",
+      "public.check_messages",
+      "public.aws_mortgage_desk_working_request(uuid, text[])",
+      "auth.uid()",
+      "role checksops",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.loss_draft_tracking.id",
+      "column public.loss_draft_tracking.check_intake_item_id",
+      "column public.loss_draft_tracking.monitoring_type",
+      "column public.loss_draft_tracking.escrow_status",
+      "column public.loss_draft_tracking.total_escrowed",
+      "column public.loss_draft_tracking.draw_amount_requested",
+      "column public.loss_draft_tracking.draw_amount_released",
+      "column public.loss_draft_tracking.holdback_amount",
+      "column public.loss_draft_tracking.draw_stage",
+      "column public.loss_draft_tracking.updated_at",
+      "column public.loss_draft_audit_log.loss_draft_id",
+      "column public.loss_draft_audit_log.action",
+      "column public.loss_draft_audit_log.actor_id",
+      "column public.loss_draft_audit_log.amount",
+      "column public.loss_draft_audit_log.notes",
+      "column public.loss_draft_audit_log.old_values",
+      "column public.loss_draft_audit_log.new_values",
+      "column public.check_messages.id",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_set_monitoring(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_messages",
+      "public.loss_draft_audit_log",
+      "public.loss_draft_tracking",
+      "public.mortgage_handling_requests"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
