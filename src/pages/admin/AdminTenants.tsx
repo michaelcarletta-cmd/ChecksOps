@@ -747,7 +747,6 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
   const [nextDay, setNextDay] = useState<number | "">(tenant.next_day_rate_cents ?? "");
   const [sameDay, setSameDay] = useState<number | "">(tenant.same_day_rate_cents ?? "");
   const [mortgageInitial, setMortgageInitial] = useState<number | "">(tenant.mortgage_ops_initial_rate_cents ?? "");
-  const [mortgageAdditional, setMortgageAdditional] = useState<number | "">(tenant.mortgage_ops_additional_rate_cents ?? "");
   const [saving, setSaving] = useState(false);
 
   // Pricing is the platform owner's (tenant-billing-admin, SQL 96); it never
@@ -760,7 +759,7 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
       per_check_rate_cents: rate,
     };
     const rateChange = (
-      key: "next_day_rate_cents" | "same_day_rate_cents" | "mortgage_ops_initial_rate_cents" | "mortgage_ops_additional_rate_cents",
+      key: "next_day_rate_cents" | "same_day_rate_cents" | "mortgage_ops_initial_rate_cents",
       value: number | "",
     ) => {
       const next = value === "" ? null : value;
@@ -769,7 +768,6 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
     rateChange("next_day_rate_cents", nextDay);
     rateChange("same_day_rate_cents", sameDay);
     rateChange("mortgage_ops_initial_rate_cents", mortgageInitial);
-    rateChange("mortgage_ops_additional_rate_cents", mortgageAdditional);
     setSaving(true);
     try {
       const saved = await saveTenantPricing(tenant.id, patch);
@@ -780,7 +778,6 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
       setNextDay(asInput(values.next_day_rate_cents));
       setSameDay(asInput(values.same_day_rate_cents));
       setMortgageInitial(asInput(values.mortgage_ops_initial_rate_cents));
-      setMortgageAdditional(asInput(values.mortgage_ops_additional_rate_cents));
       toast({ title: "Saved" });
       onUpdated({ ...tenant, ...values });
     } catch (e) {
@@ -858,7 +855,6 @@ function BillingTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           <h3 className="text-sm font-medium">MortgageOps rates (cents)</h3>
           <div className="grid grid-cols-2 gap-4">
             {centsInput("mortgage-initial-rate", "Initial request", mortgageInitial, setMortgageInitial)}
-            {centsInput("mortgage-additional-rate", "Each additional request", mortgageAdditional, setMortgageAdditional)}
           </div>
         </div>
 
