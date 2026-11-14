@@ -51,7 +51,7 @@ column, policy, table grant, trigger or row. The db-readonly-validate trigger co
 SPA change is part of this pin: the API (`claim_ledger_relink_check` in the RPC route) and the Review screen ship
 afterwards through their own guarded paths.
 
-**Status:** staging pin execute-authorized (wave 59); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 59, 2026-11-14, apply run 43628481801); staging acceptance: the staging apply under the owner's run approval ("apply SQL 166 and SQL 167 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `6b4e6de5-3548-4477-927c-bcbda4a11391`). Not applied in production.
 
 **Staging read-live (2026-11-14).** Run 43623494491 (main `3239508c`, after executor inspect run 43622613027 and executor deploy
 run 43622915623 (executor CodeSha256 `BGu9krtX…` -> `4gH9sgaz…`)), under the owner's words "apply SQL 166 and SQL 167 in
@@ -59,6 +59,40 @@ staging": `already_applied` false, `precondition_failures` `[]`, `prerequisites_
 `45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343`, equal to the derived pre-state; intended `3aebf662…`. Recorded in the staging pin
 (`expected_live_definition_sha256`, `execute: true`, wave 59). The staging apply is a separate run after this pin is merged and
 the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-14).** The staging pins for SQL 166 and SQL 167 (waves 58 and 59, PR
+#1908, owner's words "merge #1908") merged as `84dd7e5492e911aee336282a6262888965fd6659`. Deploy run 43626936092 updated the staging guarded SQL executor
+(CodeSha256 `4gH9sgaz…` -> `0KNPXGrb…`); a fresh read-live, run 43628253879, read `45b7f3a9…`. Apply run 43628481801 (main
+`84dd7e5`) under the owner's words "apply SQL 166 and SQL 167 in staging": `before_hash` `45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343`, `after_hash`
+`3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c` (the intended hash). Read-live run 43628751159: `already_applied` true. The owner gave the run
+approval "apply SQL 166 and SQL 167 in staging"; no separate staging acceptance statement was given. There is no separate
+staging record PR for SQL 167: these staging runs are recorded here and in the production pin's `staging_acceptance` by the
+production pin PR.
+
+**Production inspect (2026-11-14).** Read-only `--inspect` through SSM `6b4e6de5-3548-4477-927c-bcbda4a11391` on
+`i-0c35557c4e5385406` (under the owner's words "run the SQL 166 and SQL 167 production inspect"; runner started from stopped
+with no SSM command in progress, command 18:54:51Z to 18:55:02Z, AWS-RunShellScript, Success, runner stopped again afterwards,
+all by `user/claude-code`; the same command ran SQL 166's `--inspect`, recorded in `ops/production-sql-166-apply.md`), main
+`84dd7e549` (tarball sha256 `f7965818d5b9d95284f125c9fded2fde1c50f3702d24a036e03e5aac68767c03`, checked by `sha256sum -c` on the runner, `SOURCE_COMMIT` matched, staged by
+`sql53-temporary-transfer.yml` run 43629060749; sha256 of the printed sql167 output, computed on the runner,
+`0db0c0abc74b215e0d6c301a4262856ea021f5f6a63eaef90d4b39718952f7e5`, 2383 bytes), exit 0, `ok` true, `read_only` true, `current_user` `checksops_admin`,
+`missing_dependencies` `[]`: live `45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343` (the function absent: the derived pre-state, equal to staging's
+before its apply), no predecessor, `prerequisites_missing` `[]`, `successors_applied` `[]`, `definer_writes` ok on
+`check_intake_items`, `claims`, `loss_draft_tracking`, `signature_requests`, `check_audit_log` and `claim_settlements`,
+`already_applied` false, `precondition_failures` `[]`, `apply_preconditions_met` false (no pre-state recorded yet).
+Production's pre-state equals staging's (read-live runs 43623494491 and 43628253879), so the staging apply took the path
+production will. Recorded in the production pin with the staging apply (run 43628481801) as its staging acceptance and
+`execute: true` under the owner's "Yes" to "Shall I open the pin PR?". The owner merges the pin change; the apply runs only
+after that merge is on main and staged, under the owner's words for that run (phrase
+`RELINK_CHECK_TO_CORRECTED_EXISTING_CLAIM`).
+
+Not covered by the inspect (not verified): the live-only trigger `touch_claim_on_signature` on `signature_requests`
+(`public.touch_claim_updated_at`, AFTER INSERT, UPDATE or DELETE; listed in the live trigger inventory
+`aws/db-copy/analysis/triggers_classified.json`, defined by no migration under `aws/`). It fires when the relink moves this
+check's `signature_requests` rows and touches the `claims` row they point to. It matters only when a moved check's signature
+requests point to a target claim with no `org_id`: SQL 155's claim owner stamp (`trg_aws_stamp_claim_org_id`, BEFORE INSERT
+OR UPDATE on `claims`) keeps an existing `org_id` and acts only on an UPDATE of a claims row whose `org_id` is NULL. The
+release inspect does not read triggers outside the spec, and the PostgreSQL test does not carry this trigger.
 
 ## Fingerprint
 
