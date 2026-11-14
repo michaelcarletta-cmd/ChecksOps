@@ -218,7 +218,22 @@ const TRANSFER_TO_BANK_MANIFEST = 'aws/tests/fixtures/production-wallet-transfer
 // SQL 165 / SQL 165 / SQL 154, unchanged), planning only. Not a member of any recorded rebuild section; the history checks read each row
 // as it stood before that plan (vendorApiPre).
 const VENDOR_API_MANIFEST = 'aws/tests/fixtures/production-vendor-payments-api-manifest-2026-11-13.json';
-const vendorApiPre = (row) => {
+// Applied 2026-11-14 (production runs 43548581455, 43548654658 and 43548826506, VERIFIED): the three rows expect main's bytes
+// and name the applied record, whose previous_manifest is the planning manifest. vendorApiRecordPre reads such a row as it
+// stood before those applies (the planning row); vendorApiPre reads it as it stood before the plan.
+const VENDOR_API_APPLIED_MANIFEST = 'aws/tests/fixtures/production-vendor-payments-api-applied-manifest-2026-11-14.json';
+const vendorApiRecordPre = (row) => {
+  if (!row || row.manifest !== VENDOR_API_APPLIED_MANIFEST) return row;
+  const applied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_APPLIED_MANIFEST), 'utf8')).members;
+  const entry = Object.values(applied).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
+  assert.ok(entry, 'a vendor payments API applied row names its record entry');
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, entry.previous_manifest), 'utf8')).members;
+  const plannedEntry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256);
+  assert.ok(plannedEntry, 'the applied record chains to its planning entry');
+  return { ...row, expected_live_sha256: plannedEntry.live_sha256, manifest: entry.previous_manifest };
+};
+const vendorApiPre = (row0) => {
+  const row = vendorApiRecordPre(row0);
   if (!row || row.manifest !== VENDOR_API_MANIFEST) return row;
   const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_MANIFEST), 'utf8')).members;
   const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
@@ -603,7 +618,7 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     // applied bytes stand for main's.
     let mainBytes = sha256(fs.readFileSync(path.join(apiRoot, name)));
     // (Likewise the vendor payments API plan: the applied bytes it starts from stand for main's.)
-    if (overlay.members[name]?.manifest === VENDOR_API_MANIFEST) {
+    if (vendorApiRecordPre(overlay.members[name])?.manifest === VENDOR_API_MANIFEST) {
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
       mainBytes = vendorApiPre(overlay.members[name]).accepted_sha256;
     }
@@ -1738,7 +1753,7 @@ test('transfer to bank (2026-11-13, planning only): its seven API files wait for
   assert.ok(CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has('app-services.mjs'));
 });
 
-test('vendor payments API (2026-11-13, planning only): its three REPLACEs go through the production overlay plan from their applied bytes; no recorded rebuild section lists them', () => {
+test('vendor payments API (2026-11-13): its three REPLACEs went through the production overlay plan from their applied bytes (production runs 43548581455, 43548654658, 43548826506, recorded applied); no recorded rebuild section lists them', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_MANIFEST), 'utf8'));
   const overlay = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
@@ -1751,8 +1766,12 @@ test('vendor payments API (2026-11-13, planning only): its three REPLACEs go thr
     assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
     assert.equal(entry.operation, 'replace', name);
     assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
+    // Applied 2026-11-14: the row expects main's bytes and names the applied record; read before the applies, it is the
+    // planning row (the bytes it recorded live expected, the planning manifest named).
     const row = overlay.members[name];
-    assert.deepEqual([row.accepted_sha256, row.expected_live_sha256, row.manifest], [entry.accepted_sha256, entry.live_sha256, VENDOR_API_MANIFEST], name);
+    assert.deepEqual([row.accepted_sha256, row.expected_live_sha256, row.manifest], [entry.accepted_sha256, entry.accepted_sha256, VENDOR_API_APPLIED_MANIFEST], name);
+    const planningRow = vendorApiRecordPre(row);
+    assert.deepEqual([planningRow.accepted_sha256, planningRow.expected_live_sha256, planningRow.manifest], [entry.accepted_sha256, entry.live_sha256, VENDOR_API_MANIFEST], name);
     assert.deepEqual(vendorApiPre(row).manifest, entry.previous_manifest, name);
   }
   // The current sections, applied in both environments, list none of them: a staging inspect of a full-package rebuild of
