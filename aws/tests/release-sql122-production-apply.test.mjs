@@ -242,8 +242,14 @@ test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check 
   assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
   assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
   assert.equal(pre.pin, 'ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json');
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL122_FILE), ['mortgage-desk-return.mjs']);
-  assert.equal(plan.members['mortgage-desk-return.mjs'].operation, 'add');
+  // The ADD was held on it until applied (2026-10-28). The desk set monitoring plan (2026-11-14, planning only) has since moved
+  // the row on to a REPLACE held on SQL 166, whose function calls SQL 122's gate; nothing waits on SQL 122 itself now.
+  const deskMonitoring = readJson('aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json');
+  const deskRow = plan.members['mortgage-desk-return.mjs'];
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL122_FILE), []);
+  assert.deepEqual([deskRow.operation, deskRow.sql_before, deskRow.manifest],
+    ['replace', 'aws/workflows/sql/166_mortgage_desk_set_monitoring.sql', 'aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json']);
+  assert.equal(deskMonitoring.members['mortgage-desk-return.mjs'].previous_manifest, 'aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json');
   for (const importer of ['workflow-rpc.mjs', 'storage-write-auth.mjs', 'app-services.mjs']) {
     assert.ok(plan.order.indexOf('mortgage-desk-return.mjs') < plan.order.indexOf(importer), importer);
     assert.match(fs.readFileSync(path.join(ROOT, 'aws/functions/api', importer), 'utf8'), /from '\.\/mortgage-desk-return\.mjs'/, importer);

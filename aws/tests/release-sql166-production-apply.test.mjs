@@ -241,9 +241,14 @@ test('order: no predecessor; one new SECURITY DEFINER function with its ACL, not
     'definer_can_write_relations', 'db-readonly-validate trigger count is not affected', 'no API, Lambda or SPA change is part of this pin', releaseStateHash(KEY, {})]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // No API member waits on SQL 166 yet.
+  // The desk set monitoring API (2026-11-14, planning only) holds mortgage-desk-return.mjs on SQL 166; production records it
+  // verified live from this pin's applied record (#1910).
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL166_FILE], undefined);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL166_FILE), ['mortgage-desk-return.mjs']);
+  assert.equal(plan.sql_prerequisites[SQL166_FILE].verified_live, true);
+  for (const text of [COMMITTED.applied.apply_ssm_command_id, COMMITTED.applied.one_shot_run_id, COMMITTED.applied.one_use_id, '#1910']) {
+    assert.ok(plan.sql_prerequisites[SQL166_FILE].evidence.includes(text), text);
+  }
   // The file: the prerequisite DO block, one function, its REVOKE from PUBLIC, the role REVOKE DO block and the GRANT to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL166_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');
