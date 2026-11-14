@@ -4,6 +4,8 @@ import { AlertTriangle, Clock, CheckCircle2, HelpCircle, XCircle } from "lucide-
 import {
   assessCheckValidity,
   CHECK_VALIDITY_BADGE_CLASS,
+  isCheckDeposited,
+  type CheckDepositStateLike,
   type CheckValidityRisk,
 } from "@/lib/checkValidity";
 
@@ -20,6 +22,8 @@ interface CheckValidityBadgeProps {
   expirationDays?: number | null;
   /** Hide when risk is "ok" or "unknown" — useful in dense lists. */
   hideWhenSafe?: boolean;
+  /** The check's deposit state. Once deposited (isCheckDeposited) no badge is shown. */
+  check?: CheckDepositStateLike | null;
   className?: string;
   size?: "xs" | "sm";
 }
@@ -28,9 +32,13 @@ export function CheckValidityBadge({
   issueDate,
   expirationDays,
   hideWhenSafe = false,
+  check,
   className = "",
   size = "xs",
 }: CheckValidityBadgeProps) {
+  // Owner 2026-11-14: the issue date does not matter once the check is deposited.
+  if (isCheckDeposited(check)) return null;
+
   const assessment = assessCheckValidity(issueDate, { 
     staleThresholdDays: expirationDays,
     expirationThresholdDays: expirationDays 

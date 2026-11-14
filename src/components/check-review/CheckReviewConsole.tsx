@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
-import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
+import { checkValidityWarning } from "@/lib/checkValidity";
 import { CashJobReviewLink } from "@/components/cash-jobs/CashJobReviewLink";
 import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@/lib/reviewQueueQuery";
 import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
@@ -1131,11 +1131,12 @@ export function ReviewDecisionPanel({
         )}
 
         {(() => {
-          const v = assessCheckValidity(check.issue_date, {
+          // None once the check is deposited (owner 2026-11-14, isCheckDeposited).
+          const v = checkValidityWarning(check, {
             expirationThresholdDays: (check as any).expiration_days
           });
 
-          if (v.risk === "ok" || v.risk === "unknown") return null;
+          if (!v) return null;
           const tone =
             v.risk === "expired"
               ? "border-red-500/40 bg-red-500/10 text-red-400"
@@ -1510,13 +1511,14 @@ export function ReviewDecisionPanel({
                     });
                     return;
                   }
-                  /* Stale-date soft warning */
-                  const v = assessCheckValidity(effectiveCheck.issue_date, { 
+                  /* Stale-date soft warning; none once the check is deposited
+                     (owner 2026-11-14, isCheckDeposited). */
+                  const v = checkValidityWarning(effectiveCheck, {
                     staleThresholdDays: (effectiveCheck as any).expiration_days,
-                    expirationThresholdDays: (effectiveCheck as any).expiration_days 
+                    expirationThresholdDays: (effectiveCheck as any).expiration_days
                   });
                   if (
-                    isAtRisk(v.risk) &&
+                    v &&
                     depositPath !== "reissue_requested" &&
                     depositPath !== "hold_for_claim_review"
                   ) {

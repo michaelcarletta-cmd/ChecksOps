@@ -159,3 +159,65 @@ export const CHECK_VALIDITY_BADGE_CLASS: Record<CheckValidityRisk, string> = {
 export function isAtRisk(risk: CheckValidityRisk): boolean {
   return risk === "warning" || risk === "stale" || risk === "expired";
 }
+
+/**
+ * Owner 2026-11-14: "Make sure once a check is deposited the validity of the check is
+ * irrelevant meaning the date issued does not matter for anyone it's already been deposited
+ * and not a concern. There is no need to show the warning once a check is deposited."
+ *
+ * "Deposited" is read the way the Check Command Center already reads it:
+ *   - check_stage deposited, or past it: funds_released, disbursed_externally (the Funds tab
+ *     payout gate and the Deposited / Funds Released lanes), cleared (HomeownerClaimPortal);
+ *   - status (or a mirrored check's partner_status) deposited / released (prettifyStatus shows
+ *     both as "Deposited"), funds_released, cleared, settled (getDepositLabel's "Cleared");
+ *   - deposited_at recorded (the manual and Check Alt deposit paths set it).
+ * A check whose status or stage is "returned" is not deposited: the bank sent it back, and it
+ * has to be presented again, so its issue date matters again.
+ */
+export const DEPOSITED_CHECK_STAGES: ReadonlySet<string> = new Set([
+  "deposited",
+  "funds_released",
+  "disbursed_externally",
+  "cleared",
+]);
+
+export const DEPOSITED_CHECK_STATUSES: ReadonlySet<string> = new Set([
+  "deposited",
+  "released",
+  "funds_released",
+  "cleared",
+  "settled",
+]);
+
+export interface CheckDepositStateLike {
+  status?: string | null;
+  check_stage?: string | null;
+  partner_status?: string | null;
+  deposited_at?: string | null;
+}
+
+const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+
+export function isCheckDeposited(check: CheckDepositStateLike | null | undefined): boolean {
+  if (!check) return false;
+  const status = norm(check.status);
+  const stage = norm(check.check_stage);
+  if (status === "returned" || stage === "returned") return false;
+  if (DEPOSITED_CHECK_STAGES.has(stage)) return true;
+  if (DEPOSITED_CHECK_STATUSES.has(status)) return true;
+  if (DEPOSITED_CHECK_STATUSES.has(norm(check.partner_status))) return true;
+  return Boolean(check.deposited_at);
+}
+
+/**
+ * The issue-date validity warning for a check, or null when none is shown: the check is
+ * deposited (or past deposit), or its age is not at risk ("ok" / "unknown").
+ */
+export function checkValidityWarning(
+  check: (CheckDepositStateLike & { issue_date?: string | Date | null }) | null | undefined,
+  options: Parameters<typeof assessCheckValidity>[1] = {},
+): CheckValidityAssessment | null {
+  if (!check || isCheckDeposited(check)) return null;
+  const assessment = assessCheckValidity(check.issue_date, options);
+  return isAtRisk(assessment.risk) ? assessment : null;
+}
