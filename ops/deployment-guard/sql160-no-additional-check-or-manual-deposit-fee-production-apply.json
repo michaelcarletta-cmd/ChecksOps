@@ -1,8 +1,8 @@
 {
   "id": "sql160-no-additional-check-or-manual-deposit-fee-production-apply",
   "migration": "sql160",
-  "authorization": "Owner approved 2026-11-13 (the owner's words of 2026-11-12 and 2026-11-13: \"start SQL 160 yes\", \"apply SQL 160 in staging\", \"run the SQL 160 and SQL 161 production inspect\" and \"Yes\" to \"Shall I open the pin PR?\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 160 after the staging apply below (production 3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229 -> fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-14; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 160 production pin change on 2026-11-13 in the words \"start SQL 160 yes\", \"apply SQL 160 in staging\", \"run the SQL 160 and SQL 161 production inspect\" and \"Yes\" to \"Shall I open the pin PR?\" (on the staging apply run 43353383753; 3a8bb0b1 -> fae1623b, #1855, merged to main as 43fed439a) and the one apply run recorded in applied (workstream prod-sql160-no-additional-check-fee-20261114) in the words \"apply SQL 160 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -63,5 +63,340 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43353383753",
     "basis": "Guarded staging SQL executor apply of sql160-no-additional-check-or-manual-deposit-fee, run 43353383753 (2026-11-13, main 2e2076d494ec3ff7454c1ae1dcc75a3f4d0b0589, wave 51, staging pin PR #1851), under the owner's words \"apply SQL 160 in staging\", on the executor deployed by deploy run 43352734483 (CodeSha256 OrCHvYX9... -> m0Av9v61...), from the staging pre-state read by read-live run 43353085216 (3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229, apply_preconditions_met true; first recorded by read-live run 43350223533, main 4cd25dac, in the staging pin): receipt before 3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229, after fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40 == intended, result applied. Read-live run 43353724235 then reported already_applied true, live fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40; SQL 161's read-live run 43353977052 still reported already_applied true. Before that, the first SQL 160 read-live (run 43307779123, main 83a508fb) read 7fd99249... because staging lacked the checksops EXECUTE on tg_record_mortgage_handling_billing() that production holds; SQL 161 granted it in staging (apply run 43349438014, 72031400... -> b916bcb5..., read-live 43349855104 already_applied true). The owner gave the run approval \"apply SQL 160 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-160-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql160-billing-additional-check-pg.test.mjs and through the executor by aws/tests/release-sql160-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so staging accepted exactly the production transition. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-14",
+    "result": "applied",
+    "source_commit": "394e0349e6dbf4c94297583369bfd6afb7fefc59",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-394e0349e6dbf4c94297583369bfd6afb7fefc59.tar.gz",
+      "sha256": "95493212eee7f1ce7e18b9ac9a44576013c509a8d6fad59151481c54f4593289"
+    },
+    "source_staged_by": "sql53-temporary-transfer.yml run 43550312888 (staged main 394e0349e6dbf4c94297583369bfd6afb7fefc59; TARBALL_SHA256 95493212eee7f1ce7e18b9ac9a44576013c509a8d6fad59151481c54f4593289, checked by sha256sum -c on the runner before both commands; SOURCE_COMMIT matched)",
+    "migration_source_sha256": "8133121f731f3ff11c9877747685af666efb91a06c0cbae20612cb6ba690c334",
+    "migration_source_sha256_note": "The one-shot source step checked the pinned migration file in the tarball against source_sha256 (step source ok).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql160-no-additional-check-fee-20261114",
+    "one_use_id": "sql160-prod-2d7a7cac-3d44-4393-813b-f96a6c2ec9e2",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 160 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql160; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "inspect_ssm_command_id": "ed053374-07a9-4819-a22a-73eed6d25305",
+    "apply_ssm_command_id": "3d189bad-52e1-4d49-adae-c5e59b4c98de",
+    "one_shot_run_id": "8278c975-b6d9-47c3-ad4b-b8c959e0dd88",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql160_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. Recorded from the run's printed output: one SSM command (3d189bad-52e1-4d49-adae-c5e59b4c98de on i-0c35557c4e5385406, Success, 2026-11-14T03:13:22.667Z to 2026-11-14T03:13:35.667Z, EXIT=0) printed the top-level result, the steps, each details section as JSON cut at 6000 characters by the operator's output filter, and the sha256 of the full one-shot JSON output, 31a27ffb0d60e0b7aef8e4da6e6d6a6effbacc62d256b596cf52e5a9e4de8c0f. details.applied arrived only up to its receipt (the cut fell inside it); details.apply_result (2033 characters) and details.post_apply_inspect (1607) arrived whole, and the one-shot sets applied.receipt and applied.post_apply_inspect to those same objects (scripts/deployment-guard/lib/production-sql-one-shot.mjs), so they are recorded from them; the part of applied.receipt printed before the cut equals the start of details.apply_result, and details.pre_apply_inspect equals applied.pre_apply_inspect as printed. The full output was deleted with the run's work directory (removed on exit), so only its sha256 is kept. Pre-apply inspect: one-shot --phase inspect SSM ed053374-07a9-4819-a22a-73eed6d25305 (Success, 2026-11-14T03:13:06.636Z to 2026-11-14T03:13:21.636Z, EXIT=0, steps pin, source, inspect and contracts ok, nothing written, sha256 of its output 92c6f80b550380be6e9603977a36d916ca13ec77cb2ccf7c7ed907427da14b34) read live 3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures []); the apply command was sent only after that output showed this pre-state and precondition_failures []. Source staged by transfer run 43550312888. The runner was started from stopped with no SSM command in progress (root volume 39% used), both commands ran in one session, a process check after the apply (pgrep) found no one-shot running, and the runner was stopped afterwards, all by user/claude-code. Production acceptance: not yet reported by the owner when this was recorded.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 394e0349e6dbf4c94297583369bfd6afb7fefc59 (production-sql-one-shot 8278c975-b6d9-47c3-ad4b-b8c959e0dd88, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 394e0349e6dbf4c94297583369bfd6afb7fefc59 (production-sql-one-shot 8278c975-b6d9-47c3-ad4b-b8c959e0dd88, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 394e0349e6dbf4c94297583369bfd6afb7fefc59 (production-sql-one-shot 8278c975-b6d9-47c3-ad4b-b8c959e0dd88, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "record_check_billing_event()",
+            "state": "different"
+          },
+          {
+            "name": "accrue_mortgage_ops_billing(uuid)",
+            "state": "different"
+          },
+          {
+            "name": "earn_mortgage_agent_compensation(uuid)",
+            "state": "different"
+          },
+          {
+            "name": "tg_record_mortgage_handling_billing()",
+            "state": "different"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "record_check_billing_event()",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "accrue_mortgage_ops_billing(uuid)",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "authenticated EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "earn_mortgage_agent_compensation(uuid)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "tg_record_mortgage_handling_billing()",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "receipt": {
+      "migration": "sql160",
+      "workstream": "prod-sql160-no-additional-check-fee-20261114",
+      "commit": "394e0349e6dbf4c94297583369bfd6afb7fefc59",
+      "sql_file": "aws/workflows/sql/160_no_additional_check_mortgage_charge_or_manual_deposit_fee.sql",
+      "before_hash": "3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229",
+      "after_hash": "fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40",
+      "release_sql_inspect": {
+        "live_definition_sha256": "fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "record_check_billing_event()",
+            "state": "intended"
+          },
+          {
+            "name": "accrue_mortgage_ops_billing(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "earn_mortgage_agent_compensation(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "tg_record_mortgage_handling_billing()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "record_check_billing_event()",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "accrue_mortgage_ops_billing(uuid)",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "authenticated EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "earn_mortgage_agent_compensation(uuid)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "tg_record_mortgage_handling_billing()",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "ba7fc5f7caaffb6cc6216e18c260533f624c51cfe2d52db190d37679666ca522",
+      "unrelated_catalog_counts": {
+        "relations": 906,
+        "columns": 3586,
+        "constraints": 2279,
+        "policies": 481,
+        "functions": 1387,
+        "indexes": 665,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43353383753",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "record_check_billing_event()",
+            "state": "intended"
+          },
+          {
+            "name": "accrue_mortgage_ops_billing(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "earn_mortgage_agent_compensation(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "tg_record_mortgage_handling_billing()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "record_check_billing_event()",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "accrue_mortgage_ops_billing(uuid)",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "authenticated EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "earn_mortgage_agent_compensation(uuid)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "tg_record_mortgage_handling_billing()",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "not_captured": "Fields an applied record of this kind (SQL 159's) carries that this one lacks: manifest_sha256 (details.manifest_sha256, which SQL 159's record copied into applied, was not among the printed sections), the size of the one-shot output and a copy of it on the runner (the output filter printed only the cut sections and the sha256 31a27ffb…; the work directory holding the output was removed on exit), details.not_observed_by_this_run and details.manifest_deleted (not printed), and the inspect run's run_id (not printed). None of them is reconstructed."
+  },
+  "production_evidence": {
+    "2026-11-14 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql160-no-additional-check-fee-20261114, main 394e0349e (tarball 95493212…, transfer run 43550312888, migration source 8133121f… == pin), owner-approved run (\"apply SQL 160 in production\"), pre-apply --phase inspect SSM ed053374-07a9-4819-a22a-73eed6d25305 (live 3a8bb0b1…, live_matches_expected true, precondition_failures []), apply SSM 3d189bad-52e1-4d49-adae-c5e59b4c98de, run_id 8278c975-b6d9-47c3-ad4b-b8c959e0dd88, one_use_id sql160-prod-2d7a7cac-3d44-4393-813b-f96a6c2ec9e2: every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; 3a8bb0b1… -> fae1623b…, result applied, unrelated catalog ba7fc5f7…; post-apply inspect already_applied true, precondition_failures [], the four functions intended with their EXECUTE ACLs unchanged. The one-shot output was printed in sections cut at 6000 characters (sha256 of the full output 31a27ffb…); the manifest hash was not captured (see applied.not_captured). The runner was stopped after a check that no one-shot process remained. Production acceptance (no $5 Mortgage Ops charge, agent pay or mortgage_handling event for an additional check, no $4 for a check deposited outside ChecksOps) was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

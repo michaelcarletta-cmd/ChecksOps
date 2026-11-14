@@ -30,7 +30,7 @@ recorded; owner, EXECUTE grants, SECURITY DEFINER and SET options of the four fu
 table, trigger, policy or grant. The db-readonly-validate trigger count is not affected. No API, Lambda or SPA change is
 part of this pin.
 
-**Status:** applied in staging (wave 51, 2026-11-13, apply run 43353383753); staging acceptance: the staging apply under the owner's run approval ("apply SQL 160 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `4a5e9028-0372-43b9-a1bb-d6751e6bedd3`). Not applied in production.
+**Status:** applied in staging (wave 51, 2026-11-13, apply run 43353383753); staging acceptance: the staging apply under the owner's run approval ("apply SQL 160 in staging"; no separate acceptance statement); applied to production (2026-11-14); the production pin is retired (`execute: false`).
 
 **Staging read-live (2026-11-12).** The first read-live, run 43307779123 (main `83a508fb`), read `7fd99249…`: staging's
 `tg_record_mortgage_handling_billing()` lacked the `checksops EXECUTE` production holds, so SQL 160's post-state could not reach
@@ -71,6 +71,25 @@ equals staging's (read-live runs 43350223533 and 43353085216), so the staging ap
 the production pin with the staging apply (run 43353383753) as its staging acceptance and `execute: true` under the owner's
 "Yes" to "Shall I open the pin PR?". The owner merges the pin change; the apply runs only after that merge is on main and
 staged, under the owner's words for that run (phrase `STOP_ADDITIONAL_CHECK_AND_OUTSIDE_DEPOSIT_CHARGES`).
+
+**Production apply (2026-11-14).** After the pin change (#1855, merged to main as `43fed439a`), transfer run 43550312888
+(`sql53-temporary-transfer.yml`) staged main `394e0349e` (tarball sha256
+`95493212eee7f1ce7e18b9ac9a44576013c509a8d6fad59151481c54f4593289`, checked by `sha256sum -c` on the runner; `SOURCE_COMMIT`
+matched). Under the owner's words "apply SQL 160 in production" (passed verbatim), on `i-0c35557c4e5385406` (started from stopped
+with no SSM command in progress, root volume 39% used): one-shot `--phase inspect` (SSM `ed053374-07a9-4819-a22a-73eed6d25305`,
+Success, exit 0, steps pin, source, inspect and contracts ok, nothing written) read live `3a8bb0b1…` (`live_matches_expected`
+true, `already_applied` false, `precondition_failures` `[]`); the apply command was sent only after that. Then `--phase apply`
+(SSM `3d189bad-52e1-4d49-adae-c5e59b4c98de`, Success, exit 0, run `8278c975-b6d9-47c3-ad4b-b8c959e0dd88`, workstream
+`prod-sql160-no-additional-check-fee-20261114`, one_use_id `sql160-prod-2d7a7cac-3d44-4393-813b-f96a6c2ec9e2`): contracts 4/4,
+6/6 and 43/43; all 11 steps ok; receipt `3a8bb0b1…` → `fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40`
+(intended), result `applied`, unrelated catalog `ba7fc5f7…`; post-apply inspect `already_applied` true, `precondition_failures`
+`[]`, the four functions `intended` with their EXECUTE ACLs unchanged. The run's output was printed in sections cut at 6000
+characters (sha256 of the full output `31a27ffb0d60e0b7aef8e4da6e6d6a6effbacc62d256b596cf52e5a9e4de8c0f`; the output itself was
+deleted with the run's work directory on exit): the receipt and the post-apply inspect arrived whole, the manifest hash was not
+captured and is not reconstructed (`applied.not_captured`). Both commands ran in one session; a process check after the apply
+found no one-shot running and the runner was stopped afterwards, all by `user/claude-code`. Recorded in the pin's `applied` and
+`production_evidence`; `execute` is false again. Production acceptance (no additional-check charge or agent pay, no $4 for an
+outside deposit) had not been reported by the owner when this record was written; this record does not claim it.
 
 ## Grants and attributes (observed, kept)
 
