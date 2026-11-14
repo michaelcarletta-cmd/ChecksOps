@@ -11,7 +11,6 @@ import {
 import {
   DEFAULT_FAILED_DEPOSIT_FEE_CENTS,
   DEFAULT_INVOICE_FEE_CENTS,
-  DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS,
   DEFAULT_MORTGAGE_INITIAL_RATE_CENTS,
   DEFAULT_NEXT_DAY_RATE_CENTS,
   DEFAULT_SAME_DAY_RATE_CENTS,
@@ -25,7 +24,6 @@ test('1 blank rates show the billing engine defaults; the defaults match the eng
   assert.equal(rows.next_day, DEFAULT_NEXT_DAY_RATE_CENTS);
   assert.equal(rows.same_day, DEFAULT_SAME_DAY_RATE_CENTS);
   assert.equal(rows.mortgage_initial, DEFAULT_MORTGAGE_INITIAL_RATE_CENTS);
-  assert.equal(rows.mortgage_additional, DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS);
   assert.equal(rows.check_processing, null);
   assert.equal('monthly' in rows, false);
 });
@@ -36,7 +34,7 @@ test('2 the tenant\'s own rates win; an explicit 0 is free, not the default', ()
     next_day_rate_cents: 0, same_day_rate_cents: 150, mortgage_ops_initial_rate_cents: 0, mortgage_ops_additional_rate_cents: 300,
   }));
   assert.deepEqual(rows, {
-    monthly: 7500, check_processing: 400, next_day: 0, same_day: 150, mortgage_initial: 0, mortgage_additional: 300,
+    monthly: 7500, check_processing: 400, next_day: 0, same_day: 150, mortgage_initial: 0,
     mortgage_second_mortgagee: 500, invoice_sent: 30, failed_deposit: 200,
   });
 });
@@ -50,7 +48,20 @@ test('2c the 2nd mortgage company on a check is a flat $5 (SQL 153), whatever th
   assert.equal(byKey(feeScheduleRows({})).mortgage_second_mortgagee, ENGINE_SECOND_MORTGAGEE_FEE_CENTS);
   // Listed right after the other Mortgage Ops rows.
   const keys = rows.map((r) => r.key);
-  assert.equal(keys.indexOf('mortgage_second_mortgagee'), keys.indexOf('mortgage_additional') + 1);
+  assert.equal(keys.indexOf('mortgage_second_mortgagee'), keys.indexOf('mortgage_initial') + 1);
+});
+
+test('2d no "additional check" Mortgage Ops fee (owner 2026-11-12, SQL 160): not listed, whatever a stored rate says; not editable in Tenant Management', () => {
+  for (const rates of [{}, { mortgage_ops_additional_rate_cents: 500 }, { mortgage_ops_additional_rate_cents: 0 }]) {
+    const rows = feeScheduleRows(rates);
+    assert.equal(rows.some((r) => r.key === 'mortgage_additional'), false);
+    assert.equal(rows.some((r) => /additional check/i.test(r.fee) || /additional check/i.test(r.when)), false);
+  }
+  const page = readFileSync(new URL('../../src/pages/admin/AdminTenants.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(page, /mortgage-additional-rate|Each additional request/);
+  assert.doesNotMatch(page, /rateChange\("mortgage_ops_additional_rate_cents"/);
+  // The first-check rate stays editable.
+  assert.match(page, /centsInput\("mortgage-initial-rate", "Initial request"/);
 });
 
 test('2b invoice fee $0.30 and failed deposit fee $2.00 (agreement 3.6, 3.7) match the engine and SQL 152 (SQL 149 replaced)', () => {
