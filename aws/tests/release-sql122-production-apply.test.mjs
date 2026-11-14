@@ -242,13 +242,15 @@ test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check 
   assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
   assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
   assert.equal(pre.pin, 'ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json');
-  // The ADD was held on it until applied (2026-10-28). The desk set monitoring plan (2026-11-14, planning only) has since moved
-  // the row on to a REPLACE held on SQL 166, whose function calls SQL 122's gate; nothing waits on SQL 122 itself now.
+  // The ADD was held on it until applied (2026-10-28). The desk set monitoring plan (2026-11-14) has since moved the row on to
+  // a REPLACE held on SQL 166, whose function calls SQL 122's gate, applied 2026-11-14 (production run 43645016323, recorded
+  // in the desk monitoring and relink applied record, which chains to that plan); nothing waits on SQL 122 itself now.
   const deskMonitoring = readJson('aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json');
   const deskRow = plan.members['mortgage-desk-return.mjs'];
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL122_FILE), []);
   assert.deepEqual([deskRow.operation, deskRow.sql_before, deskRow.manifest],
-    ['replace', 'aws/workflows/sql/166_mortgage_desk_set_monitoring.sql', 'aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json']);
+    ['replace', 'aws/workflows/sql/166_mortgage_desk_set_monitoring.sql', 'aws/tests/fixtures/production-desk-monitoring-relink-api-applied-manifest-2026-11-14.json']);
+  assert.equal(readJson('aws/tests/fixtures/production-desk-monitoring-relink-api-applied-manifest-2026-11-14.json').members['mortgage-desk-return.mjs'].previous_manifest, 'aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json');
   assert.equal(deskMonitoring.members['mortgage-desk-return.mjs'].previous_manifest, 'aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json');
   for (const importer of ['workflow-rpc.mjs', 'storage-write-auth.mjs', 'app-services.mjs']) {
     assert.ok(plan.order.indexOf('mortgage-desk-return.mjs') < plan.order.indexOf(importer), importer);
