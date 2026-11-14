@@ -1,0 +1,64 @@
+{
+  "id": "sql167-claim-ledger-relink-check-production-apply",
+  "migration": "sql167",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/167_claim_ledger_relink_check.sql",
+  "migration_id": "167_claim_ledger_relink_check",
+  "staging_pin_commit": "254932308e387e00214522f590cef5082eba3a02",
+  "source_sha256": "72bd9ae6a3d336b049d6e7d11ae28da061bf052a5516912ac690a2276b288c6d",
+  "function_identities": [
+    "public.claim_ledger_relink_check(uuid, uuid, text, text, uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
+  "authorization_phrase": "RELINK_CHECK_TO_CORRECTED_EXISTING_CLAIM",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 167 adds one SECURITY DEFINER function and replaces nothing (owner 2026-11-14: \"Need to be able to change/correct claim number once edited for ledger to link to existing claim\"; decisions: before deposit only, the check's loss draft file and signature requests move with it, a number that matches no claim keeps today's rename): claim_ledger_relink_check(uuid, uuid, text, text, uuid), action inspect or relink, locks the check, refuses tenant_mismatch, a deposited, voided or returned check (SQL 43's rule) and an unlinked one (SQL 44's job), finds the claim with SQL 44's same-tenant match copied exactly (ambiguous, cross_tenant, no_match; never creates, renames or deletes a claim), and on relink moves the check's claim_id (guarded on the claim it read), this check's loss_draft_tracking and signature_requests rows still on the old claim, and writes one check_audit_log row (claim_relinked); never another check, claim_settlements, payouts or either claims row. EXECUTE checksops and the owner only. The spec prerequisites are the file's own (55000 sql167_prerequisite_missing), SQL 41's ocr_claim_number_key(text) among them; the applying login must reach check_intake_items, claims, loss_draft_tracking, signature_requests, check_audit_log and claim_settlements as the definer past RLS (definer_can_write_relations; the file refuses otherwise, sql167_definer_cannot_reach). No table, column, policy, table grant, trigger or row changes, so the db-readonly-validate trigger count is not affected. Expected pre-state in both environments: the function absent (release sql167 v1: 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343, releaseStateHash('sql167', {})). The API (claim_ledger_relink_check in the RPC route) and the Review screen ship after this through their own guarded paths; no API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql167-claim-ledger-relink-check-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql167-claim-ledger-relink-check",
+    "one_shot_migration": "sql167",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-167-apply.md",
+    "tests": [
+      "aws/tests/release-sql167-executor.test.mjs",
+      "aws/tests/release-sql167-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql167-claim-ledger-relink-check-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 167: sql167-claim-ledger-relink-check-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql167-claim-ledger-relink-check); production-sql-one-shot.mjs --migration sql167. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with its attributes, body, result and ACL. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 167 yet. Expected: prerequisites_missing [], the function absent, definer_writes ok on check_intake_items, claims, loss_draft_tracking, signature_requests, check_audit_log and claim_settlements, already_applied false. Expected release-engine fingerprint of that pre-state under sql167: 45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343 (releaseStateHash('sql167', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c",
+    "note": "public.claim_ledger_relink_check(uuid, uuid, text, text, uuid) (plpgsql, VOLATILE, RETURNS jsonb), owned by checksops_admin, SECURITY DEFINER, SET search_path = public, SET row_security = off, EXECUTE checksops and the owner, nothing for PUBLIC, anon, authenticated or service_role. No other function, table, column, policy, grant or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql167', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 3aebf66213d324256f0a93f91aadd829adca0e1b258c96f91ee68a2d1147635c."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 167 (choice sql167-claim-ledger-relink-check) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql167-claim-ledger-relink-check-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
