@@ -97,7 +97,7 @@ import { Share2, CalendarRange } from "lucide-react";
 import { CheckProjectScheduleTab } from "@/components/homeowner-ledger/CheckProjectScheduleTab";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
-import { assessCheckValidity } from "@/lib/checkValidity";
+import { checkValidityWarning } from "@/lib/checkValidity";
 import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
@@ -2194,7 +2194,7 @@ export default function CheckCommandCenter() {
                                 {fundsLabel && (
                                   <Badge variant="outline" className="text-[10px]">{fundsLabel}</Badge>
                                 )}
-                                <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} hideWhenSafe />
+                                <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} check={check} hideWhenSafe />
                                 {!hideDepositCol && RecIcon && (
                                   <Badge variant="outline" className={`text-[10px] gap-1 ${rec!.color}`} title={rec!.label}>
                                     <RecIcon className="h-3 w-3" />
@@ -3873,13 +3873,14 @@ function CheckDetailPanel({
           <EditableAmount checkId={checkId} currentAmount={null} readOnly={isSharedView} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
         )}
 
-        {/* Validity assessment — issue date age vs 180-day stale threshold */}
+        {/* Validity assessment — issue date age vs 180-day stale threshold; none once the
+            check is deposited (owner 2026-11-14, isCheckDeposited). */}
         {(() => {
-          const v = assessCheckValidity(check.issue_date, { 
+          const v = checkValidityWarning(check, {
             staleThresholdDays: check.expiration_days,
-            expirationThresholdDays: check.expiration_days 
+            expirationThresholdDays: check.expiration_days
           });
-          if (v.risk === "ok" || v.risk === "unknown") return null;
+          if (!v) return null;
           const tone =
             v.risk === "expired"
               ? "border-red-500/40 bg-red-500/10 text-red-400"
