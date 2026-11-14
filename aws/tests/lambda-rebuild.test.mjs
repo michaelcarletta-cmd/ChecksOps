@@ -237,7 +237,7 @@ const vendorApiRecordPre = (row) => {
 // plan (SQL 154 hold unchanged), planning only. mortgage-ops-usage.mjs carries the same change and is not an overlay
 // member: it reaches a function only with a full-package rebuild. noAdditionalPre reads a row as it stood before that plan
 // (vendorApiPre, which reads further back, applies it first). The eighth sections (staging inspect 43602853354, applied
-// 43604345243; production inspect 43604759009, accepted) list both with these bytes; no earlier section does.
+// 43604345243; production inspect 43604759009, applied 43606264549) list both with these bytes; no earlier section does.
 const NO_ADDITIONAL_MANIFEST = 'aws/tests/fixtures/production-no-additional-check-api-manifest-2026-11-14.json';
 const noAdditionalPre = (row) => {
   if (!row || row.manifest !== NO_ADDITIONAL_MANIFEST) return row;
@@ -1544,14 +1544,31 @@ test('the production history keeps the seventh section (inspect 43461114623, app
   assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
 });
 
-test('the production plan section accepts inspect run 43604759009: the no additional-check charge API rebuild (2 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
+test('the production plan section accepts inspect run 43604759009 and records apply 43606264549: the no additional-check charge API rebuild (2 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const seventh = production.history[6];
   const fifth = production.history[4];
   const staging = raw.environments.staging;
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  // Applied 2026-11-14 (run 43606264549) on the owner's phrase, from the staging reference the section names.
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '43606264549');
+  assert.equal(production.applied.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43606264549');
+  assert.equal(production.applied.main_commit, 'aa107d30997f3aa1db6570949211181c083f12cd');
+  assert.equal(production.applied.approval_phrase, 'DEPLOY FULL API PACKAGE TO PRODUCTION');
+  assert.equal(production.applied.staging_acceptance, production.inspect.staging_acceptance);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.revision_id_before, production.inspect.live_revision_id);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
+  assert.equal(production.applied.code_sha256_after, 'g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg=');
+  assert.equal(production.applied.revision_id_after, 'e116e629-9b3a-41f2-bfbc-1e19a37f2301');
+  assert.equal(production.applied.state, 'VERIFIED');
+  assert.deepEqual(production.applied.smoke, ['/health', '/db-health']);
+  // Production now runs the package staging runs since its eighth rebuild.
+  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  for (const evidence of ['90d494ba-69ea-49d1-8368-f63385b40164', 'github-production-rebuild-43606264549', '6430005b15a252881da2db9b3455ad14966387231ece2cfba81a01802d2c56ff', '#1901', 'no person-run additional-check accept on staging', 'Not verified by this record']) {
+    assert.ok(production.applied.notes.includes(evidence), evidence);
+  }
   assert.equal(production.inspect.run_id, '43604759009');
   assert.equal(production.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43604759009');
   assert.equal(production.inspect.main_commit, '49f34426ed26471b17b76bbb64d0dab044731bbe');
@@ -1925,8 +1942,8 @@ test('transfer to bank (2026-11-13, planning only): its seven API files wait for
   // four changed, three added.
   const staging = raw.environments.staging.history[6];
   const production = raw.environments.production.history[6];
-  // The eighth sections (staging inspect 43602853354, applied 43604345243; production inspect 43604759009, accepted) list
-  // none of them: they are live with main's bytes.
+  // The eighth sections (staging inspect 43602853354, applied 43604345243; production inspect 43604759009, applied
+  // 43606264549) list none of them: they are live with main's bytes.
   for (const [environment, section] of [['staging', raw.environments.staging], ['production', raw.environments.production]]) {
     for (const name of [...ADDS, ...REPLACES]) {
       assert.equal(section.members[name], undefined, `${environment} ${name}`);
@@ -1974,7 +1991,7 @@ test('vendor payments API (2026-11-13): its three REPLACEs went through the prod
     assert.deepEqual(vendorApiPre(row).manifest, entry.previous_manifest, name);
   }
   // The applied seventh sections (history[6] in both environments) list none of them, and neither do the eighth sections
-  // (staging inspect 43602853354, applied 43604345243; production inspect 43604759009, accepted): their inspects count
+  // (staging inspect 43602853354, applied 43604345243; production inspect 43604759009, applied 43606264549): their inspects count
   // them as same, live with main's bytes.
   for (const [environment, section] of [['staging', raw.environments.staging.history[6]], ['production', raw.environments.production.history[6]]]) {
     assert.equal(section.status, 'applied', environment);
@@ -1984,7 +2001,7 @@ test('vendor payments API (2026-11-13): its three REPLACEs went through the prod
     }
   }
   assert.equal(raw.environments.staging.status, 'applied');
-  assert.equal(raw.environments.production.status, 'accepted');
+  assert.equal(raw.environments.production.status, 'applied');
   for (const [environment, section] of [['staging', raw.environments.staging], ['production', raw.environments.production]]) {
     for (const name of REPLACES) {
       assert.equal(section.members[name], undefined, `${environment} ${name}`);
