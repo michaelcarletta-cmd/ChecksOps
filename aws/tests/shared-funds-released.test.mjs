@@ -70,9 +70,12 @@ test('3 a row built from the check adds nothing to the Funds Received totals; a 
 });
 
 test('4 the page lists a partner release under Funds Received, and under neither Funds Released nor Deposited', () => {
-  // Funds Released: only own splits and sends.
+  // Funds Released: only own splits and sends. A send this organization made from a check shared
+  // with it is its own money out too (partner-send-shared-check.test.mjs); the sharing
+  // organization's release of that check is not listed here.
   assert.match(page, /\[\.\.\.\(fundsReleased as any\[\]\), \.\.\.sentReleased\]\.filter\(matchesSplitSearch\)/);
-  assert.match(page, /\[fundsReleased, checkSends, matchesSplitSearch\]/);
+  assert.match(page, /sentReleasedRows\(checkSends\.legs, \[\.\.\.checkSends\.checks, \.\.\.\(sharedChecks as any\[\]\)\]\)/);
+  assert.match(page, /\[fundsReleased, checkSends, sharedChecks, matchesSplitSearch\]/);
   // Funds Received: recorded payments, incoming transfers, then the released shared checks they do not cover.
   assert.match(page, /const received = \[\.\.\.\(fundsReceived as any\[\]\), \.\.\.incomingFundsReceivedRows\(incomingTransfers\)\];/);
   assert.match(page, /sharedReleasedReceivedRows\(sharedChecks as any\[\], received\)/);

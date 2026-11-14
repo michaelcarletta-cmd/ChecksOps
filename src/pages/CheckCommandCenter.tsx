@@ -1239,10 +1239,12 @@ export default function CheckCommandCenter() {
       // Only this organization's own money out: its settled splits and its sends. A shared check
       // the partner released is listed under Funds Received (sharedFundsReleased.ts).
       // Sends write payment_transfers legs, not splits: one row per sent check and recipient.
-      const sentReleased = sentReleasedRows(checkSends.legs, checkSends.checks);
+      // A send from a check another organization shares with this one is this organization's own
+      // money out too (partnerSend.ts); its check is read from the shared list, not by tenant.
+      const sentReleased = sentReleasedRows(checkSends.legs, [...checkSends.checks, ...(sharedChecks as any[])]);
       return [...(fundsReleased as any[]), ...sentReleased].filter(matchesSplitSearch);
     },
-    [fundsReleased, checkSends, matchesSplitSearch],
+    [fundsReleased, checkSends, sharedChecks, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
     () => {
