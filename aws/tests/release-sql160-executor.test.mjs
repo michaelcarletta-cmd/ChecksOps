@@ -8,7 +8,7 @@
  *
  *   - the engine reads pg_get_functiondef's SET name TO 'value' (and TO value) as SET name = value;
  *   - the pin: staging-authorized (applied in staging by run 43353383753), code-derived, selectable, packed, in step with
- *     the execute-authorized production pin (production's own pre-state); the pinned commit authored the bytes; no
+ *     the production pin (applied 2026-11-14 from production's own pre-state, retired); the pinned commit authored the bytes; no
  *     predecessor, supersedes nothing;
  *   - the file and spec: four CREATE OR REPLACE of existing live functions, no GRANT or REVOKE; each spec ACL the one the
  *     production billing trigger inspect observed (billing-trigger-inspect.json observed_functions) with revokes [];
@@ -154,7 +154,7 @@ test('engine: SET name TO \'value\' and SET name TO value read as SET name = val
   assert.deepEqual(releaseFunctionDefinitions(body).g.config, []);
 });
 
-test('pin: SQL 160 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor', () => {
+test('pin: SQL 160 staging-authorized from its read-live, code-derived, selectable, packed, in step with the applied and retired production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -172,7 +172,7 @@ test('pin: SQL 160 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-12: staging apply (wave 51) from staging read-live run 43350223533');
   assert.equal(pin.expected_live_definition_sha256, PRE);
   assert.equal(pin.expected_live_definition_sha256, '3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-160-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 51, 2026-11-13, apply run 43353383753\); staging acceptance: the staging apply under the owner's run approval \("apply SQL 160 in staging"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `4a5e9028-0372-43b9-a1bb-d6751e6bedd3`\)\. Not applied in production\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-160-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 51, 2026-11-13, apply run 43353383753\); staging acceptance: the staging apply under the owner's run approval \("apply SQL 160 in staging"; no separate acceptance statement\); applied to production \(2026-11-14\); the production pin is retired \(`execute: false`\)\./);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-160-apply.md'), 'utf8'), /read-live \(2026-11-13\)\.\*\* Run 43350223533/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(PRE, pin.intended_replacement_sha256);
@@ -222,8 +222,10 @@ test('pin: SQL 160 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(prod.predecessors, []);
   // Production pin execute-authorized (owner-approved pin change of 2026-11-13) on the staging apply from the same pre-state.
   // Its pre-state is production's own (read-only inspect SSM 4a5e9028): the inspected bodies, equal to the staging pin's.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-13 /);
+  // Then applied 2026-11-14 ("apply SQL 160 in production") and retired.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-14; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'STOP_ADDITIONAL_CHECK_AND_OUTSIDE_DEPOSIT_CHARGES');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, PRE);
