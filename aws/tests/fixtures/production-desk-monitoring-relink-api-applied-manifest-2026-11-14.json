@@ -1,0 +1,21 @@
+{
+  "workstream_id": "desk-monitoring-relink-api-applied",
+  "authorization": "Record only (2026-11-14): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage Desk set monitoring API (#1913, merged as 0cc2724af) and the Claim Ledger relink API (#1911, merged as e8548da62; its workflow-rpc.mjs bytes are carried by #1913's) applied. Owner 2026-11-14: \"DEPLOY mortgage-desk-return.mjs TO PRODUCTION\" and \"DEPLOY workflow-rpc.mjs TO PRODUCTION\". Applied 2026-11-14 from main 9cb083e42f41eeb79bd35659a9c35c7453763281 (the #1914 merge), in plan order. Staging (main 9cb083e42, checksops-staging-api): inspect runs 43644379445 and 43644392593 read 0c99317f and 6ec0fd5a live (CodeSha256 g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg=); staging apply run 43644516471 (mortgage-desk-return.mjs; -> c0RAoCKbrtp/Ejj1Gvkms0CoSnSTfHX+DalnFVaKPQs=), staging apply run 43644625759 (workflow-rpc.mjs; -> 65TrtxCSbqreeUtP8mf1RioBT+sYCcroh0xnzi2QESI=), each errors [] with the public staging smoke /health, /db-health and /db-readonly-validate 200; staging re-inspect runs 43644702225 and 43644720000 read ffefa0e4 and 72eed9c7 live (CodeSha256 65TrtxCS..., RevisionId 05c10ae8-84a8-4375-ba9a-e0fd51916fab). Production preflight inspect runs 43644886183 (mortgage-desk-return.mjs) and 43644905131 (workflow-rpc.mjs): 0c99317f and 6ec0fd5a live, CodeSha256 g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg=, RevisionId e116e629-9b3a-41f2-bfbc-1e19a37f2301. mortgage-desk-return.mjs REPLACE 0c99317f -> ffefa0e4: production apply run 43645016323 with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43644516471, expected live 0c99317f, ok true, errors [], before CodeSha256 g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg= RevisionId e116e629-9b3a-41f2-bfbc-1e19a37f2301, after CodeSha256 c0RAoCKbrtp/Ejj1Gvkms0CoSnSTfHX+DalnFVaKPQs= RevisionId 8f643fea-2ca0-408d-a2a2-d088d9df3b53, settled at RevisionId 142e60dd-5ed5-4a9c-9ccf-dad6e7dcc24e. workflow-rpc.mjs REPLACE 6ec0fd5a -> 72eed9c7: production apply run 43645128104 with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43644625759, expected live 6ec0fd5a, ok true, errors [], before CodeSha256 c0RAoCKb... RevisionId 142e60dd-5ed5-4a9c-9ccf-dad6e7dcc24e, after CodeSha256 65TrtxCSbqreeUtP8mf1RioBT+sYCcroh0xnzi2QESI= RevisionId b8a65f4f-8518-432c-986e-afc80f13bb46, settled at RevisionId a354e0c0-8839-4dfb-bae5-f6a94af59a12. Each apply passed the public production smoke (/health and /db-health 200). VERIFIED: production re-inspect runs 43645233654 and 43645251748 read ffefa0e4 and 72eed9c7 live, CodeSha256 65TrtxCSbqreeUtP8mf1RioBT+sYCcroh0xnzi2QESI= (equal to the staging package after run 43644625759), RevisionId a354e0c0-8839-4dfb-bae5-f6a94af59a12. Holds: SQL 166 (mortgage-desk-return.mjs) and SQL 167 (workflow-rpc.mjs), recorded live (#1910). index.mjs is untouched. The website (#1912, #1914) ships with the SPA and is not live through this record. Not verified by this record: a monitoring switch or a claim relink exercised in production. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains each member to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "mortgage-desk-return.mjs": {
+      "live_sha256": "ffefa0e415052bd8bdc574658e053e622cae7126febd0af420edc96a014222f4",
+      "accepted_sha256": "ffefa0e415052bd8bdc574658e053e622cae7126febd0af420edc96a014222f4",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json"
+    },
+    "workflow-rpc.mjs": {
+      "live_sha256": "72eed9c7108f77874b11c549ff39e2fc0205d54271eb1cfcd68f076e103ccb77",
+      "accepted_sha256": "72eed9c7108f77874b11c549ff39e2fc0205d54271eb1cfcd68f076e103ccb77",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json"
+    }
+  }
+}

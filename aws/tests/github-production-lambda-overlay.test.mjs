@@ -539,6 +539,17 @@ const deskMonitoringPreviousAccepted = (name) => (DESK_MONITORING_PREVIOUS_ROWS[
   ? JSON.parse(fs.readFileSync(path.join(ROOT, DESK_MONITORING_PREVIOUS_ROWS[name].manifest), 'utf8')).members[name].accepted_sha256
   : DESK_MONITORING.members[name]?.live_sha256);
 const deskMonitoringApplied = (member) => deskMonitoringPreviousAccepted(member) ?? sha(`aws/functions/api/${member}`);
+// Applied 2026-11-14 in plan order (production runs 43645016323 and 43645128104, each VERIFIED): both rows expect main's bytes
+// and name the applied record, which chains to the planning manifest above (it keeps the pre-apply state). deskRecordPre
+// restates the plan as it stood before those applies (expected_live back to the planning live bytes, manifest back to the
+// planning manifest); deskMonitoringPre, which rewrites both rows whole, needs nothing first.
+const DESK_RELINK_APPLIED_REL = 'aws/tests/fixtures/production-desk-monitoring-relink-api-applied-manifest-2026-11-14.json';
+const deskRecordPre = (plan) => {
+  for (const [name, entry] of Object.entries(DESK_MONITORING.members)) {
+    plan.members[name] = { ...plan.members[name], expected_live_sha256: entry.live_sha256, manifest: DESK_MONITORING_REL };
+  }
+  return plan;
+};
 const deskMonitoringPre = (plan) => {
   for (const [name, entry] of Object.entries(DESK_MONITORING.members)) {
     const previous = DESK_MONITORING_PREVIOUS_ROWS[name];
@@ -2007,8 +2018,9 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     // workflow-rpc.mjs: production run 42912070859 (2026-11-10) replaced the Loss Draft escrow close bytes (0e77f1f6)
     // for the second mortgagee link (b2976326, recorded applied).
     // (production run 43038036742, 2026-11-11, then replaced those for the deposit after payout bytes, 44874858, recorded applied;
-    // production run 43548581455, 2026-11-14, replaced those for the vendor payments API bytes, 6ec0fd5a, recorded applied).
-    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: '6ec0fd5a6c37e99db60b16d0b3349a5b96994fad3600db5030db17eac67d17dd' },
+    // production run 43548581455, 2026-11-14, replaced those for the vendor payments API bytes, 6ec0fd5a, recorded applied;
+    // production run 43645128104, 2026-11-14, replaced those for the desk monitoring and relink bytes, 72eed9c7, recorded applied).
+    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: '72eed9c7108f77874b11c549ff39e2fc0205d54271eb1cfcd68f076e103ccb77' },
     // app-services.mjs moved on too: its daab02f7 release bytes were live (the order gate of production
     // run 40577608750), and production run 40621229388 replaced them for the Mortgage Desk return email
     // route (d1faa212); production run 40778196802 then replaced those for the Mortgage Desk e-sign route
@@ -4068,7 +4080,8 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   // The absent ADD is caught by the import check (missing) or, once present, by the order gate (pending).
   // (workflow-rpc.mjs is held on SQL 148 now, the second mortgagee plan: the replay states it live, as SQL 98.)
   const replayPlan = () => {
-    const plan = mortgageDeskPre(structuredClone(PLAN_SQL98_LIVE));
+    // (The desk monitoring and relink rows, applied 2026-11-14, read as they stood before that record: deskRecordPre.)
+    const plan = mortgageDeskPre(deskRecordPre(structuredClone(PLAN_SQL98_LIVE)));
     plan.sql_prerequisites[SQL148_FILE] = { verified_live: true, evidence: 'test' };
     // (And on SQL 166 since the desk set monitoring plan, planning only: stated live here as well.)
     plan.sql_prerequisites[SQL166_FILE] = { verified_live: true, evidence: 'test' };
@@ -9474,13 +9487,16 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
   for (const name of REPLACES) {
     if (RELINK_API.members[name]) {
-      // The Claim Ledger relink plan (planning only) REPLACEs these applied bytes: on today's plan they are the expected
-      // live bytes, READY for that REPLACE, and main's are ALREADY_ACCEPTED (the plans as they stood before it, with main's
-      // bytes no longer their accepted bytes, cannot be replayed here; the row is checked by the relink plan's own test).
+      // The Claim Ledger relink plan REPLACEd these applied bytes, through the desk monitoring row that carries both RPCs
+      // (production run 43645128104, 2026-11-14, recorded applied): on the plan as it stood before that record
+      // (deskRecordPre) they were the expected live bytes, READY; now main's are ALREADY_ACCEPTED and these a reconciliation
+      // stop (the plans as they stood before the relink plan, with main's bytes no longer their accepted bytes, cannot be
+      // replayed here; the row is checked by the relink plan's own test).
       assert.equal(RELINK_API.members[name].live_sha256, VENDOR_API.members[name].accepted_sha256, name);
-      assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: VENDOR_API.members[name].accepted_sha256 }) })).state, 'READY', name);
+      const preRecord = deskRecordPre(structuredClone(PLAN));
+      assert.equal((await run(inspect(name), { root: ROOT, plan: preRecord, inspectLive: liveFor(name, { sha256: VENDOR_API.members[name].accepted_sha256, plan: preRecord }) })).state, 'READY', name);
       assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: sha(`aws/functions/api/${name}`) }) })).state, 'ALREADY_ACCEPTED', name);
-      for (const other of [VENDOR_API.members[name].live_sha256, 'c'.repeat(64)]) {
+      for (const other of [VENDOR_API.members[name].accepted_sha256, VENDOR_API.members[name].live_sha256, 'c'.repeat(64)]) {
         await assert.rejects(
           run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: other }) }),
           (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -9601,7 +9617,7 @@ test('No additional-check charge in the API (owner 2026-11-12, SQL 160 live): te
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
 });
 
-test('Mortgage Desk set monitoring API (owner 2026-11-14, SQL 166): mortgage-desk-return.mjs and workflow-rpc.mjs REPLACE their applied bytes, held on SQL 166 and SQL 167 (both recorded live in production, record #1910); workflow-rpc.mjs carries the Claim Ledger relink RPC too; planning only', async () => {
+test('Mortgage Desk set monitoring API (owner 2026-11-14, SQL 166): mortgage-desk-return.mjs and workflow-rpc.mjs REPLACE their applied bytes, held on SQL 166 and SQL 167 (both recorded live in production, record #1910); workflow-rpc.mjs carries the Claim Ledger relink RPC too; production runs 43645016323 and 43645128104 applied them', async () => {
   const DESK = 'mortgage-desk-return.mjs';
   const RPC = 'workflow-rpc.mjs';
   const MEMBERS = [DESK, RPC];
@@ -9618,6 +9634,28 @@ test('Mortgage Desk set monitoring API (owner 2026-11-14, SQL 166): mortgage-des
   }
   assert.ok(PLAN.notes.includes('Mortgage Desk set monitoring API (2026-11-14, owner 2026-11-14'));
   assert.ok(PLAN.notes.includes(`Manifest ${DESK_MONITORING_REL}. Planning only.`));
+  // Applied 2026-11-14 on main 9cb083e42 in plan order (owner "DEPLOY mortgage-desk-return.mjs TO PRODUCTION", "DEPLOY
+  // workflow-rpc.mjs TO PRODUCTION"): the applied record chains each member to the planning manifest; each row expects main's
+  // bytes and names it. deskRecordPre restates the plan as it stood before the applies.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, DESK_RELINK_APPLIED_REL), 'utf8'));
+  assert.equal(record.workstream_id, 'desk-monitoring-relink-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-14\)/);
+  assert.equal(record.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(record.members), MEMBERS);
+  for (const runId of ['43644379445', '43644392593', '43644516471', '43644625759', '43644702225', '43644720000', '43644886183',
+    '43644905131', '43645016323', '43645128104', '43645233654', '43645251748']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['9cb083e42f41eeb79bd35659a9c35c7453763281', '"DEPLOY mortgage-desk-return.mjs TO PRODUCTION"',
+    '"DEPLOY workflow-rpc.mjs TO PRODUCTION"', 'e116e629-9b3a-41f2-bfbc-1e19a37f2301', '142e60dd-5ed5-4a9c-9ccf-dad6e7dcc24e',
+    'a354e0c0-8839-4dfb-bae5-f6a94af59a12', '65TrtxCSbqreeUtP8mf1RioBT+sYCcroh0xnzi2QESI=', 'VERIFIED', 'errors []',
+    'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${DESK_RELINK_APPLIED_REL}. The two rows expect the applied bytes and name the desk monitoring and relink applied record; their holds (SQL 166, SQL 167) are unchanged.`));
+  const preApply = deskRecordPre(structuredClone(PLAN));
   // Each REPLACE: from the bytes its applied record put live (named as previous_manifest), to main's. mortgage-desk-return.mjs
   // is held on SQL 166; workflow-rpc.mjs moves on from the Claim Ledger relink row (#1911, SQL 167, its planning bytes
   // 961a1866), so its accepted bytes carry both RPCs and it stays on SQL 167.
@@ -9643,7 +9681,11 @@ test('Mortgage Desk set monitoring API (owner 2026-11-14, SQL 166): mortgage-des
     }, name);
     const previous = JSON.parse(fs.readFileSync(path.join(ROOT, entry.previous_manifest), 'utf8')).members[name];
     assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [entry.live_sha256, entry.live_sha256], `${name}: the previous manifest is an applied record`);
+    assert.deepEqual(record.members[name], { live_sha256: entry.accepted_sha256, accepted_sha256: entry.accepted_sha256, operation: 'replace', previous_manifest: DESK_MONITORING_REL }, name);
     assert.deepEqual(PLAN.members[name], {
+      operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.accepted_sha256, sql_before: name === DESK ? SQL166_FILE : SQL167_FILE, manifest: DESK_RELINK_APPLIED_REL,
+    }, name);
+    assert.deepEqual(preApply.members[name], {
       operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: name === DESK ? SQL166_FILE : SQL167_FILE, manifest: DESK_MONITORING_REL,
     }, name);
     assert.notEqual(entry.accepted_sha256, entry.live_sha256, name);
@@ -9677,41 +9719,46 @@ test('Mortgage Desk set monitoring API (owner 2026-11-14, SQL 166): mortgage-des
   // What the bytes call: SQL 166's function behind the SQL 122 gate; the router dispatches the new name to the Desk module.
   assert.match(fs.readFileSync(path.join(API, DESK), 'utf8'), /public\.aws_mortgage_desk_set_monitoring\(\$1::uuid, \$2::text\)/);
   assert.match(fs.readFileSync(path.join(API, RPC), 'utf8'), /case 'mortgage_desk_set_monitoring':\n\s*return executeMortgageDeskRpc/);
-  // Inspect: READY on the applied live bytes; main's ALREADY_ACCEPTED; anything else a reconciliation stop.
+  // Inspect: before the applies READY on the applied live bytes (production inspect runs 43644886183 and 43644905131,
+  // replayed on the pre-apply plan); now ALREADY_ACCEPTED on main's, and the pre-apply bytes, or anything else, a
+  // reconciliation stop.
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
   for (const name of MEMBERS) {
     const entry = DESK_MONITORING.members[name];
-    const ready = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: entry.live_sha256 }) });
+    const ready = await run(inspect(name), { root: ROOT, plan: preApply, inspectLive: liveFor(name, { sha256: entry.live_sha256, plan: preApply }) });
     assert.equal(ready.state, 'READY', name);
     assert.equal(ready.mutation, false, name);
     assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: entry.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED', name);
-    await assert.rejects(
-      run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: 'c'.repeat(64) }) }),
-      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-      name,
-    );
+    for (const other of [entry.live_sha256, 'c'.repeat(64)]) {
+      await assert.rejects(
+        run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: other }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        `${name} ${other}`,
+      );
+    }
   }
-  // Apply (dry): refused while a member's hold is not recorded live; on the committed plan (both recorded), passes the gates
-  // from the applied live bytes with no mutation and one receipt.
+  // Apply as it stood (dry, the pre-apply plan): refused while a member's hold is not recorded live; with both recorded,
+  // passes the gates from the applied live bytes with no mutation and one receipt.
   for (const name of MEMBERS) {
     const live = DESK_MONITORING.members[name].live_sha256;
     const hold = PLAN.members[name].sql_before;
-    const pending = structuredClone(PLAN);
+    const pending = structuredClone(preApply);
     pending.sql_prerequisites[hold] = { verified_live: false, evidence: null };
     await assert.rejects(
       run(applyEnv(name, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), { ...applyDeps(name, { sha256: live, plan: pending }).deps, plan: pending }),
       (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === hold,
       name,
     );
-    const plan = structuredClone(PLAN);
+    const plan = structuredClone(preApply);
     const { deps, calls } = applyDeps(name, { sha256: live, plan });
     const result = await run(applyEnv(name, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), { ...deps, plan });
     assert.equal(result.mutation, false, name);
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: [name], add: [] }, name);
   }
-  // workflow-rpc.mjs, later in order, waits for the Desk module at its accepted bytes.
+  // workflow-rpc.mjs, later in order, waited for the Desk module at its accepted bytes (the first production apply was the
+  // Desk module's, run 43645016323).
   {
-    const plan = structuredClone(PLAN);
+    const plan = structuredClone(preApply);
     const live = DESK_MONITORING.members[RPC].live_sha256;
     await assert.rejects(
       run(applyEnv(RPC, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), { ...applyDeps(RPC, { sha256: live, plan, pending: [DESK] }).deps, plan }),
@@ -9792,7 +9839,10 @@ test('Claim Ledger relink API (owner 2026-11-14, SQL 167): workflow-rpc.mjs REPL
     run(inspect, { root: ROOT, plan: relinkPlan, inspectLive: liveFor(RPC, { sha256: entry.live_sha256, plan: relinkPlan }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  assert.equal(PLAN.members[RPC].expected_live_sha256, entry.live_sha256);
+  // The desk set monitoring row put both RPCs live (production run 43645128104, 2026-11-14, recorded applied): before that
+  // record the row expected these applied vendor bytes; now it expects main's.
+  assert.equal(deskRecordPre(structuredClone(PLAN)).members[RPC].expected_live_sha256, entry.live_sha256);
+  assert.equal(PLAN.members[RPC].expected_live_sha256, sha(`aws/functions/api/${RPC}`));
   assert.equal(PLAN.members[RPC].sql_before, SQL167_FILE);
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
 });

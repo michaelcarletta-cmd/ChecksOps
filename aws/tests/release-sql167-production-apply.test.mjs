@@ -248,10 +248,13 @@ test('order: no predecessor; one new SECURITY DEFINER function with its ACL, not
   }
   // The Claim Ledger relink API (2026-11-14, planning only) holds workflow-rpc.mjs on SQL 167; production records it
   // verified live only from this pin's applied record, so until then the hold is not live and the overlay apply refuses.
-  // (The desk set monitoring API, later, moved the row on to bytes carrying both RPCs; the SQL 167 hold stays.)
+  // (The desk set monitoring API, later, moved the row on to bytes carrying both RPCs; the SQL 167 hold stays. Applied
+  // 2026-11-14, production run 43645128104: the row names the desk monitoring and relink applied record, which chains to
+  // that plan.)
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL167_FILE), ['workflow-rpc.mjs']);
-  assert.equal(plan.members['workflow-rpc.mjs'].manifest, 'aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json');
+  assert.equal(plan.members['workflow-rpc.mjs'].manifest, 'aws/tests/fixtures/production-desk-monitoring-relink-api-applied-manifest-2026-11-14.json');
+  assert.equal(readJson('aws/tests/fixtures/production-desk-monitoring-relink-api-applied-manifest-2026-11-14.json').members['workflow-rpc.mjs'].previous_manifest, 'aws/tests/fixtures/production-desk-set-monitoring-api-manifest-2026-11-14.json');
   if (COMMITTED.applied == null) assert.deepEqual(plan.sql_prerequisites[SQL167_FILE], { verified_live: false, evidence: null });
   else assert.ok(plan.sql_prerequisites[SQL167_FILE].evidence?.includes(COMMITTED.applied.apply_ssm_command_id));
   // The file: the prerequisite DO block, one function, the REVOKE from PUBLIC, the role REVOKE DO block and the GRANT to checksops; nothing else.
