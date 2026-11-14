@@ -650,13 +650,22 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   };
 
   const uploadShippingLabel = async (file: File) => {
-    if (!req || !check?.id || !user?.id) {
+    // The request's check id, as uploadDoc takes it: on AWS the agent cannot read the tenant's check row, and the
+    // workspace check (SQL 163) may be absent.
+    const checkId = check?.id || req?.check_intake_item_id;
+    if (!req || !checkId || !user?.id) {
       toast.error("A check must be linked before uploading a label");
+      return;
+    }
+    // AWS (SQL 122): only the agent assigned to an in-progress request may place a Desk file
+    // (storage-write-auth.mjs mortgage_desk grant) and attach it. Refuse before uploading anything.
+    if (mortgageUsesAwsBackend && !canWorkMortgageDeskRequest(req, user.id, false)) {
+      toast.error("Only the agent assigned to this in-progress request can upload a shipping label");
       return;
     }
     setUploadingLabel(true);
     try {
-      const path = mortgageDeskFilePath(check.id, file.name, "label-");
+      const path = mortgageDeskFilePath(checkId, file.name, "label-");
       const { error: upErr } = await supabase.storage
         .from("claim-files")
         .upload(path, file, { contentType: file.type, upsert: false });
@@ -666,7 +675,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       // the record that lets the tenant sign its download URL).
       const { error: attachErr } = await attachMortgageDeskFile(deskClient, mortgageUsesAwsBackend, {
         requestId: req.id,
-        checkId: check.id,
+        checkId,
         senderId: user.id,
         fileName: file.name,
         filePath: path,
@@ -693,7 +702,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
       const { error: msgErr } = await postMortgageDeskMessage(deskClient, mortgageUsesAwsBackend, {
         requestId: req.id,
-        checkId: check.id,
+        checkId,
         senderId: user.id,
         body: `🏷️ Mortgage Ops uploaded a shipping label${shipCarrier ? ` (${shipCarrier})` : ""}${shipTracking ? ` · tracking ${shipTracking}` : ""}. Download it from the Mortgage Desk card on this loss draft.`,
       });
@@ -711,6 +720,20 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
   const openShippingLabel = async () => {
     if (!req?.shipping_label_path) return;
+    if (mortgageUsesAwsBackend) {
+      // AWS: the agent cannot read the check's check_files row, so /storage/sign (storage.mjs) answers
+      // 403 storage_forbidden. The Desk API signs Desk paths instead (SQL 124 e), as downloadFile does.
+      const { signedUrl, error: signErr } = await signMortgageDeskFile(deskEsignClient, {
+        requestId: req.id,
+        path: req.shipping_label_path,
+      });
+      if (signErr || !signedUrl) {
+        toast.error(signErr || "Could not open label");
+        return;
+      }
+      window.open(signedUrl, "_blank", "noopener");
+      return;
+    }
     const { data, error } = await supabase.storage
       .from("claim-files")
       .createSignedUrl(req.shipping_label_path, 3600);
