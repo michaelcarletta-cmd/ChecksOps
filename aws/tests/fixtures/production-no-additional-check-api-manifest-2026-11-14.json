@@ -1,0 +1,15 @@
+{
+  "workstream_id": "no-additional-check-api",
+  "authorization": "Pending owner review (2026-11-14). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "No Mortgage Ops charge for an additional check in the API (owner 2026-11-12: \"we are removing the mortgage handling for an additional check if an additional check is on the same request. There will be no more $5 charge ... do not allow that charge to occur\"; agent pay for an additional check: \"Stop paying it\"). SQL 160 (applied to production 2026-11-14) already records nothing in the database; the API's own accrual still recorded mortgage_ops_additional_check at the tenant's additional rate. Now the accept of an additional check on a claim that already has a charge records nothing and returns { skipped: 'additional_check_not_charged', claim_id } (callers: mortgage-desk-esign.mjs accrueDeskAssignment reports accrual skipped; workflow-rpc.mjs executeAcceptMortgage ignores the result), and a lost race for the first charge no longer records an additional-check charge in its place. The first check's $10 (mortgage_ops_initial, the tenant's initial rate) and SQL 153's flat $5 for a 2nd mortgage company are unchanged; events of type mortgage_ops_additional_check recorded before keep being invoiced and listed. One REPLACE from its recorded applied bytes, with its own guarded overlay run (staging, then production): tenant-billing-engine.mjs, which keeps its SQL 154 hold (it needs no new SQL; SQL 160 is live). REPLACE tenant-billing-engine.mjs 5859fc13 -> ea380af7. mortgage-ops-usage.mjs (the accrual workflow-rpc.mjs and mortgage-desk-esign.mjs import) changes too, abd5fe7a -> 6e60d033, but is not an overlay member: it reaches a function only with a full-package rebuild, whose staging and production sections are written from their own inspects. No member is added; no import changes. index.mjs is untouched. Planning only.",
+  "members": {
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "5859fc13399bad9c8f603fee893819ca330f074e7e7c63773beda7899f59a4c8",
+      "accepted_sha256": "ea380af7abc61941cce5c0ed9d2857f3deab71043440c2f3f83c5f8a8aac1001",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-second-mortgagee-fee-billing-engine-applied-manifest-2026-11-11.json"
+    }
+  }
+}

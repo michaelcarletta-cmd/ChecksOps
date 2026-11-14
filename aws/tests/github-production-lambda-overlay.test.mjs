@@ -171,7 +171,8 @@ const assertMovedToMoneyWrite = (member, { live, previous }) => {
     // which starts from the fee pull savepoints applied bytes and names its own manifest.
     const later = laterPlan(member);
     assert.equal(row.manifest, feeLeg ? FEE_LEG_API_APPLIED_REL : later ? later.rel : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
-    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+    // (Main's bytes until the no additional-check charge plan moved the engine on: noAdditionalApplied.)
+    assert.equal(row.accepted_sha256, noAdditionalApplied(member), member);
     assert.equal(row.expected_live_sha256, later ? later.entry.live_sha256 : row.accepted_sha256, member);
     if (later) assert.equal(later.entry.previous_manifest, FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
     if (feeLeg) assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8')).members[member].live_sha256, FEE_PULL_COLLECTION_BYTES, member);
@@ -512,6 +513,21 @@ const laterPlan = (member) => {
   if (USAGE_FEES.members[member]) return { rel: USAGE_FEES_REL, entry: USAGE_FEES.members[member], sql: SQL152_FILE };
   return null;
 };
+// No additional-check charge in the API (owner 2026-11-12, "There will be no more $5 charge ... do not allow that charge to
+// occur"; SQL 160 live): tenant-billing-engine.mjs REPLACEs the bytes its row records live (the second mortgagee fee billing
+// engine applied record), keeping its SQL 154 hold, planning only; its own test is at the end. noAdditionalApplied is a member's
+// bytes before that plan: its live_sha256 for a member it moved on, else main's. noAdditionalPre restates the plan as it stood
+// before it (the row back on its applied record: accepted and expected live, the previous manifest named); the history checks
+// below (and the vendor payments API restatement, which came earlier) read the row through it.
+const NO_ADDITIONAL_REL = 'aws/tests/fixtures/production-no-additional-check-api-manifest-2026-11-14.json';
+const NO_ADDITIONAL = JSON.parse(fs.readFileSync(path.join(ROOT, NO_ADDITIONAL_REL), 'utf8'));
+const noAdditionalApplied = (member) => NO_ADDITIONAL.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+const noAdditionalPre = (plan) => {
+  for (const [name, entry] of Object.entries(NO_ADDITIONAL.members)) {
+    plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+  }
+  return plan;
+};
 // Production record (2026-11-11): tenant-fee-invoice-email.mjs, tenant-billing-engine.mjs, tenant-billing-handlers.mjs
 // and db-readonly-validate.mjs were applied (runs 43094320664, 43094857413, 43100747668, 43101262577; VERIFIED): each
 // row expects its applied bytes and names its applied record. Replays of the plan as it stood before that record start
@@ -529,7 +545,8 @@ const record1111Pre = (plan) => {
   }
   return plan;
 };
-const PLAN_1111_PRE = record1111Pre(structuredClone(PLAN));
+// (Read with the no additional-check charge plan, which came later, undone.)
+const PLAN_1111_PRE = record1111Pre(noAdditionalPre(structuredClone(PLAN)));
 /** The bytes live before the pending plans: main's, until one moved the member on. */
 const beforeUsageFees = (member) => laterPlan(member)?.entry.live_sha256 ?? sha(`aws/functions/api/${member}`);
 /**
@@ -642,8 +659,10 @@ const VENDOR_API_PREVIOUS_HOLDS = Object.freeze({
   'workflow-rpc.mjs': SQL148_FILE,
   'tenant-billing-handlers.mjs': SQL154_FILE,
 });
-const vendorApiApplied = (member) => VENDOR_API.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
-const vendorApiPre = (plan) => {
+// (Read with the no additional-check charge plan, which came later, also undone: noAdditionalApplied, noAdditionalPre.)
+const vendorApiApplied = (member) => VENDOR_API.members[member]?.live_sha256 ?? noAdditionalApplied(member);
+const vendorApiPre = (plan0) => {
+  const plan = noAdditionalPre(plan0);
   for (const [name, entry] of Object.entries(VENDOR_API.members)) {
     plan.members[name] = {
       ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256,
@@ -682,6 +701,15 @@ const assertAppliedNow = async (inspect, member, bytes) => {
     assert.equal(bytes, VENDOR_API.members[member].live_sha256, member);
     assert.equal(await state(bytes, vendorApiRecordPre(structuredClone(PLAN))), 'READY', member);
     await assert.rejects(state(bytes), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED, member);
+    assert.equal(await state(sha(`aws/functions/api/${member}`)), 'ALREADY_ACCEPTED', member);
+    return;
+  }
+  if (NO_ADDITIONAL.members[member]) {
+    // The no additional-check charge plan (planning only) REPLACEs these applied bytes: on today's plan they are the
+    // expected live bytes, READY for that REPLACE (the plan as it stood before it, with main's bytes no longer its
+    // accepted bytes, cannot be replayed here; its row is checked by the plan's own test).
+    assert.equal(bytes, NO_ADDITIONAL.members[member].live_sha256, member);
+    assert.equal(await state(bytes), 'READY', member);
     assert.equal(await state(sha(`aws/functions/api/${member}`)), 'ALREADY_ACCEPTED', member);
     return;
   }
@@ -7388,17 +7416,19 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
     } else if (laterPlan(member)) {
       // (Since moved on again by the Starter Package plan, SQL 151, which supersedes the usage fees bytes, never applied,
       // and then by the second mortgagee fee plan, which supersedes the Starter Package bytes, never applied.)
+      // (The engine's applied second mortgagee fee bytes stand for main's: the no additional-check charge plan, planning
+      // only, has moved the row on from them since: noAdditionalApplied.)
       const later = laterPlan(member);
       assert.deepEqual(PLAN_1111_PRE.members[member], {
         operation: 'replace',
-        accepted_sha256: sha(`aws/functions/api/${member}`),
+        accepted_sha256: noAdditionalApplied(member),
         expected_live_sha256: accepted,
         sql_before: later.sql,
         manifest: later.rel,
       }, member);
       assert.deepEqual(
         [later.entry.live_sha256, later.entry.accepted_sha256, later.entry.operation, later.entry.previous_manifest],
-        [accepted, sha(`aws/functions/api/${member}`), 'replace', FEE_PULL_SAVEPOINTS_APPLIED_REL], member);
+        [accepted, noAdditionalApplied(member), 'replace', FEE_PULL_SAVEPOINTS_APPLIED_REL], member);
       if (later.rel === STARTER_PACKAGE_REL && USAGE_FEES.members[member]) {
         assert.equal(later.entry.supersedes_unapplied_manifest, USAGE_FEES_REL, member);
         assert.equal(USAGE_FEES.members[member].live_sha256, accepted, member);
@@ -9391,5 +9421,84 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
     assert.equal(result.mutation, false, name);
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: [name], add: [] }, name);
   }
+  assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
+});
+
+test('No additional-check charge in the API (owner 2026-11-12, SQL 160 live): tenant-billing-engine.mjs REPLACEs its applied bytes, SQL 154 hold kept; planning only', async () => {
+  const ENGINE = 'tenant-billing-engine.mjs';
+  const SQL160 = 'aws/workflows/sql/160_no_additional_check_mortgage_charge_or_manual_deposit_fee.sql';
+  const ENGINE_APPLIED_REL = 'aws/tests/fixtures/production-second-mortgagee-fee-billing-engine-applied-manifest-2026-11-11.json';
+  assert.equal(NO_ADDITIONAL.workstream_id, 'no-additional-check-api');
+  assert.equal(NO_ADDITIONAL.deploy_authorized, false);
+  assert.match(NO_ADDITIONAL.authorization, /^Pending owner review \(2026-11-14\)\. Planning only/);
+  assert.equal(NO_ADDITIONAL.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(NO_ADDITIONAL.members), [ENGINE]);
+  for (const text of ['There will be no more $5 charge', 'Stop paying it', "{ skipped: 'additional_check_not_charged', claim_id }",
+    'accrueDeskAssignment', 'executeAcceptMortgage', 'keeps its SQL 154 hold', 'mortgage-ops-usage.mjs', 'is not an overlay member',
+    'No member is added', 'index.mjs is untouched', 'Planning only']) {
+    assert.ok(NO_ADDITIONAL.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes('No additional-check charge in the API (2026-11-14, owner 2026-11-12'));
+  assert.ok(PLAN.notes.includes(`Manifest ${NO_ADDITIONAL_REL}. Planning only.`));
+  // The REPLACE: from the bytes the row recorded live (the 2026-11-11 billing engine applied record, named as
+  // previous_manifest), to main's; the hold and the order are unchanged.
+  const entry = NO_ADDITIONAL.members[ENGINE];
+  const before = noAdditionalPre(structuredClone(PLAN)).members[ENGINE];
+  assert.deepEqual(before, {
+    operation: 'replace', accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, sql_before: SQL154_FILE, manifest: ENGINE_APPLIED_REL,
+  });
+  assert.deepEqual(entry, { live_sha256: before.accepted_sha256, accepted_sha256: sha(`aws/functions/api/${ENGINE}`), operation: 'replace', previous_manifest: ENGINE_APPLIED_REL });
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, entry.previous_manifest), 'utf8')).members[ENGINE];
+  assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [entry.live_sha256, entry.live_sha256], 'the previous manifest is an applied record');
+  assert.deepEqual(PLAN.members[ENGINE], {
+    operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: SQL154_FILE, manifest: NO_ADDITIONAL_REL,
+  });
+  assert.notEqual(entry.accepted_sha256, entry.live_sha256);
+  const evidence = `${ENGINE} ${entry.live_sha256.slice(0, 8)} -> ${entry.accepted_sha256.slice(0, 8)}`;
+  assert.ok(NO_ADDITIONAL.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(evidence), evidence);
+  assert.equal(PLAN.sql_prerequisites[SQL154_FILE].verified_live, true);
+  // SQL 160 is applied in production (its pin's applied record); the bytes need nothing from it, so it is not a hold.
+  const pin = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/sql160-no-additional-check-or-manual-deposit-fee-production-apply.json'), 'utf8'));
+  assert.equal(pin.source_sha256, sha(SQL160));
+  assert.equal(pin.execute, false);
+  assert.equal(pin.applied.result, 'applied');
+  // No new local import (no ADD needed, order unchanged); the overlay resolves the member.
+  assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(ENGINE), `DEPLOY ${ENGINE} TO PRODUCTION`);
+  assert.deepEqual(PLAN.order, noAdditionalPre(structuredClone(PLAN)).order);
+  // mortgage-ops-usage.mjs carries the same change and is not an overlay member (full-package rebuild only): from the bytes
+  // the fifth production rebuild put live (apply 43215807509) to main's.
+  assert.ok(NO_ADDITIONAL.notes.includes(`abd5fe7a -> ${sha('aws/functions/api/mortgage-ops-usage.mjs').slice(0, 8)}`));
+  assert.equal(PLAN.members['mortgage-ops-usage.mjs'], undefined);
+  assert.equal(PLAN.order.includes('mortgage-ops-usage.mjs'), false);
+  // What the bytes do: the accrual never records or prices an additional check; recorded ones are still invoiced.
+  const source = fs.readFileSync(path.join(API, ENGINE), 'utf8');
+  const accrual = source.slice(source.indexOf('async function accrueCheckMortgageOpsEvent'));
+  assert.doesNotMatch(accrual.slice(0, accrual.indexOf('\n}\n')), /FEE_MORTGAGE_ADDITIONAL|resolveMortgageAdditionalRateCents/);
+  assert.match(source, /additional: rows\.filter\(\(row\) => row\.event_type === FEE_MORTGAGE_ADDITIONAL\)/);
+  // Inspect: READY on the recorded live bytes; main's ALREADY_ACCEPTED; anything else a reconciliation stop.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: entry.live_sha256 }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: entry.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // Apply (dry): refused while its hold is not recorded live; with it recorded, passes the gates from the recorded live
+  // bytes with no mutation and one receipt.
+  const pending = structuredClone(PLAN);
+  pending.sql_prerequisites[SQL154_FILE] = { verified_live: false, evidence: null };
+  await assert.rejects(
+    run(applyEnv(ENGINE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: entry.live_sha256 }), { ...applyDeps(ENGINE, { sha256: entry.live_sha256, plan: pending }).deps, plan: pending }),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL154_FILE,
+  );
+  const plan = structuredClone(PLAN);
+  const { deps, calls } = applyDeps(ENGINE, { sha256: entry.live_sha256, plan });
+  const result = await run(applyEnv(ENGINE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: entry.live_sha256 }), { ...deps, plan });
+  assert.equal(result.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [ENGINE], add: [] });
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
 });
