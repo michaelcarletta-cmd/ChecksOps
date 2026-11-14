@@ -43,8 +43,14 @@ grant, trigger or row is changed by the apply. The db-readonly-validate trigger 
 `set_monitoring_type` and every escrow and draw action are unchanged. No API, Lambda or SPA change is part of this pin:
 the Desk API action and the Desk page's switch and warning ship afterwards through their own guarded paths.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`; staging wave 58 when approved).
-Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 58); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-14).** Run 43623201872 (main `3239508c`, after executor inspect run 43622613027 and executor deploy
+run 43622915623 (executor CodeSha256 `BGu9krtX…` -> `4gH9sgaz…`)), under the owner's words "apply SQL 166 and SQL 167 in
+staging": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; the function absent. Live
+`11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608`, equal to the derived pre-state; intended `5c8e030f…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 58). The staging apply is a separate run after this pin is merged and
+the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
 
 Production authorization phrase (pin `authorization_phrase`): `LET_MORTGAGE_DESK_SWITCH_LOSS_DRAFT_MONITORING`.
 

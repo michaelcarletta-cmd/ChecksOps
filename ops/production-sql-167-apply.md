@@ -51,8 +51,14 @@ column, policy, table grant, trigger or row. The db-readonly-validate trigger co
 SPA change is part of this pin: the API (`claim_ledger_relink_check` in the RPC route) and the Review screen ship
 afterwards through their own guarded paths.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 59 when approved (wave 57 is SQL 165, the highest on main; 58 is left for SQL 166, built in parallel).
+**Status:** staging pin execute-authorized (wave 59); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-14).** Run 43623494491 (main `3239508c`, after executor inspect run 43622613027 and executor deploy
+run 43622915623 (executor CodeSha256 `BGu9krtX…` -> `4gH9sgaz…`)), under the owner's words "apply SQL 166 and SQL 167 in
+staging": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; the function absent. Live
+`45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343`, equal to the derived pre-state; intended `3aebf662…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 59). The staging apply is a separate run after this pin is merged and
+the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
 
 ## Fingerprint
 

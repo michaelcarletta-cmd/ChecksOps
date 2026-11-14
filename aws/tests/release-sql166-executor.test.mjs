@@ -5,7 +5,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 166 included); this file covers what is
  * new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 58) from staging read-live run 43623201872, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the file and spec: one new SECURITY DEFINER function behind SQL 122's aws_mortgage_desk_working_request (in
  *     progress only), refused without a loss draft or on a closed one, three writes (the monitoring type, the audit row,
@@ -112,7 +112,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 166 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 166 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -123,11 +123,15 @@ test('pin: SQL 166 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql166-mortgage-desk-set-monitoring');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending until a reviewed pin change records a staging read-live.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-14) from staging read-live run 43623201872: already_applied false,
+  // precondition_failures []. It read the derived pre-state (the function absent).
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-14: staging apply (wave 58) from staging read-live run 43623201872');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT_PRE);
+  assert.equal(pin.expected_live_definition_sha256, '11a10b33e6a5a46ea98934487cd9e941ddfe6b232ca6c7d4debad8c2f033f608');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-166-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 58\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-166-apply.md'), 'utf8'), /read-live \(2026-11-14\)\.\*\* Run 43623201872/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT_PRE, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
@@ -333,6 +337,8 @@ test('PostgreSQL 16: SQL 166 through the executor: the pre-state as derived; ref
     assert.deepEqual(pre.release_sql_inspect.definer_writes, allOk);
     assert.equal(pre.already_applied, false);
     assert.equal(pre.live_definition_sha256, ABSENT_PRE);
+    // The committed staging pin is authorized on exactly this pre-state (wave 58, read-live run 43623201872).
+    assert.equal(pre.pin_executable, true);
     assert.equal(await present(), false);
 
     // Each relation under FORCE ROW LEVEL SECURITY (the DEFINER owner could not reach it): refused, nothing applied.
@@ -357,10 +363,12 @@ test('PostgreSQL 16: SQL 166 through the executor: the pre-state as derived; ref
     assert.deepEqual((await inspect()).precondition_failures, []);
     assert.equal(await present(), false);
 
-    // A pending pin cannot apply (pend a copy of the committed pin, the pre-state kept recorded).
+    // A pending pin cannot apply: a pending copy of the committed pin (the committed pin is staging-authorized, wave 58),
+    // the pre-state kept recorded.
     const pendingCopy = Object.freeze({ ...pendingPin(PINS[KEY]), expected_live_definition_sha256: ABSENT_PRE });
     const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy }));
     assert.equal(pending.ok, false);
+    assert.equal(pending.code, CODES.GUARD_APPLY_FORBIDDEN);
     assert.equal(await present(), false);
 
     // An unexpected pre-state: a pin recording the intended state as the pre-state is not a valid authorization

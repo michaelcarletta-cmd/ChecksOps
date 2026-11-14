@@ -193,7 +193,7 @@ test('order: no predecessor; one new SECURITY DEFINER function with its ACL, not
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, releaseStateHash(KEY, {}), 'LET_MORTGAGE_DESK_SWITCH_LOSS_DRAFT_MONITORING']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`; staging wave 58 when approved\)\.\nNothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 58\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql166` \|/);
   assert.match(oneShot, /`sql164`, `sql165`, `sql166`, `sql167`\) \|/);
