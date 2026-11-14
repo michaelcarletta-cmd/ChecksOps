@@ -232,8 +232,27 @@ const vendorApiRecordPre = (row) => {
   assert.ok(plannedEntry, 'the applied record chains to its planning entry');
   return { ...row, expected_live_sha256: plannedEntry.live_sha256, manifest: entry.previous_manifest };
 };
+// No additional-check charge in the API (2026-11-14, owner 2026-11-12 "There will be no more $5 charge ... do not allow
+// that charge to occur"; SQL 160 live): tenant-billing-engine.mjs REPLACEs its applied bytes through the production overlay
+// plan (SQL 154 hold unchanged), planning only. mortgage-ops-usage.mjs carries the same change and is not an overlay
+// member: it reaches a function only with a full-package rebuild. noAdditionalPre reads a row as it stood before that plan
+// (vendorApiPre, which reads further back, applies it first).
+const NO_ADDITIONAL_MANIFEST = 'aws/tests/fixtures/production-no-additional-check-api-manifest-2026-11-14.json';
+const noAdditionalPre = (row) => {
+  if (!row || row.manifest !== NO_ADDITIONAL_MANIFEST) return row;
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, NO_ADDITIONAL_MANIFEST), 'utf8')).members;
+  const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
+  assert.ok(entry, 'a no additional-check charge row names its manifest entry');
+  return { ...row, accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+};
+// Members of the fifth rebuild sections (staging inspect 43207489743, production inspect 43210883811) that main changed
+// since: the sections keep the accepted hash they recorded as evidence; the new bytes need a later rebuild.
+const CHANGED_SINCE_FIFTH_SECTION = new Set([
+  // No additional-check charge (2026-11-14, planning only): an additional check's accept records nothing.
+  'mortgage-ops-usage.mjs',
+]);
 const vendorApiPre = (row0) => {
-  const row = vendorApiRecordPre(row0);
+  const row = vendorApiRecordPre(noAdditionalPre(row0));
   if (!row || row.manifest !== VENDOR_API_MANIFEST) return row;
   const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_MANIFEST), 'utf8')).members;
   const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
@@ -622,6 +641,11 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
       mainBytes = vendorApiPre(overlay.members[name]).accepted_sha256;
     }
+    // (And the no additional-check charge plan, planning only: the applied bytes it starts from stand for main's.)
+    if (overlay.members[name]?.manifest === NO_ADDITIONAL_MANIFEST) {
+      assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
+      mainBytes = noAdditionalPre(overlay.members[name]).accepted_sha256;
+    }
     if (row && row.manifest === TRANSFER_TO_BANK_MANIFEST) {
       const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
       assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [mainBytes, planned.live_sha256], name);
@@ -805,7 +829,10 @@ test('the production history keeps the fifth section (inspect 43210883811, apply
   assert.deepEqual(section.members, staging.members);
   const entry = section.members['mortgage-ops-usage.mjs'];
   assert.equal(entry.live_sha256, fourth.members['mortgage-ops-usage.mjs'].accepted_sha256);
-  assert.equal(entry.accepted_sha256, sha256(fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/mortgage-ops-usage.mjs'))));
+  // Accepted was main's bytes; main has changed it since (listed), the section keeps the hash it recorded.
+  const onMain = sha256(fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/mortgage-ops-usage.mjs')));
+  if (CHANGED_SINCE_FIFTH_SECTION.has('mortgage-ops-usage.mjs')) assert.notEqual(onMain, entry.accepted_sha256, 'mortgage-ops-usage.mjs is listed as changed but main still has the accepted bytes');
+  else assert.equal(entry.accepted_sha256, onMain);
   // The five members the inspect reported as drifted against the fourth section are main's bytes now (counted as same),
   // and none of them is a member of this section.
   for (const name of ['app-services.mjs', 'auth-financial-totp.mjs', 'tenant-billing-engine.mjs', 'tenant-billing-handlers.mjs', 'tenant-collection-v2.mjs']) {
@@ -1075,9 +1102,12 @@ test('the staging history keeps the fifth section (inspect 43207489743, apply 43
   assert.deepEqual(section.removed, {});
   assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
   const entry = section.members['mortgage-ops-usage.mjs'];
-  // Accepted is main's bytes; live is the bytes the fourth section accepted and put live.
+  // Accepted was main's bytes (main has changed it since, listed: the section keeps the hash it recorded); live is the
+  // bytes the fourth section accepted and put live.
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
-  assert.equal(entry.accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, 'mortgage-ops-usage.mjs'))));
+  const onMain = sha256(fs.readFileSync(path.join(apiRoot, 'mortgage-ops-usage.mjs')));
+  if (CHANGED_SINCE_FIFTH_SECTION.has('mortgage-ops-usage.mjs')) assert.notEqual(onMain, entry.accepted_sha256, 'mortgage-ops-usage.mjs is listed as changed but main still has the accepted bytes');
+  else assert.equal(entry.accepted_sha256, onMain);
   assert.equal(entry.accepted_sha256, 'abd5fe7a8caba4cf9c48ff4ce0d2cb5ab7cb6e1d122a1c389ac66ede44acb044');
   assert.equal(entry.live_sha256, fourth.members['mortgage-ops-usage.mjs'].accepted_sha256);
   assert.ok(CHANGED_SINCE_FOURTH_STAGING_SECTION.has('mortgage-ops-usage.mjs'));

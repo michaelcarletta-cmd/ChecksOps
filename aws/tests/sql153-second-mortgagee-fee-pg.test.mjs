@@ -193,13 +193,15 @@ test('SQL 153: the 2nd mortgage company is charged a flat $5 once per check (Pos
        VALUES ($1, $2, '${SECOND}', 500, 'recorded') ON CONFLICT DO NOTHING`, [T, CHECK]);
     assert.equal((await events(superuser, `event_type = '${SECOND}'`)).length, 1);
 
-    // A request that is not the 2nd company's (no order) on another check: the $10 / $5 rule as before.
+    // A request that is not the 2nd company's (no order) on another check of the claim: an additional check, not
+    // charged since SQL 160 (it recorded mortgage_ops_additional_check at the tenant's $7 before).
     const other = await accept(owner, REQ_3);
-    assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: other })).event.event_type, 'mortgage_ops_additional_check');
+    assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: other })).skipped, 'additional_check_not_charged');
+    assert.equal((await events(superuser, `event_type = 'mortgage_ops_additional_check'`)).length, 0);
 
     // Month-end: the period's events, the 2nd company's on its own line; a voided one is skipped.
     let mortgage = await engine.loadMortgageOpsUsageForPeriod(owner, { tenantId: T, period: '2026-11' });
-    assert.deepEqual([mortgage.initial.length, mortgage.additional.length, mortgage.secondMortgagee.length], [1, 1, 1]);
+    assert.deepEqual([mortgage.initial.length, mortgage.additional.length, mortgage.secondMortgagee.length], [1, 0, 1]);
     assert.equal(mortgage.secondMortgagee[0].unit_price_cents, 500);
     await superuser.query(`UPDATE public.check_billing_events SET status = 'voided' WHERE event_type = '${SECOND}'`);
     mortgage = await engine.loadMortgageOpsUsageForPeriod(owner, { tenantId: T, period: '2026-11' });
@@ -236,7 +238,7 @@ test('SQL 153: the 2nd mortgage company is charged a flat $5 once per check (Pos
     await owner.query('COMMIT');
     const row = (await owner.query('SELECT * FROM public.tenant_maintenance_payments WHERE id = $1', [booked.occurrence.id])).rows[0];
     assert.deepEqual([row.mortgage_ops_second_mortgagee_count, row.mortgage_ops_second_mortgagee_amount_cents], [1, 500]);
-    assert.equal(row.amount_cents, 10000 + 1200 + 700 + 500);
+    assert.equal(row.amount_cents, 10000 + 1200 + 500);
     assert.deepEqual(occurrenceInvoiceLines(row).find((l) => /2nd mortgage/.test(l.label)),
       { label: 'Mortgage Ops: 2nd mortgage company', count: 1, amount_cents: 500 });
   });

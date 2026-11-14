@@ -164,12 +164,14 @@ for (const [name, mod] of [['mortgage-ops-usage.mjs', usage], ['tenant-billing-e
       [['mortgage_ops_initial', 1200, REQUEST_2], [SECOND, 500, REQUEST_2]]);
   });
 
-  test(`${name}: 2nd company accepted first on an additional check of the claim: $5 additional plus $5`, async () => {
+  test(`${name}: 2nd company accepted first on an additional check of the claim: only the flat $5 (SQL 160)`, async () => {
+    // Before SQL 160 this recorded mortgage_ops_additional_check at the tenant's additional rate ($7 here) plus the $5.
     const otherCheck = { ...firstEvent, id: 'evt-other', check_intake_item_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' };
     const client = usageClient({ events: [otherCheck] });
     const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
-    assert.deepEqual(client.inserts.map((i) => [i.row.event_type, i.row.unit_price_cents]),
-      [['mortgage_ops_additional_check', 700], [SECOND, 500]]);
+    assert.deepEqual(client.inserts.map((i) => [i.row.event_type, i.row.unit_price_cents]), [[SECOND, 500]]);
+    assert.equal(result.skipped, 'additional_check_not_charged');
+    assert.equal(result.event, undefined);
     assert.equal(result.second_mortgagee.created, true);
   });
 

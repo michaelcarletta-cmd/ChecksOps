@@ -3,16 +3,25 @@
  *
  * Extracted from live tenant-billing-engine.mjs
  * SHA-256 65b75735825f9a06955d5daba603f74835d106cabf52eb449153c856a59dae2f
- * (staging + production-prep, 2026-10-02). Accept-time behavior is preserved:
- * one check_billing_events row per accepted check, $10 first / $5 additional
- * by claim, idempotent on check_intake_item_id.
+ * (staging + production-prep, 2026-10-02). Accept-time behavior: one
+ * check_billing_events row for the claim's first accepted check ($10, the
+ * tenant's mortgage_ops_initial_rate_cents), idempotent on check_intake_item_id.
+ *
+ * SQL 160 (owner 2026-11-12: "There will be no more $5 charge ... do not allow
+ * that charge to occur"): an additional check on the same claim is not charged.
+ * Its accept records nothing and returns { skipped: 'additional_check_not_charged' };
+ * no mortgage_ops_additional_check event is written or priced here. Events of
+ * that type recorded before SQL 160 stay readable (FEE_MORTGAGE_ADDITIONAL,
+ * MORTGAGE_EVENT_TYPES): they still count as the check's charge and as the
+ * claim's prior charge.
  *
  * SQL 153 (owner 2026-11-10/11, "Flat $5"; "it should be an additional $5 if 2
  * mortgage companies are on check"): the accept of a check's 2nd mortgage company
- * (endorsement_order 2, SQL 148) records the check's normal $10 / $5 charge if
- * neither request has yet, plus one mortgage_ops_second_mortgagee event at a flat
- * SECOND_MORTGAGEE_FEE_CENTS. The 1st company's accept is unchanged.
- * tenant-billing-engine.mjs carries the same code.
+ * (endorsement_order 2, SQL 148) records the check's normal charge if neither
+ * request has yet (SQL 160: none for an additional check of the claim), plus one
+ * mortgage_ops_second_mortgagee event at a flat SECOND_MORTGAGEE_FEE_CENTS. The
+ * 1st company's accept is unchanged. tenant-billing-engine.mjs carries the same
+ * code.
  *
  * This module does not import destination/collection engines or
  * provider posting paths.
@@ -24,10 +33,12 @@
 export const MORTGAGE_USAGE_MONEY_WRITE_SQL = "SELECT set_config('request.money_write', '1', true)";
 
 export const DEFAULT_MORTGAGE_INITIAL_RATE_CENTS = 1000;
-export const DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS = 500;
 export const FEE_MORTGAGE_INITIAL = 'mortgage_ops_initial';
+// Read only (events recorded before SQL 160); the API never records this type.
 export const FEE_MORTGAGE_ADDITIONAL = 'mortgage_ops_additional_check';
 export const MORTGAGE_EVENT_TYPES = [FEE_MORTGAGE_INITIAL, FEE_MORTGAGE_ADDITIONAL];
+// SQL 160: the accept of an additional check on a claim that already has a charge records nothing.
+export const MORTGAGE_ADDITIONAL_CHECK_NOT_CHARGED = 'additional_check_not_charged';
 // SQL 153: the 2nd mortgage company on a check, a flat fee (not a per-tenant rate).
 export const FEE_MORTGAGE_SECOND_MORTGAGEE = 'mortgage_ops_second_mortgagee';
 export const SECOND_MORTGAGEE_FEE_CENTS = 500;
@@ -71,15 +82,6 @@ export const resolveMortgageInitialRateCents = (tenant) => {
   }
   const stored = Number(tenant.mortgage_ops_initial_rate_cents);
   return Number.isFinite(stored) ? Math.max(0, stored) : DEFAULT_MORTGAGE_INITIAL_RATE_CENTS;
-};
-
-/** Explicit 0 is a free promotion and must not fall back to $5. */
-export const resolveMortgageAdditionalRateCents = (tenant) => {
-  if (tenant?.mortgage_ops_additional_rate_cents === undefined || tenant?.mortgage_ops_additional_rate_cents === null) {
-    return DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS;
-  }
-  const stored = Number(tenant.mortgage_ops_additional_rate_cents);
-  return Number.isFinite(stored) ? Math.max(0, stored) : DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS;
 };
 
 /** The 2nd mortgage company's request on a check (SQL 148: endorsement_order 2). */
@@ -205,7 +207,7 @@ const insertMortgageOpsEvent = async (client, {
 /**
  * SQL 153: the accept of the 2nd mortgage company's request records one flat
  * mortgage_ops_second_mortgagee event for the check, in addition to the check's
- * normal $10 / $5 charge. Nothing of this type before SQL 153 is applied.
+ * normal charge (if any). Nothing of this type before SQL 153 is applied.
  */
 async function accrueSecondMortgageeAcceptedRequest(client, { request, persist }) {
   const ready = (await client.query(SECOND_MORTGAGEE_READY_SQL).catch(() => ({ rows: [] }))).rows[0];
@@ -268,17 +270,20 @@ export async function accrueMortgageOpsAcceptedRequest(client, {
     return accrueCheckMortgageOpsEvent(client, { request, tenant, persist });
   }
   // SQL 153 (owner 2026-11-11: "it should be an additional $5 if 2 mortgage companies are on
-  // check"): the 2nd company's accept makes sure the check has its normal $10 / $5 charge (the
-  // same rule as the 1st company's accept; nothing when either request already recorded it), then
-  // adds the flat $5 once per check.
+  // check"): the 2nd company's accept makes sure the check has its normal charge (the same rule as
+  // the 1st company's accept; nothing when either request already recorded it, and nothing for an
+  // additional check of the claim since SQL 160), then adds the flat $5 once per check (SQL 160
+  // keeps it).
   const normal = await accrueCheckMortgageOpsEvent(client, { request, tenant, persist });
   const secondMortgagee = await accrueSecondMortgageeAcceptedRequest(client, { request, persist });
   return { ...normal, second_mortgagee: secondMortgagee };
 }
 
 /**
- * The check's normal Mortgage Ops charge: $10 for the claim's first check, $5 for each additional
- * check (the tenant's rates), once per check whichever of its requests is accepted first.
+ * The check's normal Mortgage Ops charge: $10 (the tenant's initial rate) for the claim's first
+ * check, once per check whichever of its requests is accepted first. SQL 160: an additional check
+ * of the claim is not charged; its accept records nothing and returns
+ * { skipped: 'additional_check_not_charged', claim_id }.
  */
 async function accrueCheckMortgageOpsEvent(client, { request, tenant, persist }) {
   const existing = await loadMortgageEventByCheck(client, request.check_intake_item_id);
@@ -297,7 +302,7 @@ async function accrueCheckMortgageOpsEvent(client, { request, tenant, persist })
     billingTenant = ctx.tenant;
   }
 
-  const prior = claimId
+  const loadPriorClaimCharges = async () => (claimId
     ? (await client.query(
       `SELECT id, event_type FROM public.check_billing_events
        WHERE tenant_id = $1::uuid
@@ -306,27 +311,21 @@ async function accrueCheckMortgageOpsEvent(client, { request, tenant, persist })
          AND status IS DISTINCT FROM 'voided'`,
       [request.tenant_id, claimId],
     ).catch(() => ({ rows: [] }))).rows
-    : [];
+    : []);
+  const notCharged = { skipped: MORTGAGE_ADDITIONAL_CHECK_NOT_CHARGED, claim_id: claimId };
 
-  const classifyAdditional = prior.length > 0;
-  const insertEvent = (eventType, unit) => insertMortgageOpsEvent(client, {
-    request, claimId, eventType, unit, persist,
+  // SQL 160: the claim already has a charge, so this is an additional check: nothing is recorded or priced.
+  if ((await loadPriorClaimCharges()).length > 0) return notCharged;
+
+  const inserted = await insertMortgageOpsEvent(client, {
+    request, claimId, eventType: FEE_MORTGAGE_INITIAL, unit: resolveMortgageInitialRateCents(billingTenant), persist,
   });
-
-  const preferredType = classifyAdditional ? FEE_MORTGAGE_ADDITIONAL : FEE_MORTGAGE_INITIAL;
-  const preferredRate = classifyAdditional
-    ? resolveMortgageAdditionalRateCents(billingTenant)
-    : resolveMortgageInitialRateCents(billingTenant);
-  let inserted = await insertEvent(preferredType, preferredRate);
-  if (!inserted && !classifyAdditional && persist) {
-    inserted = await insertEvent(
-      FEE_MORTGAGE_ADDITIONAL,
-      resolveMortgageAdditionalRateCents(billingTenant),
-    );
-  }
   if (!inserted) {
     const raced = await loadMortgageEventByCheck(client, request.check_intake_item_id);
     if (raced) return { ok: true, event: asEvent(raced), duplicate: true, created: false };
+    // SQL 160: another check of the claim took the first charge meanwhile, so this one is an additional check and
+    // is not charged (before SQL 160 a lost race recorded an additional-check charge in its place).
+    if ((await loadPriorClaimCharges()).length > 0) return notCharged;
     return { skipped: 'not_inserted' };
   }
   return { ok: true, event: asEvent(inserted), created: !inserted.preview, duplicate: false };
