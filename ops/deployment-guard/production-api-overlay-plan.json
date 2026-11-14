@@ -211,8 +211,8 @@
       "evidence": "2026-11-13 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 2e31f0c1-23d2-4947-8296-d6d66eaefdf8, run 01fe9718-5448-4aab-b72f-07bb146cfcdf, workstream prod-sql165-vendor-lookup-payroll-vendor-20261113, main fe4dfa244, one_use_id sql165-prod-a2cab179-a04f-4f91-bba7-0f22b07e946c): receipt before 3a6d086e…, after 23c689b9… = the pin's intended, result applied; post-apply inspect already_applied true (ops/production-sql-165-apply.md, ops/deployment-guard/sql165-vendor-payee-lookup-and-payroll-vendor-production-apply.json, record #1889). Its predecessor SQL 141 is recorded live above."
     },
     "aws/workflows/sql/167_claim_ledger_relink_check.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "2026-11-14 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 83892c35-edaf-404f-b9cd-d14cecf50a55, run f2e0b482-129c-44fa-9597-b0cdc404d9b3, workstream prod-sql167-claim-ledger-relink-20261114, main d8da56bac, one_use_id sql167-prod-a0a99ec5-74aa-472f-ad05-d8922b4d240e): receipt before 45b7f3a9…, after 3aebf662… = the pin's intended, result applied; post-apply inspect already_applied true (ops/production-sql-167-apply.md, ops/deployment-guard/sql167-claim-ledger-relink-check-production-apply.json, record #1910). No predecessor."
     }
   },
   "order": [
