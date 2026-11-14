@@ -170,6 +170,7 @@ export const MIGRATIONS = Object.freeze({
   'sql164-wallet-withdrawal-leg-and-limits': RELEASE_2026_10_17_PENDING_SQL_PINS.sql164,
   'sql165-vendor-payee-lookup-and-payroll-vendor': RELEASE_2026_10_17_PENDING_SQL_PINS.sql165,
   'sql166-mortgage-desk-set-monitoring': RELEASE_2026_10_17_PENDING_SQL_PINS.sql166,
+  'sql167-claim-ledger-relink-check': RELEASE_2026_10_17_PENDING_SQL_PINS.sql167,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;
