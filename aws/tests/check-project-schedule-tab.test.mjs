@@ -44,7 +44,8 @@ test('the tab edits through ProjectPlanCard only for the owner, and explains a m
   assert.match(tab, /if \(!claimId\) \{[\s\S]*not linked to a claim yet/);
   assert.match(tab, /if \(!canEdit \|\| !tenantId\) \{[\s\S]*managed by the company that uploaded this check/);
   assert.match(tab, /return <ProjectPlanCard claimId=\{claimId\} tenantId=\{tenantId\} \/>;/);
-  // The Funds tab keeps its owner-only card; partners (readOnly) still never get the editor there.
+  // The Funds tab no longer repeats the schedule (owner 2026-11-15: "Remove project schedule from
+  // funds tab since it has its own tab"); this tab is the one place it is edited on the check.
   const funds = readFileSync('src/components/payments/FundsTab.tsx', 'utf8');
-  assert.match(funds, /\{!readOnly && claimId && tenant\?\.id && \(\s*<ProjectPlanCard/);
+  assert.doesNotMatch(funds, /ProjectPlanCard/);
 });
