@@ -1,15 +1,24 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { FileText, Headset, StickyNote } from "lucide-react";
+import { FileText, Headset } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import {
-  displayCheckMessageBody,
   mortgageDeskReturnedWorkAnchorId,
   selectMortgageDeskNotes,
 } from "@/lib/mortgageDeskReturn";
 import { MORTGAGE_DESK_FILE_SOURCE } from "@/lib/mortgageDeskWrites";
+import {
+  MORTGAGE_DESK_NOTE_LABEL,
+  MORTGAGE_DESK_NOTES_VISIBLE,
+  countUnreadMortgageDeskNotes,
+  isUnreadMortgageDeskNote,
+  newestMortgageDeskNotesFirst,
+} from "@/lib/mortgageDeskNoteDisplay";
+import { MortgageDeskNoteRow } from "./MortgageDeskNoteRow";
 
 type DeskRequestRow = {
   id: string;
@@ -44,6 +53,8 @@ type DeskFileRow = {
  * Returned File" scrolls here.
  */
 export function MortgageDeskReturnedWork({ checkId }: { checkId: string }) {
+  const { user } = useAuth();
+  const [showAllNotes, setShowAllNotes] = useState(false);
   const { data } = useQuery({
     queryKey: ["mortgage-desk-returned-work", checkId],
     enabled: !!checkId,
@@ -78,6 +89,24 @@ export function MortgageDeskReturnedWork({ checkId }: { checkId: string }) {
     },
   });
 
+  // "New" uses the existing per-user read mark of the check thread (check_message_reads, set
+  // when the thread opens). The key sits under "check-unread-counts", so the thread's
+  // invalidation on open refreshes it. A failed read marks nothing.
+  const { data: readState } = useQuery({
+    queryKey: ["check-unread-counts", "mortgage-desk-notes", checkId, user?.id ?? null],
+    enabled: !!checkId && !!user?.id && !!data?.notes.length,
+    queryFn: async (): Promise<{ known: boolean; lastReadAt: string | null }> => {
+      const { data: row, error } = await supabase
+        .from("check_message_reads")
+        .select("last_read_at")
+        .eq("user_id", user!.id)
+        .eq("check_id", checkId)
+        .maybeSingle();
+      if (error) return { known: false, lastReadAt: null };
+      return { known: true, lastReadAt: (row as { last_read_at?: string | null } | null)?.last_read_at ?? null };
+    },
+  });
+
   if (!data?.requests.length || (!data.notes.length && !data.files.length)) return null;
 
   const openFile = async (file: DeskFileRow) => {
@@ -91,58 +120,81 @@ export function MortgageDeskReturnedWork({ checkId }: { checkId: string }) {
     window.open(signed.signedUrl, "_blank", "noopener");
   };
 
+  const sortedNotes = newestMortgageDeskNotesFirst(data.notes);
+  const visibleNotes = showAllNotes ? sortedNotes : sortedNotes.slice(0, MORTGAGE_DESK_NOTES_VISIBLE);
+  const lastReadAt = readState?.known ? readState.lastReadAt : undefined;
+  const newCount = countUnreadMortgageDeskNotes(data.notes, lastReadAt);
+
+  // Compact (owner 2026-11-15): an amber accent, the "Mortgage Desk" label and a "New" count
+  // keep an update easy to notice; each note is one small clamped row with "Show more".
   return (
     <div
       id={mortgageDeskReturnedWorkAnchorId(checkId)}
-      className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs space-y-3 scroll-mt-4"
+      className="w-full rounded-md border border-border/60 border-l-2 border-l-amber-400 bg-muted/30 px-2 py-1.5 text-xs space-y-1.5 scroll-mt-4"
       data-testid="mortgage-desk-returned-work"
     >
-      <div className="flex items-center gap-2">
-        <Headset className="h-3.5 w-3.5 text-amber-400" />
-        <span className="font-semibold">Mortgage Desk notes &amp; documents</span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Headset className="h-3 w-3 shrink-0 text-amber-400" />
+        <span className="text-[11px] font-semibold">{MORTGAGE_DESK_NOTE_LABEL}</span>
+        <span className="truncate text-[10px] text-muted-foreground">
+          {[
+            data.notes.length > 0 ? `${data.notes.length} note${data.notes.length === 1 ? "" : "s"}` : null,
+            data.files.length > 0 ? `${data.files.length} doc${data.files.length === 1 ? "" : "s"}` : null,
+          ].filter(Boolean).join(" · ")}
+        </span>
+        {newCount > 0 && (
+          <Badge
+            className="ml-auto h-4 shrink-0 bg-amber-500 px-1.5 text-[9px] font-semibold text-black hover:bg-amber-500"
+            data-testid="mortgage-desk-notes-new"
+          >
+            {newCount} new
+          </Badge>
+        )}
       </div>
 
-      {data.notes.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="flex items-center gap-1 text-[10px] tracking-wide text-muted-foreground">
-            <StickyNote className="h-3 w-3" /> Notes ({data.notes.length})
-          </p>
-          <ul className="space-y-1.5">
-            {data.notes.map((note) => (
-              <li key={note.id} className="rounded bg-background/60 p-2">
-                <p className="whitespace-pre-wrap leading-snug">{displayCheckMessageBody(note.body)}</p>
-                {note.created_at && (
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {format(new Date(note.created_at), "MMM d, yyyy h:mm a")}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
+      {visibleNotes.length > 0 && (
+        <ul className="space-y-1">
+          {visibleNotes.map((note) => (
+            <li key={note.id}>
+              <MortgageDeskNoteRow
+                body={note.body}
+                createdAt={note.created_at}
+                isNew={isUnreadMortgageDeskNote(note.created_at, lastReadAt)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      {sortedNotes.length > MORTGAGE_DESK_NOTES_VISIBLE && (
+        <button
+          type="button"
+          className="text-[10px] font-medium text-primary hover:underline"
+          aria-expanded={showAllNotes}
+          onClick={() => setShowAllNotes((v) => !v)}
+        >
+          {showAllNotes ? "Show fewer notes" : `Show all ${sortedNotes.length} notes`}
+        </button>
       )}
 
       {data.files.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="flex items-center gap-1 text-[10px] tracking-wide text-muted-foreground">
-            <FileText className="h-3 w-3" /> Documents ({data.files.length})
-          </p>
-          <ul className="space-y-1">
-            {data.files.map((file) => (
-              <li key={file.id} className="flex items-center justify-between gap-2">
+        <ul className="space-y-0.5 border-t border-border/40 pt-1">
+          {data.files.map((file) => (
+            <li key={file.id} className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1">
+                <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{file.file_name}</p>
+                  <p className="truncate text-[11px] font-medium">{file.file_name}</p>
                   {file.description && (
                     <p className="truncate text-[10px] text-muted-foreground">{file.description}</p>
                   )}
                 </div>
-                <Button size="sm" variant="outline" className="h-6 shrink-0 px-2 text-[10px]" onClick={() => void openFile(file)}>
-                  Open
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
+              </div>
+              <Button size="sm" variant="outline" className="h-6 shrink-0 px-2 text-[10px]" onClick={() => void openFile(file)}>
+                Open
+              </Button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

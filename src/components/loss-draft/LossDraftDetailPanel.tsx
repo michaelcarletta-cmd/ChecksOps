@@ -125,7 +125,11 @@ export function LossDraftDetailPanel({
     `$${(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
   return (
-    <Card className="flex h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem] min-w-0 flex-col overflow-hidden">
+    // Phones (below md) let the card grow with its content so the page itself scrolls: a fixed
+    // height with overflow-hidden clipped the tall header (check, actions, Mortgage Desk cards)
+    // and left no room for the tabs (owner 2026-11-15). From md up the panel keeps its fixed
+    // height with the tab body scrolling inside.
+    <Card className="flex min-w-0 flex-col md:h-[calc(100vh-16rem)] md:min-h-[22rem] md:max-h-[42rem] md:overflow-hidden">
       <CardHeader className="shrink-0 pb-2">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <CardTitle className="min-w-0 text-sm flex items-center gap-2 leading-snug">
@@ -370,6 +374,7 @@ export function LossDraftDetailPanel({
       {returnAlert?.actionRequired && draft.check_intake_item_id && (
         <div className="mx-4 my-3 shrink-0">
           <MortgageDeskReturnedBanner
+            compact
             completedAt={returnAlert.completedAt}
             returnedAt={returnAlert.returnedAt}
             acknowledging={ackBusy}
@@ -425,7 +430,7 @@ export function LossDraftDetailPanel({
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col md:min-h-0 md:flex-1 md:overflow-hidden">
         <TabsList className="w-full rounded-none shrink-0 overflow-hidden">
           <TabsTrigger value="actions" className="flex-1 text-xs">
             Actions
@@ -449,7 +454,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="actions"
-          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
         >
           <LossDraftActionsTab
             lossDraftId={lossDraftId}
@@ -461,7 +466,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="docs"
-          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
         >
           <LossDraftDocsTab
             lossDraftId={lossDraftId}
@@ -474,7 +479,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="releases"
-          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
         >
           <LossDraftReleasesTab
             releases={releases}
@@ -486,7 +491,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="partners"
-          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
         >
           <div className="flex h-full flex-col p-4">
             <div className="flex items-center justify-between mb-2">
@@ -508,7 +513,7 @@ export function LossDraftDetailPanel({
         {showAuditTab && (
           <TabsContent
             value="audit"
-            className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+            className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
           >
             <LossDraftAuditTab audit={audit} />
           </TabsContent>
