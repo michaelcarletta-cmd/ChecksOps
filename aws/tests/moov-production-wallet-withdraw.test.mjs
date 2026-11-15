@@ -3,12 +3,16 @@ import { test } from 'node:test';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
 import { classifyFunction } from '../functions/api/providers/catalog.mjs';
+import fs from 'node:fs';
 import {
   expectedArrival,
+  resolveDestinationBank,
   selectSameDayCreditMethod,
+  TENANT_BANKS_SQL,
   tenantLimitBreach,
   WALLET_WITHDRAW_LEG,
 } from '../functions/api/providers/production/moov-wallet-withdraw.mjs';
+import { buildSweepSnapshot } from '../functions/api/providers/parity/sweep-read.mjs';
 import { SET_MONEY_WRITE_SQL } from '../functions/api/money-write-flag.mjs';
 import { minutesAgo, stepUpWithinWindow } from './helpers/financial-stepup-window.mjs';
 
@@ -20,6 +24,13 @@ const ORIGIN_JTI = 'b2c3d4e5-aaaa-4bbb-8ccc-000011112222';
 const LOGIN = `${SUB}:jti:${ORIGIN_JTI}`;
 const CLICK = '0b0e0c3a-5f4e-4d2c-9a1b-2c3d4e5f6a7b';
 const BANK_ROW = '8eb5b26e-6f66-435c-a578-880fb7fc14dd';
+const OTHER_ROW = '1eb5b26e-6f66-435c-a578-880fb7fc14dd';
+/** A bank row of this tenant as payment_provider_methods holds it: connected, on the tenant's Moov account. */
+const bankRow = (id, bank, extra = {}) => ({
+  id, tenant_id: TENANT, environment: 'production', provider_account_id: 'moov-acct', provider_bank_account_id: bank,
+  bank_name: 'FIRST BANK', last_four: '1234', is_default: false, connection_status: 'connected', verification_status: 'verified',
+  external_recipient_id: null, ...extra,
+});
 const PATH = '/functions/v1/moov-wallet-withdraw';
 /** Tuesday 2026-11-10, 10:00 in New York (before the 16:45 same-day cutoff). */
 const TUESDAY_MORNING = new Date('2026-11-10T15:00:00Z');
@@ -79,7 +90,7 @@ const fakeDb = ({
   memberships = [{ tenant_id: TENANT, role: 'member', tenant_name: 'Freedom', tenant_slug: 'freedom' }],
   stepUps = [{ id: 'stepup-1', user_id: APP_USER, tenant_id: TENANT, action_key: 'wallet.fund', login_session: LOGIN }],
   account = { tenant_id: TENANT, environment: 'production', provider_account_id: 'moov-acct', onboarding_status: 'active' },
-  banks = [{ id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: true }],
+  banks = [bankRow(BANK_ROW, 'bank-1', { is_default: true })],
   limits = null,
   transfers = [],
 } = {}) => {
@@ -141,7 +152,15 @@ const fakeDb = ({
       if (sql.includes('INSERT INTO public.payment_wallets')) {
         return { rows: [{ id: 'wallet-row', tenant_id: params[0], environment: params[1], wallet_type: params[2], provider_wallet_id: params[4], provider_payment_method_id: params[6], available_cents: params[7], pending_cents: params[8] }] };
       }
-      if (sql.includes('FROM public.payment_provider_methods')) return { rows: banks };
+      if (sql === TENANT_BANKS_SQL) {
+        // As PostgreSQL would: this tenant and environment only, never a recipient's bank, default first (stable).
+        return {
+          rows: banks
+            .filter((b) => (b.tenant_id ?? TENANT) === params[0] && (b.environment ?? 'production') === params[1] && !b.external_recipient_id)
+            .sort((a, b) => Number(b.is_default === true) - Number(a.is_default === true)),
+        };
+      }
+      if (sql.includes('FROM public.payment_provider_methods')) throw new Error(`unexpected bank query: ${sql}`);
       if (sql.includes('COALESCE(sum(amount_cents)') && sql.includes('ANY($3::text[])')) {
         const cents = state().transfers
           .filter((t) => t.tenant_id === params[0] && params[2].includes(t.leg_role) && t.id !== params[3]
@@ -444,27 +463,27 @@ test('if the SQL 164 limit columns were missing (applied in both environments; t
   });
 });
 
-test('the destination is the tenant\'s default bank only, verified at Moov with a same-day credit method', async () => {
+test('without a chosen bank, the destination is the settlement bank; when it cannot be credited the reason is named and nothing is sent', async () => {
   await withEnv(FLAGS, async () => {
-    const OTHER_ROW = '1eb5b26e-6f66-435c-a578-880fb7fc14dd';
     const cases = [
-      // Moov has the default bank but not verified.
-      [{}, { credits: [sameDay('pm-same-day', 'bank-1', 'new')] }, 'same_day_unavailable'],
-      // Only standard ACH credit at Moov.
+      // The settlement bank is listed at Moov, but its same-day method is not verified.
+      [{}, { credits: [sameDay('pm-same-day', 'bank-1', 'new')] }, 'settlement_bank_not_verified'],
+      // Verified, but only standard ACH credit at Moov.
       [{}, { credits: [] }, 'same_day_unavailable'],
-      // The default bank has no same-day method; another bank does: never used.
+      // The settlement bank has no same-day method; another bank does: never used without being chosen.
+      [{ banks: [bankRow(BANK_ROW, 'bank-1', { is_default: true }), bankRow(OTHER_ROW, 'bank-2')] }, { credits: [sameDay('pm-other', 'bank-2')] }, 'same_day_unavailable'],
+      // Moov does not list the settlement bank for this account at all.
+      [{ banks: [bankRow(BANK_ROW, 'bank-9')] }, {}, 'settlement_bank_not_linked'],
+      // The settlement bank row is not connected (the tile still shows a verified one).
+      [{ banks: [bankRow(BANK_ROW, 'bank-1', { connection_status: 'disconnected' })] }, {}, 'settlement_bank_not_linked'],
+      // The settlement bank belongs to another Moov account of the tenant.
+      [{ banks: [bankRow(BANK_ROW, 'bank-1', { provider_account_id: 'old-moov-acct' })] }, {}, 'settlement_bank_not_linked'],
+      // No bank of this tenant at all; another tenant's and a recipient's banks are never read as one.
+      [{ banks: [] }, {}, 'no_settlement_bank'],
       [{ banks: [
-        { id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: true },
-        { id: OTHER_ROW, provider_bank_account_id: 'bank-2', is_default: false },
-      ] }, { credits: [sameDay('pm-other', 'bank-2')] }, 'same_day_unavailable'],
-      // No default bank: refused, even with a single connected bank (owner decision 2026-11-13).
-      [{ banks: [{ id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: false }] }, {}, 'default_bank_required'],
-      [{ banks: [
-        { id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: false },
-        { id: OTHER_ROW, provider_bank_account_id: 'bank-2', is_default: false },
-      ] }, { credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2')] }, 'default_bank_required'],
-      // No connected ChecksOps bank of this tenant at all (a recipient's bank is never listed).
-      [{ banks: [] }, {}, 'default_bank_required'],
+        bankRow(BANK_ROW, 'bank-1', { tenant_id: OTHER_TENANT, is_default: true }),
+        bankRow(OTHER_ROW, 'bank-2', { external_recipient_id: 'recipient-1' }),
+      ] }, {}, 'no_settlement_bank'],
     ];
     for (const [db, stub, error] of cases) {
       const client = fakeDb(db);
@@ -472,18 +491,143 @@ test('the destination is the tenant\'s default bank only, verified at Moov with 
       const result = await run(client, moov);
       assert.equal(result.statusCode, 409, JSON.stringify(result));
       assert.equal(result.error, error, JSON.stringify({ db, stub }));
+      assert.notEqual(result.error, 'default_bank_required');
       assert.match(result.message, /Nothing was sent/);
       nothingHappened(client, moov);
     }
   });
 });
 
+test('the settlement bank is used even when is_default is false (owner 2026-11-15), the same row the Settlement bank tile shows', async () => {
+  await withEnv(FLAGS, async () => {
+    const shapes = [
+      // A single bank the legacy sync or a re-add left with is_default false.
+      [[bankRow(BANK_ROW, 'bank-1')], 'pm-same-day', BANK_ROW],
+      // is_default is only the tiebreak: a connected bank beats a default one that is not.
+      [[
+        bankRow(OTHER_ROW, 'bank-2', { is_default: true, connection_status: 'pending', verification_status: 'pending' }),
+        bankRow(BANK_ROW, 'bank-1'),
+      ], 'pm-same-day', BANK_ROW],
+      // Among connected banks, the default one.
+      [[bankRow(BANK_ROW, 'bank-1'), bankRow(OTHER_ROW, 'bank-2', { is_default: true })], 'pm-other', OTHER_ROW],
+    ];
+    for (const [banks, method, row] of shapes) {
+      const client = fakeDb({ banks });
+      const moov = moovStub({ credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2')] });
+      const result = await run(client, moov);
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: method });
+      assert.equal(client.committed.transfers[0].destination_payment_method_id, row);
+      assert.equal(client.committed.transfers[0].provider_metadata.destination_choice, 'settlement_bank');
+      // The tile (sweep-read.mjs buildSweepSnapshot) shows the same row from the same rows, in the same order.
+      const rows = (await fakeDb({ banks }).query(TENANT_BANKS_SQL, [TENANT, 'production'])).rows;
+      assert.equal(buildSweepSnapshot({ tenantId: TENANT, localMethods: rows }).settlement_method.id, row);
+    }
+  });
+});
+
+test('the bank rows are read with the tile\'s filter and order, for the tenant of the verified identity', async () => {
+  const source = fs.readFileSync(new URL('../functions/api/providers/parity/sweep-read.mjs', import.meta.url), 'utf8');
+  const tile = /async function loadLocalMethods[\s\S]*?FROM public\.payment_provider_methods\s+([\s\S]*?)`/.exec(source)?.[1];
+  const squash = (text) => String(text).replace(/\s+/g, ' ').trim();
+  assert.ok(tile, 'sweep-read.mjs loadLocalMethods is found');
+  assert.equal(squash(TENANT_BANKS_SQL.split('FROM public.payment_provider_methods')[1]), squash(tile));
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const result = await run(client, moovStub(), { bank_id: BANK_ROW });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    const reads = client.log.filter((q) => q.sql === TENANT_BANKS_SQL);
+    assert.equal(reads.length, 1);
+    assert.deepEqual(reads[0].params, [TENANT, 'production']);
+  });
+});
+
+test('a bank chosen in the dialog is credited when it is the tenant\'s own linked, verified same-day bank', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb({ banks: [bankRow(BANK_ROW, 'bank-1', { is_default: true }), bankRow(OTHER_ROW, 'bank-2')] });
+    const moov = moovStub({ credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2')] });
+    const result = await run(client, moov, { bank_id: OTHER_ROW.toUpperCase() });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: 'pm-other' });
+    const row = client.committed.transfers[0];
+    assert.equal(row.destination_payment_method_id, OTHER_ROW);
+    assert.equal(row.provider_metadata.destination_moov_payment_method_id, 'pm-other');
+    assert.equal(row.provider_metadata.destination_choice, 'caller');
+
+    // A repeat of the sent click reports it and sends nothing (whatever bank it names).
+    const again = await run(client, moov, { bank_id: BANK_ROW });
+    assert.equal(again.duplicate, true, JSON.stringify(again));
+    assert.equal(moov.posts().length, 1);
+
+    // A recorded but unsent click resumed for another bank is a different payment.
+    const ready = {
+      id: '00000000-0000-4000-8000-0000000000aa', tenant_id: TENANT, status: 'ready', idempotency_key: `wallet-withdraw:${CLICK}`,
+      amount_cents: 2500, leg_role: WALLET_WITHDRAW_LEG, wallet_id: 'wallet-row', provider_transfer_id: null,
+      provider_metadata: { source_moov_payment_method_id: 'pm-wallet', destination_moov_payment_method_id: 'pm-other' },
+    };
+    const resumed = fakeDb({ banks: [bankRow(BANK_ROW, 'bank-1', { is_default: true }), bankRow(OTHER_ROW, 'bank-2')], transfers: [ready] });
+    const moov2 = moovStub({ credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2')] });
+    const other = await run(resumed, moov2, { bank_id: BANK_ROW });
+    assert.equal(other.statusCode, 409, JSON.stringify(other));
+    assert.equal(other.error, 'idempotency_key_reused');
+    assert.equal(moov2.posts().length, 0);
+    const same = await run(resumed, moov2, { bank_id: OTHER_ROW });
+    assert.equal(same.ok, true, JSON.stringify(same));
+    assert.deepEqual(moov2.posts()[0].body.destination, { paymentMethodID: 'pm-other' });
+  });
+});
+
+test('a chosen bank that is foreign, a recipient\'s, malformed, unlinked or unverified is refused and nothing is sent', async () => {
+  await withEnv(FLAGS, async () => {
+    const FOREIGN = '7d1f3c55-1111-4222-8333-444455556666';
+    const RECIPIENT = '6d1f3c55-1111-4222-8333-444455556666';
+    const banks = [
+      bankRow(BANK_ROW, 'bank-1', { is_default: true }),
+      bankRow(FOREIGN, 'bank-f', { tenant_id: OTHER_TENANT }),
+      bankRow(RECIPIENT, 'bank-r', { external_recipient_id: 'recipient-1' }),
+      bankRow(OTHER_ROW, 'bank-2'),
+    ];
+    const cases = [
+      [{ bank_id: FOREIGN }, {}, 404, 'bank_not_found'],
+      [{ bank_id: RECIPIENT }, {}, 404, 'bank_not_found'],
+      [{ bank_id: '3c9e1b8a-0000-4000-8000-000000000000' }, {}, 404, 'bank_not_found'],
+      [{ bank_id: 'bank-2' }, {}, 400, 'invalid_bank_id'],
+      [{ bank_id: 42 }, {}, 400, 'invalid_bank_id'],
+      // Moov reports the chosen bank unverified.
+      [{ bank_id: OTHER_ROW }, { credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2', 'unverified')] }, 409, 'settlement_bank_not_verified'],
+      // Moov does not list the chosen bank.
+      [{ bank_id: OTHER_ROW }, {}, 409, 'settlement_bank_not_linked'],
+    ];
+    for (const [body, stub, status, error] of cases) {
+      const client = fakeDb({ banks });
+      const moov = moovStub(stub);
+      const result = await run(client, moov, body);
+      assert.equal(result.statusCode, status, JSON.stringify({ body, result }));
+      assert.equal(result.error, error, JSON.stringify(body));
+      assert.match(result.message, /Nothing was sent/);
+      nothingHappened(client, moov);
+    }
+    // A chosen bank that is not connected, or on another Moov account, is never credited, even though Moov lists it.
+    for (const extra of [{ connection_status: 'disconnected' }, { provider_account_id: 'old-moov-acct' }]) {
+      const client = fakeDb({ banks: [bankRow(BANK_ROW, 'bank-1', { is_default: true }), bankRow(OTHER_ROW, 'bank-2', extra)] });
+      const moov = moovStub({ credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2')] });
+      const result = await run(client, moov, { bank_id: OTHER_ROW });
+      assert.equal(result.statusCode, 409, JSON.stringify(extra));
+      assert.equal(result.error, 'settlement_bank_not_linked');
+      nothingHappened(client, moov);
+    }
+    // A malformed bank id is refused before the two-factor check or any read.
+    const client = fakeDb({ stepUps: [] });
+    const moov = moovStub();
+    const result = await run(client, moov, { bank_id: 'not-a-uuid' });
+    assert.equal(result.error, 'invalid_bank_id');
+    assert.equal(moov.calls.length, 0);
+  });
+});
+
 test('with a default bank and another verified bank, the default one is credited', async () => {
   await withEnv(FLAGS, async () => {
-    const client = fakeDb({ banks: [
-      { id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: true },
-      { id: '1eb5b26e-6f66-435c-a578-880fb7fc14dd', provider_bank_account_id: 'bank-2', is_default: false },
-    ] });
+    const client = fakeDb({ banks: [bankRow(BANK_ROW, 'bank-1', { is_default: true }), bankRow(OTHER_ROW, 'bank-2')] });
     const moov = moovStub({ credits: [sameDay('pm-other', 'bank-2'), sameDay('pm-same-day', 'bank-1')] });
     const result = await run(client, moov);
     assert.equal(result.ok, true, JSON.stringify(result));
@@ -653,10 +797,20 @@ test('limit and method helpers', () => {
 
   assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1')], 'b1').method.paymentMethodID, 'a');
   assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1'), sameDay('c', 'b2')], 'b2').method.paymentMethodID, 'c');
-  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1')], null).error, 'default_bank_required');
-  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1'), sameDay('c', 'b2')], null).error, 'default_bank_required');
-  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1', 'pending')], 'b1').error, 'same_day_unavailable');
+  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1')], null).error, 'settlement_bank_not_linked');
+  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1'), sameDay('c', 'b2')], null).error, 'settlement_bank_not_linked');
+  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1', 'pending')], 'b1').error, 'settlement_bank_not_verified');
   assert.equal(selectSameDayCreditMethod([{ ...sameDay('a', 'b1'), paymentMethodType: 'ach-credit-standard' }], 'b1').error, 'same_day_unavailable');
-  assert.equal(selectSameDayCreditMethod([sameDay('c', 'b2')], 'b1').error, 'same_day_unavailable');
-  assert.equal(selectSameDayCreditMethod(null, 'b1').error, 'same_day_unavailable');
+  assert.equal(selectSameDayCreditMethod([{ ...sameDay('a', 'b1', 'new'), paymentMethodType: 'ach-credit-standard' }], 'b1').error, 'settlement_bank_not_verified');
+  assert.equal(selectSameDayCreditMethod([sameDay('c', 'b2')], 'b1').error, 'settlement_bank_not_linked');
+  assert.equal(selectSameDayCreditMethod(null, 'b1').error, 'settlement_bank_not_linked');
+  // The destination row: the tile's pick without a choice, the chosen row only if it is listed; linked either way.
+  const linked = { id: 'r1', provider_account_id: 'acct', provider_bank_account_id: 'b1', connection_status: 'connected', is_default: false };
+  assert.equal(resolveDestinationBank([linked], { providerAccountId: 'acct' }).bank.id, 'r1');
+  assert.equal(resolveDestinationBank([], { providerAccountId: 'acct' }).error, 'no_settlement_bank');
+  assert.equal(resolveDestinationBank(null, { providerAccountId: 'acct' }).error, 'no_settlement_bank');
+  assert.equal(resolveDestinationBank([linked], { bankId: 'r2', providerAccountId: 'acct' }).error, 'bank_not_found');
+  assert.equal(resolveDestinationBank([linked], { bankId: 'r1', providerAccountId: 'other' }).error, 'settlement_bank_not_linked');
+  assert.equal(resolveDestinationBank([{ ...linked, provider_bank_account_id: null }], { providerAccountId: 'acct' }).error, 'settlement_bank_not_linked');
+  assert.equal(resolveDestinationBank([linked], { providerAccountId: null }).error, 'settlement_bank_not_linked');
 });

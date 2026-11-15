@@ -513,6 +513,36 @@ const laterPlan = (member) => {
   if (USAGE_FEES.members[member]) return { rel: USAGE_FEES_REL, entry: USAGE_FEES.members[member], sql: SQL152_FILE };
   return null;
 };
+// Transfer to bank to the settlement bank (owner 2026-11-15, "build the transfer-to-bank fix"; "The default bank should be the
+// settlement bank that each tenant sets up"): providers/production/moov-wallet-withdraw.mjs (its row moves from the 2026-11-13
+// ADD, put live by the seventh production rebuild, to a REPLACE) REPLACEs those bytes, no hold, planning only; its own test is
+// at the end. It is the latest plan: settlementApplied is a member's bytes before it (its live_sha256 for the member it moved
+// on, else main's), and settlementPre restates the row as it stood before it (the ADD on the transfer to bank manifest). The
+// desk set monitoring restatement below, and so every older one, starts from these.
+const SETTLEMENT_REL = 'aws/tests/fixtures/production-transfer-to-bank-settlement-api-manifest-2026-11-15.json';
+const SETTLEMENT = JSON.parse(fs.readFileSync(path.join(ROOT, SETTLEMENT_REL), 'utf8'));
+const SETTLEMENT_PREVIOUS_ROWS = Object.freeze({
+  'providers/production/moov-wallet-withdraw.mjs': Object.freeze({
+    operation: 'add', expected_live_sha256: null, sql_before: null,
+    manifest: 'aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json',
+  }),
+});
+/** The local imports the settlement change added to a member (none before it): the tile's own selection function. */
+const SETTLEMENT_ADDED_IMPORTS = Object.freeze({ 'providers/production/moov-wallet-withdraw.mjs': Object.freeze(['providers/parity/sweep-read.mjs']) });
+const settlementApplied = (member) => SETTLEMENT.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+const settlementPre = (plan) => {
+  for (const [name, entry] of Object.entries(SETTLEMENT.members)) {
+    const previous = SETTLEMENT_PREVIOUS_ROWS[name];
+    plan.members[name] = {
+      operation: previous.operation,
+      accepted_sha256: entry.live_sha256,
+      expected_live_sha256: previous.expected_live_sha256,
+      sql_before: previous.sql_before,
+      manifest: previous.manifest,
+    };
+  }
+  return plan;
+};
 // Mortgage Desk set monitoring API (owner 2026-11-14, "Mortgage agent needs to be able to change the claim from monitor to not
 // monitored, so the tenants see that type of update"; SQL 166): mortgage-desk-return.mjs (its row moves from the SQL 122 ADD,
 // applied 2026-10-28, to a REPLACE) and workflow-rpc.mjs (from its vendor payments applied bytes) REPLACE their applied bytes,
@@ -538,7 +568,8 @@ const DESK_MONITORING_PREVIOUS_ROWS = Object.freeze({
 const deskMonitoringPreviousAccepted = (name) => (DESK_MONITORING_PREVIOUS_ROWS[name]?.accepted_from_manifest
   ? JSON.parse(fs.readFileSync(path.join(ROOT, DESK_MONITORING_PREVIOUS_ROWS[name].manifest), 'utf8')).members[name].accepted_sha256
   : DESK_MONITORING.members[name]?.live_sha256);
-const deskMonitoringApplied = (member) => deskMonitoringPreviousAccepted(member) ?? sha(`aws/functions/api/${member}`);
+// (Read with the transfer to bank settlement plan, which came later, undone: settlementApplied, settlementPre.)
+const deskMonitoringApplied = (member) => deskMonitoringPreviousAccepted(member) ?? settlementApplied(member);
 // Applied 2026-11-14 in plan order (production runs 43645016323 and 43645128104, each VERIFIED): both rows expect main's bytes
 // and name the applied record, which chains to the planning manifest above (it keeps the pre-apply state). deskRecordPre
 // restates the plan as it stood before those applies (expected_live back to the planning live bytes, manifest back to the
@@ -550,7 +581,8 @@ const deskRecordPre = (plan) => {
   }
   return plan;
 };
-const deskMonitoringPre = (plan) => {
+const deskMonitoringPre = (plan0) => {
+  const plan = settlementPre(plan0);
   for (const [name, entry] of Object.entries(DESK_MONITORING.members)) {
     const previous = DESK_MONITORING_PREVIOUS_ROWS[name];
     plan.members[name] = {
@@ -9281,11 +9313,15 @@ test('Transfer to bank (owner 2026-11-13): ADD wallet-withdraw-limits.mjs, fed-h
   assert.ok(PLAN.notes.includes(`Transfer to bank (2026-11-13, planning only, intended for the guarded full-package API rebuild)`));
   assert.ok(PLAN.notes.includes(T2B_REL));
   // The ADDs: main's bytes, absent live, their imports exactly what the bytes import.
+  // (The settlement bank plan, 2026-11-15, planning only, has since moved moov-wallet-withdraw.mjs on to a REPLACE that also
+  // imports sweep-read.mjs: its row is read as it stood before that plan, and its ADD bytes as settlementApplied.)
+  const PLAN_PRE_SETTLEMENT = settlementPre(structuredClone(PLAN));
   for (const name of ADDS) {
-    const imports = localImports(fs.readFileSync(path.join(API, name), 'utf8'), name);
+    const imports = localImports(fs.readFileSync(path.join(API, name), 'utf8'), name)
+      .filter((dep) => !(SETTLEMENT_ADDED_IMPORTS[name] || []).includes(dep));
     assert.deepEqual({ ...T2B.members[name], required_imports: [...T2B.members[name].required_imports].sort() },
-      { live_sha256: null, accepted_sha256: sha(`aws/functions/api/${name}`), operation: 'add', required_imports: [...imports].sort() }, name);
-    assert.deepEqual(PLAN.members[name], { operation: 'add', accepted_sha256: sha(`aws/functions/api/${name}`), expected_live_sha256: null, sql_before: null, manifest: T2B_REL }, name);
+      { live_sha256: null, accepted_sha256: settlementApplied(name), operation: 'add', required_imports: [...imports].sort() }, name);
+    assert.deepEqual(PLAN_PRE_SETTLEMENT.members[name], { operation: 'add', accepted_sha256: settlementApplied(name), expected_live_sha256: null, sql_before: null, manifest: T2B_REL }, name);
     for (const dep of imports) assert.ok(fs.existsSync(path.join(API, dep)), `${name} imports ${dep}`);
   }
   assert.deepEqual(T2B.members[HOLIDAYS].required_imports, []);
@@ -9323,9 +9359,12 @@ test('Transfer to bank (owner 2026-11-13): ADD wallet-withdraw-limits.mjs, fed-h
   // Inspect: each ADD READY while absent and ALREADY_ACCEPTED at main's bytes; each REPLACE READY on its recorded live bytes,
   // ALREADY_ACCEPTED on main's (as after a verified full-package rebuild), anything else a reconciliation stop.
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  // (Replayed with main's bytes, as other replays are: moov-wallet-withdraw.mjs on its ADD row, accepting main's bytes.)
+  const addReplay = structuredClone(PLAN_PRE_SETTLEMENT);
+  for (const name of ADDS) addReplay.members[name].accepted_sha256 = sha(`aws/functions/api/${name}`);
   for (const name of ADDS) {
-    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name) })).state, 'READY', name);
-    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: T2B.members[name].accepted_sha256 }) })).state, 'ALREADY_ACCEPTED', name);
+    assert.equal((await run(inspect(name), { root: ROOT, plan: addReplay, inspectLive: liveFor(name, { plan: addReplay }) })).state, 'READY', name);
+    assert.equal((await run(inspect(name), { root: ROOT, plan: addReplay, inspectLive: liveFor(name, { sha256: addReplay.members[name].accepted_sha256, plan: addReplay }) })).state, 'ALREADY_ACCEPTED', name);
   }
   for (const name of REPLACES) {
     const ready = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: T2B.members[name].live_sha256 }) });
@@ -9360,8 +9399,10 @@ test('Transfer to bank (owner 2026-11-13): ADD wallet-withdraw-limits.mjs, fed-h
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   // The handler never reads a destination from the browser and never emails; no index.mjs change.
+  // (Since the settlement bank plan, 2026-11-15, the browser may name one of the tenant's own bank rows by body.bank_id,
+  // checked against the rows of the tenant from the verified identity; no other destination field is read.)
   const withdraw = fs.readFileSync(path.join(API, WITHDRAW), 'utf8');
-  assert.doesNotMatch(withdraw, /body\.(destination|bank|payment_method)/);
+  assert.doesNotMatch(withdraw, /body\.(destination|payment_method)|body\.bank(?!_id\b)/);
   assert.doesNotMatch(withdraw, /email-templates|sendEmail|resend|client-ses/i);
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
   assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('moov-wallet-withdraw'));
@@ -9845,4 +9886,83 @@ test('Claim Ledger relink API (owner 2026-11-14, SQL 167): workflow-rpc.mjs REPL
   assert.equal(PLAN.members[RPC].expected_live_sha256, sha(`aws/functions/api/${RPC}`));
   assert.equal(PLAN.members[RPC].sql_before, SQL167_FILE);
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
+});
+
+test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withdraw.mjs REPLACEs the bytes the seventh production rebuild put live, no hold; planning only', async () => {
+  const WITHDRAW = 'providers/production/moov-wallet-withdraw.mjs';
+  const SWEEP_READ = 'providers/parity/sweep-read.mjs';
+  const T2B_PLANNING_REL = 'aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json';
+  assert.equal(SETTLEMENT.workstream_id, 'transfer-to-bank-settlement-api');
+  assert.equal(SETTLEMENT.deploy_authorized, false);
+  assert.match(SETTLEMENT.authorization, /^Pending owner review \(2026-11-15\)\. Planning only/);
+  assert.equal(SETTLEMENT.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(SETTLEMENT.members), [WITHDRAW]);
+  for (const text of ['build the transfer-to-bank fix', 'The default bank should be the settlement bank that each tenant sets up',
+    'pickSettlementMethod', 'bank_id', 'bank_not_found 404', 'default_bank_required is gone', 'apply run 43464046767',
+    'apply 43606264549', 'sweep-read.mjs is not changed', 'No member is added', 'index.mjs is untouched', 'needs this API live first', 'Planning only']) {
+    assert.ok(SETTLEMENT.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes('Transfer to bank settlement bank API (2026-11-15, owner "build the transfer-to-bank fix"'));
+  assert.ok(PLAN.notes.includes(`Manifest ${SETTLEMENT_REL}. Planning only.`));
+  // The REPLACE: from the ADD's bytes (the transfer to bank planning manifest), to main's; the row moves from that ADD.
+  const before = settlementPre(structuredClone(PLAN));
+  const t2bEntry = JSON.parse(fs.readFileSync(path.join(ROOT, T2B_PLANNING_REL), 'utf8')).members[WITHDRAW];
+  assert.deepEqual(before.members[WITHDRAW], {
+    operation: 'add', accepted_sha256: t2bEntry.accepted_sha256, expected_live_sha256: null, sql_before: null, manifest: T2B_PLANNING_REL,
+  });
+  const entry = SETTLEMENT.members[WITHDRAW];
+  assert.deepEqual(entry, {
+    live_sha256: t2bEntry.accepted_sha256, accepted_sha256: sha(`aws/functions/api/${WITHDRAW}`), operation: 'replace', previous_manifest: T2B_PLANNING_REL,
+  });
+  assert.deepEqual(PLAN.members[WITHDRAW], {
+    operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: null, manifest: SETTLEMENT_REL,
+  });
+  assert.notEqual(entry.accepted_sha256, entry.live_sha256);
+  const evidence = `${WITHDRAW} ${entry.live_sha256.slice(0, 8)} -> ${entry.accepted_sha256.slice(0, 8)}`;
+  assert.ok(SETTLEMENT.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(evidence), evidence);
+  // The live bytes: the seventh production rebuild ADDed exactly these and was VERIFIED; no later section lists the file
+  // (the eighth production rebuild counted it as same), so production runs the bytes this REPLACE expects.
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const sections = [...rebuild.history, rebuild];
+  const seventh = sections.findIndex((section) => section.applied?.run_id === '43464046767');
+  assert.ok(seventh >= 0, 'the seventh production rebuild is recorded');
+  assert.equal(sections[seventh].added[WITHDRAW], entry.live_sha256);
+  assert.equal(sections[seventh].applied.state, 'VERIFIED');
+  for (const section of sections.slice(seventh + 1)) {
+    for (const key of ['members', 'added', 'removed']) assert.equal(section[key]?.[WITHDRAW], undefined, `${section.applied?.run_id} ${key}`);
+  }
+  assert.equal(rebuild.applied.run_id, '43606264549');
+  // One new local import, the tile's own selection function: sweep-read.mjs, not an overlay member, unchanged on main since
+  // the sixth production rebuild put it live; no ADD is needed and the order is unchanged.
+  const imports = localImports(fs.readFileSync(path.join(API, WITHDRAW), 'utf8'), WITHDRAW);
+  assert.deepEqual(imports.filter((dep) => !t2bEntry.required_imports.includes(dep)), [...SETTLEMENT_ADDED_IMPORTS[WITHDRAW]]);
+  assert.equal(PLAN.members[SWEEP_READ], undefined);
+  assert.ok(!PLAN.order.includes(SWEEP_READ));
+  const sixth = sections.find((section) => section.applied?.run_id === '43430080268');
+  assert.equal(sixth.members[SWEEP_READ].accepted_sha256, sha(`aws/functions/api/${SWEEP_READ}`));
+  assert.match(fs.readFileSync(path.join(API, WITHDRAW), 'utf8'), /import \{ pickSettlementMethod \} from '\.\.\/parity\/sweep-read\.mjs';/);
+  assert.deepEqual(PLAN.order, before.order);
+  assert.equal(resolvePlannedMember(WITHDRAW, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(WITHDRAW), `DEPLOY ${WITHDRAW} TO PRODUCTION`);
+  // Inspect: READY on the rebuild's live bytes, ALREADY_ACCEPTED on main's, anything else a reconciliation stop.
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  const ready = await run(inspect(WITHDRAW), { root: ROOT, inspectLive: liveFor(WITHDRAW, { sha256: entry.live_sha256 }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect(WITHDRAW), { root: ROOT, inspectLive: liveFor(WITHDRAW, { sha256: entry.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of ['c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect(WITHDRAW), { root: ROOT, inspectLive: liveFor(WITHDRAW, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+    );
+  }
+  // Apply (dry): no hold, so it passes the gates from the live bytes with no mutation and one receipt, REPLACE only.
+  const plan = structuredClone(PLAN);
+  const { deps, calls } = applyDeps(WITHDRAW, { sha256: entry.live_sha256, plan });
+  const result = await run(applyEnv(WITHDRAW, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: entry.live_sha256 }), { ...deps, plan });
+  assert.equal(result.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [WITHDRAW], add: [] });
+  assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
+  assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('moov-wallet-withdraw'));
 });

@@ -189,8 +189,11 @@ test('two-factor: the transfer and the limits both use the wallet.fund step-up a
 });
 
 test('errors: every code the API returns is handled, and its own message is shown plainly', () => {
+  // (Since the settlement bank change, owner 2026-11-15, the API names why the bank cannot be credited instead of
+  // default_bank_required.)
   const required = [
-    'default_bank_required', 'same_day_unavailable', 'tenant_limit_exceeded', 'insufficient_available_balance',
+    'no_settlement_bank', 'bank_not_found', 'settlement_bank_not_linked', 'settlement_bank_not_verified',
+    'same_day_unavailable', 'tenant_limit_exceeded', 'insufficient_available_balance',
     'totp_required', 'withdrawal_not_ready', 'limits_not_ready',
   ];
   for (const code of required) assert.ok(WITHDRAW_ERROR_MESSAGES[code], code);
