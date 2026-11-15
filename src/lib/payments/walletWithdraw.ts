@@ -4,16 +4,18 @@
  *
  * Owner decisions (2026-11-13, docs/WALLET_TO_BANK_TRANSFER_DESIGN.md §9): no fee; any member of
  * the tenant; no admin approval; same-day ACH; the same wallet.fund two-factor as Add funds;
- * no email; the operating wallet only; the tenant's default bank only; limits set by the tenant
- * (empty means no limit, so any amount up to the operating wallet balance); changing the limits
- * needs the two-factor code.
+ * no email; the operating wallet only; limits set by the tenant (empty means no limit, so any
+ * amount up to the operating wallet balance); changing the limits needs the two-factor code.
+ * The bank (owner 2026-11-15: "The default bank should be the settlement bank that each tenant
+ * sets up"): the dialog starts on the settlement bank, the same row the Settlement bank tile
+ * shows, and offers the organization's other banks; the picked bank's id is sent.
  *
  * Pure helpers only (no React, no network), so aws/tests can import this file directly.
- * The server is the authority for every rule here: the browser never picks the bank and never
- * decides the arrival date.
+ * The server is the authority for every rule here: it accepts a picked bank only if it is the
+ * organization's own linked, verified same-day bank, and it decides the arrival date.
  */
 
-/** The provider function that moves money from the operating wallet to the default bank. */
+/** The provider function that moves money from the operating wallet to the organization's bank. */
 export const WALLET_WITHDRAW_FUNCTION = "moov-wallet-withdraw";
 /** The app-services route that reads (action "get") and saves (action "save") the tenant's limits. */
 export const WALLET_WITHDRAW_LIMITS_FUNCTION = "save-tenant-wallet-withdraw-limits";
@@ -51,6 +53,7 @@ export type SettlementBankRow = {
   last_four?: string | null;
   is_default?: boolean | null;
   connection_status?: string | null;
+  verification_status?: string | null;
   external_recipient_id?: string | null;
 };
 
@@ -91,20 +94,67 @@ export function limitInputToCents(input: string): number | null | "invalid" {
 export const limitLabel = (cents: number | null | undefined) =>
   cents === null || cents === undefined ? "No limit" : usd(cents);
 
+const VERIFIED_STATUSES = ["verified", "successful"];
+const lower = (value: string | null | undefined) => String(value ?? "").toLowerCase();
+
+/** The organization's own banks: never a recipient's (the tile's query excludes them too). */
+const ownBanks = (rows: SettlementBankRow[] | null | undefined) => (rows ?? []).filter((row) => row && !row.external_recipient_id);
+
 /**
- * The tenant's default bank: the connected, tenant-owned row marked is_default. There is no
- * fallback to another bank (owner decision 2026-11-13: transfers go to the default bank only);
- * with no default, null, and the dialog explains how to choose one.
+ * The settlement bank: the same rule as the Wallet & Treasury "Settlement bank" tile
+ * (pickSettlementMethod, aws/functions/api/providers/parity/sweep-read.mjs) over the same rows in
+ * the same order (default first, then newest): the best connected or verified bank, with
+ * is_default only as the tiebreak. The transfer to bank API picks the same row. null when the
+ * organization has no bank.
  */
 export function defaultSettlementBank(rows: SettlementBankRow[] | null | undefined): SettlementBankRow | null {
-  return (
-    (rows ?? []).find(
-      (row) =>
-        row?.is_default === true
-        && String(row.connection_status ?? "").toLowerCase() === "connected"
-        && !row.external_recipient_id,
-    ) ?? null
-  );
+  const list = ownBanks(rows);
+  const connected = (row: SettlementBankRow) =>
+    lower(row.connection_status) === "connected" || VERIFIED_STATUSES.includes(lower(row.verification_status));
+  const rank = (row: SettlementBankRow) => (connected(row) ? 2 : 0) + (row.is_default ? 1 : 0);
+  return [...list].sort((a, b) => rank(b) - rank(a))[0] ?? null;
+}
+
+/**
+ * Why a bank cannot receive a transfer, as far as the browser can tell (the server checks again at
+ * Moov): not linked when it is not connected; not verified when its recorded verification is a
+ * status other than verified. An empty status is left to the server. null when it can be picked.
+ */
+export function bankIneligibility(
+  row: SettlementBankRow | null | undefined,
+): { code: "not_linked" | "not_verified"; reason: string } | null {
+  if (!row) return { code: "not_linked", reason: "Not linked" };
+  if (lower(row.connection_status) !== "connected") return { code: "not_linked", reason: "Not linked" };
+  const verification = lower(row.verification_status);
+  if (verification && !VERIFIED_STATUSES.includes(verification)) return { code: "not_verified", reason: "Not verified" };
+  return null;
+}
+
+export type TransferBankOption = {
+  bank: SettlementBankRow;
+  settlement: boolean;
+  disabled: boolean;
+  reason: string | null;
+};
+
+/**
+ * The banks the dialog offers: the settlement bank first, then the organization's other banks in
+ * the tile's order. A bank that cannot receive a transfer is listed, disabled, with its reason.
+ */
+export function transferBankOptions(rows: SettlementBankRow[] | null | undefined): TransferBankOption[] {
+  const list = ownBanks(rows);
+  const settlement = defaultSettlementBank(list);
+  const ordered = settlement ? [settlement, ...list.filter((row) => row !== settlement)] : list;
+  return ordered.map((bank) => {
+    const refused = bankIneligibility(bank);
+    return { bank, settlement: bank === settlement, disabled: !!refused, reason: refused?.reason ?? null };
+  });
+}
+
+/** The bank the dialog starts on: the settlement bank when it can receive a transfer; otherwise none. */
+export function initialTransferBankId(options: TransferBankOption[]): string | null {
+  const settlement = options.find((option) => option.settlement);
+  return settlement && !settlement.disabled ? settlement.bank.id : null;
 }
 
 /** "FIRST BANK ••1234": the bank name and only the last four digits. */
@@ -112,7 +162,7 @@ export function maskedBankLabel(
   bank: Pick<SettlementBankRow, "bank_name" | "last_four"> | null | undefined,
   displayName: (value: string | null) => string | null = (value) => value,
 ): string {
-  if (!bank) return "No default bank";
+  if (!bank) return "No bank";
   return `${displayName(bank.bank_name ?? null) ?? "Bank"} ••${bank.last_four ?? "----"}`;
 }
 
@@ -147,9 +197,15 @@ export const WITHDRAW_ERROR_MESSAGES: Record<string, string> = {
   totp_required: "Enter your two-factor code to transfer to your bank.",
   totp_not_enrolled: "Set up two-factor authentication before transferring to your bank.",
   step_up_cancelled: "Two-factor confirmation is required. Nothing was sent.",
-  // The default bank only.
+  // The destination bank: the settlement bank, or a bank picked in the dialog that the API accepts only if it is the
+  // organization's own (owner 2026-11-15). default_bank_required is the code of the API before that change.
   default_bank_required: "Choose a default settlement bank before transferring. Nothing was sent.",
-  same_day_unavailable: "Your default settlement bank is not verified for same-day transfers yet. Nothing was sent.",
+  no_settlement_bank: "Add and verify a settlement bank in Payment Account before transferring. Nothing was sent.",
+  bank_not_found: "That bank is not one of your organization's banks. Nothing was sent.",
+  invalid_bank_id: "bank_id must be one of your bank ids. Nothing was sent.",
+  settlement_bank_not_linked: "This bank is not linked to your payment account. Reconnect it in Payment Account. Nothing was sent.",
+  settlement_bank_not_verified: "This bank is not verified yet. Nothing was sent.",
+  same_day_unavailable: "This bank does not accept same-day transfers yet. Nothing was sent.",
   // Balance and the tenant's own limits.
   insufficient_available_balance:
     "That is more than your available balance. Pending funds cannot be transferred. Nothing was sent.",

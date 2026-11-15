@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Landmark, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useWalletWithdraw } from "@/hooks/useWalletWithdraw";
@@ -13,6 +13,7 @@ import { formatWalletMoney } from "@/lib/payments/operatingBalance";
 import {
   arrivalText,
   centsToDollarInput,
+  initialTransferBankId,
   limitInputToCents,
   limitLabel,
   maskedBankLabel,
@@ -27,25 +28,28 @@ const money = formatWalletMoney;
 type Step = "form" | "confirm" | "done";
 
 /**
- * Wallet & Treasury → "Transfer to bank": the operating wallet to the organization's default
- * bank by same-day ACH. No fee, no admin approval, the same wallet.fund two-factor as Add funds.
- * The bank is shown (masked) and cannot be changed here: there is no bank picker. Without a
- * default bank nothing can be sent, and the dialog says where to choose one.
+ * Wallet & Treasury → "Transfer to bank": the operating wallet to one of the organization's own
+ * banks by same-day ACH. No fee, no admin approval, the same wallet.fund two-factor as Add funds.
+ * It starts on the settlement bank (owner 2026-11-15: "The default bank should be the settlement
+ * bank that each tenant sets up"), the same bank the Settlement bank tile shows, and offers the
+ * organization's other banks; a bank that cannot receive a transfer is listed, disabled, with the
+ * reason. The picked bank's id is sent, and the server accepts it only if it is the organization's
+ * own linked, verified same-day bank.
  */
 export function TransferToBankDialog({
   availableCents,
   walletActive,
-  paymentsHref,
   onTransferred,
 }: {
   availableCents: number;
   walletActive: boolean;
-  paymentsHref: string;
   onTransferred?: () => Promise<unknown> | void;
 }) {
   const { toast } = useToast();
-  const { defaultBank, limits, withdraw, saveLimits } = useWalletWithdraw();
+  const { banks, limits, withdraw, saveLimits } = useWalletWithdraw();
   const [open, setOpen] = useState(false);
+  const [bankId, setBankId] = useState<string | null>(null);
+  const [bankPicked, setBankPicked] = useState(false);
   const [step, setStep] = useState<Step>("form");
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -58,13 +62,22 @@ export function TransferToBankDialog({
   const [perDay, setPerDay] = useState("");
   const [limitsError, setLimitsError] = useState<string | null>(null);
 
-  const bank = defaultBank.data ?? null;
+  const options = banks.data ?? [];
+  const settlementOption = options.find((option) => option.settlement) ?? null;
+  const bank = options.find((option) => option.bank.id === bankId && !option.disabled)?.bank ?? null;
   const bankLabel = maskedBankLabel(bank, displayCaseOrNull);
+  const optionLabel = (option: (typeof options)[number]) =>
+    `${maskedBankLabel(option.bank, displayCaseOrNull)}${option.settlement ? " · Settlement bank" : ""}${option.reason ? ` — ${option.reason}` : ""}`;
   const perTransferCents = limits.data?.wallet_withdraw_max_per_transfer_cents ?? null;
   const perDayCents = limits.data?.wallet_withdraw_max_per_day_cents ?? null;
   const available = Math.max(0, Number(availableCents || 0));
   const amountCents = parseDollarsToCents(amount);
   const canSend = walletActive && !!bank && available > 0;
+
+  // Start on the settlement bank (when it can receive a transfer) until the user picks another.
+  useEffect(() => {
+    if (!bankPicked) setBankId(initialTransferBankId(banks.data ?? []));
+  }, [bankPicked, banks.data]);
 
   useEffect(() => {
     if (!editingLimits) {
@@ -82,6 +95,7 @@ export function TransferToBankDialog({
     setResult(null);
     setEditingLimits(false);
     setLimitsError(null);
+    setBankPicked(false);
   }
 
   function handleReview() {
@@ -99,10 +113,10 @@ export function TransferToBankDialog({
   }
 
   async function handleSend() {
-    if (!amountCents || !idempotencyKey) return;
+    if (!amountCents || !idempotencyKey || !bank) return;
     setSendError(null);
     try {
-      const reply = await withdraw.mutateAsync({ amountCents, idempotencyKey });
+      const reply = await withdraw.mutateAsync({ amountCents, idempotencyKey, bankId: bank.id });
       setResult(reply);
       setStep("done");
       toast({ title: "Transfer to bank started", description: arrivalText(reply.expected_arrival) ?? reply.message });
@@ -154,7 +168,7 @@ export function TransferToBankDialog({
         <DialogHeader>
           <DialogTitle>Transfer to bank</DialogTitle>
           <DialogDescription>
-            Move money from your operating balance to your organization's default bank. No fee.
+            Move money from your operating balance to your organization's settlement bank, or another of its banks. No fee.
           </DialogDescription>
         </DialogHeader>
 
@@ -167,31 +181,72 @@ export function TransferToBankDialog({
                 <p className="text-xs text-muted-foreground">{money(available)} available</p>
               </div>
               <div className="min-w-0 rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">To (default bank)</p>
+                <p className="text-xs text-muted-foreground">To</p>
                 <p className="flex items-center gap-1.5 break-words font-medium">
                   <Landmark className="h-3.5 w-3.5 shrink-0" />
-                  {defaultBank.isLoading ? "Loading…" : bankLabel}
+                  {banks.isLoading ? "Loading…" : bank ? bankLabel : "Choose a bank"}
                 </p>
-                <p className="text-xs text-muted-foreground">Transfers go to the default bank only.</p>
+                <p className="text-xs text-muted-foreground">
+                  {bank && settlementOption?.bank.id === bank.id ? "Your settlement bank" : "One of your organization's banks"}
+                </p>
               </div>
             </div>
 
-            {defaultBank.error && (
-              <p className="text-destructive">Could not load your default bank: {(defaultBank.error as Error).message}</p>
+            {options.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="transfer-to-bank-bank">Bank</Label>
+                <Select
+                  value={bank?.id ?? ""}
+                  onValueChange={(value) => {
+                    setBankPicked(true);
+                    setBankId(value);
+                  }}
+                >
+                  <SelectTrigger id="transfer-to-bank-bank">
+                    <SelectValue placeholder="Choose a bank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {options.map((option) => (
+                      <SelectItem key={option.bank.id} value={option.bank.id} disabled={option.disabled}>
+                        {optionLabel(option)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Your settlement bank is chosen for you. Only your organization's own linked, verified banks can receive a transfer.
+                </p>
+              </div>
             )}
 
-            {!defaultBank.isLoading && !defaultBank.error && !bank && (
+            {banks.error && (
+              <p className="text-destructive">Could not load your banks: {(banks.error as Error).message}</p>
+            )}
+
+            {!banks.isLoading && !banks.error && settlementOption?.disabled && !bank && (
               <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                 <div className="min-w-0 space-y-1 break-words">
-                  <p className="font-medium">No default bank</p>
+                  <p className="font-medium">Your settlement bank cannot receive transfers yet</p>
                   <p className="text-muted-foreground">
-                    Transfers to bank go only to your organization's default settlement bank, and none is set.
-                    Choose a default bank in Payment Account, then come back here.
+                    {maskedBankLabel(settlementOption.bank, displayCaseOrNull)} is {settlementOption.reason?.toLowerCase()}.
+                    {options.some((option) => !option.disabled)
+                      ? " Choose another of your banks above, or finish linking and verifying this one in Payment Account."
+                      : " Finish linking and verifying it in Payment Account, then come back here."}
                   </p>
-                  <Link to={paymentsHref} className="font-medium text-primary underline-offset-4 hover:underline">
-                    Choose a default bank in Payment Account
-                  </Link>
+                </div>
+              </div>
+            )}
+
+            {!banks.isLoading && !banks.error && options.length === 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <div className="min-w-0 space-y-1 break-words">
+                  <p className="font-medium">No settlement bank</p>
+                  <p className="text-muted-foreground">
+                    Your organization has no bank to transfer to. Add a bank in Payment Account and verify it; it becomes
+                    your settlement bank and shows here.
+                  </p>
                 </div>
               </div>
             )}

@@ -191,14 +191,17 @@ async function invokeWithdrawRoute<T>(fn: string, body: Record<string, unknown>,
 }
 
 /**
- * Sends money from the operating wallet to the organization's default bank by same-day ACH
- * (moov-wallet-withdraw). The server picks the bank; the browser never names one.
- * `idempotencyKey` identifies one confirmation: retrying with the same key never sends twice.
+ * Sends money from the operating wallet to the bank picked in the dialog (the settlement bank by
+ * default) by same-day ACH (moov-wallet-withdraw). `bankId` is the picked payment_provider_methods
+ * row: the server credits it only if it is the organization's own linked, verified same-day bank,
+ * and refuses otherwise. `idempotencyKey` identifies one confirmation: retrying with the same key
+ * never sends twice.
  */
 export function withdrawToBank(input: {
   tenantId: string;
   amountCents: number;
   idempotencyKey: string;
+  bankId: string;
 }): Promise<WithdrawReply> {
   return invokeWithdrawRoute<WithdrawReply>(
     WALLET_WITHDRAW_FUNCTION,
@@ -207,6 +210,7 @@ export function withdrawToBank(input: {
       wallet_type: "operating",
       amount_cents: input.amountCents,
       idempotency_key: input.idempotencyKey,
+      bank_id: input.bankId,
       description: TRANSFER_TO_BANK_LABEL,
     },
     "The transfer to your bank could not be started. Nothing was sent.",

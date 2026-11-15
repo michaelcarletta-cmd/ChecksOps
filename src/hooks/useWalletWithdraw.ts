@@ -10,7 +10,7 @@ import {
   withdrawToBank,
 } from "@/lib/payments/wallets";
 import {
-  defaultSettlementBank,
+  transferBankOptions,
   WALLET_WITHDRAW_TOTP_ACTION,
   withdrawErrorMessage,
   type SettlementBankRow,
@@ -18,9 +18,9 @@ import {
 } from "@/lib/payments/walletWithdraw";
 
 /**
- * Transfer to bank: the organization's default bank (read only; the server picks it again and
- * never takes a bank from the browser), its own limits, and the two calls that need the same
- * wallet.fund two-factor step-up as Add funds (useWallet's fund).
+ * Transfer to bank: the organization's banks, settlement bank first (the same rows and rule as the
+ * Settlement bank tile; the server checks the picked bank again), its own limits, and the two calls
+ * that need the same wallet.fund two-factor step-up as Add funds (useWallet's fund).
  */
 export function useWalletWithdraw() {
   const { tenantId, enabled, tenantMoovEnvironment, environmentReady } = usePaymentProviderEligibility();
@@ -34,21 +34,24 @@ export function useWalletWithdraw() {
   });
   const ready = !!tenantId && enabled && environmentReady;
 
-  // The tenant's own connected banks (never a recipient's). Only the one marked default is used.
-  const defaultBank = useQuery({
-    queryKey: ["wallet-withdraw-default-bank", tenantId, walletEnvironment],
+  // The tenant's own banks (never a recipient's), with the tile's filter and order: default first, then newest.
+  // Every bank is listed; those that cannot receive a transfer are shown disabled with the reason.
+  const banks = useQuery({
+    queryKey: ["wallet-withdraw-banks", tenantId, walletEnvironment],
     enabled: ready,
     staleTime: 30_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_provider_methods")
-        .select("id, bank_name, last_four, is_default, connection_status, external_recipient_id")
+        .select("id, bank_name, last_four, is_default, connection_status, verification_status, external_recipient_id")
         .eq("tenant_id", tenantId!)
         .eq("provider", "moov")
         .eq("environment", walletEnvironment)
-        .eq("connection_status", "connected");
+        .is("external_recipient_id", null)
+        .order("is_default", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false, nullsFirst: false });
       if (error) throw error;
-      return defaultSettlementBank((data ?? []) as SettlementBankRow[]);
+      return transferBankOptions((data ?? []) as SettlementBankRow[]);
     },
   });
 
@@ -86,11 +89,11 @@ export function useWalletWithdraw() {
   }
 
   const withdraw = useMutation({
-    mutationFn: (input: { amountCents: number; idempotencyKey: string }) => {
+    mutationFn: (input: { amountCents: number; idempotencyKey: string; bankId: string }) => {
       if (!tenantId) throw new Error("Organization isn't loaded yet. Try again in a moment.");
-      // The key belongs to this confirmation: the two-factor retry reuses it, so it never sends twice.
+      // The key belongs to this confirmation (amount and bank): the two-factor retry reuses it, so it never sends twice.
       return withStepUp(
-        () => withdrawToBank({ tenantId, amountCents: input.amountCents, idempotencyKey: input.idempotencyKey }),
+        () => withdrawToBank({ tenantId, amountCents: input.amountCents, idempotencyKey: input.idempotencyKey, bankId: input.bankId }),
         "Confirm transfer to bank",
       );
     },
@@ -112,5 +115,5 @@ export function useWalletWithdraw() {
     },
   });
 
-  return { tenantId, defaultBank, limits, withdraw, saveLimits };
+  return { tenantId, banks, limits, withdraw, saveLimits };
 }
