@@ -6,20 +6,18 @@ import { test } from 'node:test';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-test('FundsTab places Disburse to Stakeholders and DisbursementConsole above ProjectPlanCard', () => {
+test('FundsTab places Disburse to Stakeholders and DisbursementConsole above the payment list', () => {
   const tab = fs.readFileSync(path.join(ROOT, 'src/components/payments/FundsTab.tsx'), 'utf8');
   const buttons = tab.indexOf('Disburse to Stakeholders');
   const consoleMount = tab.indexOf('<DisbursementConsole');
-  const projectPlan = tab.indexOf('<ProjectPlanCard');
   const paymentList = tab.indexOf('{/* Payment list */}');
 
   assert.ok(buttons > 0, 'Disburse to Stakeholders button is present');
   assert.ok(consoleMount > 0, 'DisbursementConsole is present');
-  assert.ok(projectPlan > 0, 'ProjectPlanCard is present');
   assert.ok(paymentList > 0, 'Payment list marker is present');
-  assert.equal(tab.split('<ProjectPlanCard').length - 1, 1, 'ProjectPlanCard is mounted once');
+  // The project schedule moved to its own tab (owner 2026-11-15); the Funds tab no longer mounts it.
+  assert.equal(tab.includes('<ProjectPlanCard'), false, 'ProjectPlanCard is not mounted in the Funds tab');
 
-  assert.ok(buttons < projectPlan, 'Disburse to Stakeholders is above ProjectPlanCard');
-  assert.ok(consoleMount < projectPlan, 'DisbursementConsole is above ProjectPlanCard');
-  assert.ok(projectPlan < paymentList, 'ProjectPlanCard stays above remaining Funds content');
+  assert.ok(buttons < paymentList, 'Disburse to Stakeholders is above the payment list');
+  assert.ok(consoleMount < paymentList, 'DisbursementConsole is above the payment list');
 });
