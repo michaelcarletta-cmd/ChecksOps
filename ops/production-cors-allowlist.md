@@ -4,11 +4,26 @@ Workflow: `.github/workflows/guarded-production-cors.yml` (production environmen
 `ChecksOpsGitHubProductionLambdaOverlay`). Preflight: `scripts/deployment-guard/github-production-cors.mjs`.
 Writer (the only thing that writes): `scripts/deployment-guard/production-cors-update.mjs`.
 
-The one permitted change on HTTP API `kiqojucc02`:
+The one permitted change on HTTP API `kiqojucc02` (since 2026-11-15):
 
 ```
-AllowOrigins: ["*"]  ->  ["https://checksops.com", "https://www.checksops.com"]
+AllowOrigins: ["https://checksops.com", "https://www.checksops.com"]
+          ->  ["https://checksops.com", "https://www.checksops.com", "capacitor://localhost", "https://localhost"]
 ```
+
+The owner made the iOS/Android app (`com.checksops.app`) the production app on 2026-11-15
+("Option A"; Codemagic `ios-production` / `android-production`, PR #1927). The app is the website
+bundled by Capacitor, served from `capacitor://localhost` (iOS) and `https://localhost` (Android),
+and calls `https://checksops.com/prep` cross-origin, so the API must allow those two origins.
+Read-only preflights on 2026-11-15 through CloudFront: both app origins get 204 with no
+`Access-Control-Allow-Origin`. The previous permitted change (`"*"` -> the two site origins) was
+applied 2026-10-21 (record below); its result is this change's baseline. `aws/production/api-cfn.yaml`
+and `aws/production/api-template.yaml` carry the same four origins, so a later stack update keeps them.
+
+**What the app origins allow.** A page at one of these origins can read API responses in a browser.
+Every data route still needs a signed-in user's Cognito token (and the origin-verify authorizer
+through CloudFront); CORS is not what protects the API. `https://localhost` could also be a page on
+someone's own machine; it would still need a user's token.
 
 Headers, methods and `MaxAge` stay as they are. Routes, the origin-verify authorizer, the stage,
 CloudFront, the WAF and the Lambda are read and pinned, never written.
@@ -29,6 +44,13 @@ The role needs `apigateway:GET` on `/apis/kiqojucc02`, its routes and authorizer
 policy carries them, inspect fails with `AccessDeniedException` and nothing changes.
 
 ## Steps (each needs owner approval)
+
+For the 2026-11-15 app change: staging acceptance is a green `cors-staging-live-probe.yml` run
+(staging allows any origin, and the owner's check upload from the staging app worked on
+2026-11-09); the approval phrase is exactly `ALLOW THE APP ON PRODUCTION API`; verify and smoke
+also require `capacitor://localhost` and `https://localhost` to be allowed and an untrusted origin
+not. The 2026-10-21 steps below used the phrase `TIGHTEN PRODUCTION CORS`, which apply no longer
+accepts.
 
 1. **Staging acceptance**: a green run of `cors-staging-live-probe.yml` (read-only probes of the
    staging API: the staging origin is allowed, an untrusted origin is not privileged, health ok).

@@ -98,27 +98,37 @@ process.on('exit', () => { console.log('CALLS ' + JSON.stringify(globalThis.__ca
   }
 }
 
-const GOOD = { 'https://checksops.com': 'https://checksops.com', 'https://www.checksops.com': 'https://www.checksops.com' };
+const SITE_OK = { 'https://checksops.com': 'https://checksops.com', 'https://www.checksops.com': 'https://www.checksops.com' };
+// Since 2026-11-15 the allow-list also carries the iOS and Android app origins.
+const GOOD = { ...SITE_OK, 'capacitor://localhost': 'capacitor://localhost', 'https://localhost': 'https://localhost' };
 
 test('the CORS smoke sends every preflight through CloudFront, never to the raw execute-api host', () => {
   const r = runSmoke({ mode: 'apply', answers: GOOD });
   assert.equal(r.status, 0, r.stderr);
   const preflights = r.calls.filter((c) => c.method === 'OPTIONS');
-  assert.deepEqual(preflights.map((c) => c.origin), ['https://checksops.com', 'https://www.checksops.com', 'https://cors-probe.invalid']);
+  assert.deepEqual(preflights.map((c) => c.origin), ['https://checksops.com', 'https://www.checksops.com', 'capacitor://localhost', 'https://localhost', 'https://cors-probe.invalid']);
   for (const c of r.calls) assert.equal(c.url, 'https://checksops.com/prep/health');
 });
 
-test('after apply, the website origins must be allowed and an untrusted origin must not be', () => {
+test('after apply, the website and app origins must be allowed and an untrusted origin must not be', () => {
   assert.equal(runSmoke({ mode: 'apply', answers: GOOD }).status, 0);
   const untrusted = runSmoke({ mode: 'apply', answers: { ...GOOD, 'https://cors-probe.invalid': 'https://cors-probe.invalid' } });
   assert.notEqual(untrusted.status, 0);
   assert.match(untrusted.stderr, /an untrusted origin is still allowed after apply/);
   const wildcard = runSmoke({ mode: 'apply', answers: { ...GOOD, 'https://cors-probe.invalid': '*' } });
   assert.notEqual(wildcard.status, 0);
-  const noApex = runSmoke({ mode: 'apply', answers: { 'https://www.checksops.com': 'https://www.checksops.com' } });
+  const { 'https://checksops.com': _apex, ...withoutApex } = GOOD;
+  const noApex = runSmoke({ mode: 'apply', answers: withoutApex });
   assert.notEqual(noApex.status, 0);
   assert.match(noApex.stderr, /checksops\.com is not allowed after apply/);
-  const noWww = runSmoke({ mode: 'apply', answers: { 'https://checksops.com': 'https://checksops.com' } });
+  const { 'https://www.checksops.com': _www, ...withoutWww } = GOOD;
+  const noWww = runSmoke({ mode: 'apply', answers: withoutWww });
   assert.notEqual(noWww.status, 0);
   assert.match(noWww.stderr, /www\.checksops\.com is not allowed after apply/);
+  const noIos = runSmoke({ mode: 'apply', answers: { ...GOOD, 'capacitor://localhost': null } });
+  assert.notEqual(noIos.status, 0);
+  assert.match(noIos.stderr, /the iOS app origin is not allowed after apply/);
+  const noAndroid = runSmoke({ mode: 'apply', answers: SITE_OK });
+  assert.notEqual(noAndroid.status, 0);
+  assert.match(noAndroid.stderr, /the (iOS|Android) app origin is not allowed after apply/);
 });

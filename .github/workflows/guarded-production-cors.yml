@@ -1,7 +1,8 @@
 name: Guarded production CORS allow-list
 
-# CORS-only change on the production HTTP API kiqojucc02: AllowOrigins "*" ->
-# https://checksops.com, https://www.checksops.com. inspect only reads the API, routes, authorizer,
+# CORS-only change on the production HTTP API kiqojucc02: AllowOrigins https://checksops.com,
+# https://www.checksops.com -> the same plus capacitor://localhost and https://localhost (the
+# iOS/Android app; the "*" -> site origins change was applied 2026-10-21). inspect only reads the API, routes, authorizer,
 # CloudFront and prep Lambda; apply is refused unless the live snapshot still matches the inspect,
 # the exact approval phrase and a staging acceptance reference are given, and the production
 # environment reviewer approves the job. Nothing but the CORS configuration is ever sent.
@@ -32,7 +33,7 @@ on:
         default: ""
         type: string
       approval_phrase:
-        description: "Required for apply: exactly TIGHTEN PRODUCTION CORS"
+        description: "Required for apply: exactly ALLOW THE APP ON PRODUCTION API"
         required: false
         default: ""
         type: string
@@ -77,7 +78,7 @@ jobs:
             [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "apply requires a 40-character approved_commit"; exit 2; }
             test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
             [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "apply requires expected_snapshot_sha256 from inspect"; exit 2; }
-            test "$INPUT_APPROVAL_PHRASE" = "TIGHTEN PRODUCTION CORS" || { echo "approval_phrase must be exactly: TIGHTEN PRODUCTION CORS"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "ALLOW THE APP ON PRODUCTION API" || { echo "approval_phrase must be exactly: ALLOW THE APP ON PRODUCTION API"; exit 2; }
             test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "apply requires staging_acceptance_reference"; exit 2; }
           fi
 
@@ -217,11 +218,15 @@ jobs:
           }
           const allowed = await preflight('https://checksops.com');
           const www = await preflight('https://www.checksops.com');
+          const ios = await preflight('capacitor://localhost');
+          const android = await preflight('https://localhost');
           const untrusted = await preflight('https://cors-probe.invalid');
-          console.log(JSON.stringify({ allowed, www, untrusted }));
+          console.log(JSON.stringify({ allowed, www, ios, android, untrusted }));
           if (mode === 'apply') {
             if (allowed.allowOrigin !== 'https://checksops.com') throw new Error('checksops.com is not allowed after apply');
             if (www.allowOrigin !== 'https://www.checksops.com') throw new Error('www.checksops.com is not allowed after apply');
+            if (ios.allowOrigin !== 'capacitor://localhost') throw new Error('the iOS app origin is not allowed after apply');
+            if (android.allowOrigin !== 'https://localhost') throw new Error('the Android app origin is not allowed after apply');
             if (untrusted.allowOrigin) throw new Error('an untrusted origin is still allowed after apply');
           }
           // The website calls the API same-origin through CloudFront; it must keep working.

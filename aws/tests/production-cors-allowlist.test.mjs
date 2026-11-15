@@ -5,9 +5,9 @@ import assert from 'node:assert/strict';
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
 for (const path of ['aws/production/api-cfn.yaml', 'aws/production/api-template.yaml']) {
-  test(`${path} production CORS is exact allow-list`, () => {
+  test(`${path} production CORS is exact allow-list (the site and the iOS/Android app)`, () => {
     const source = read(path);
-    assert.match(source, /AllowOrigins:\s*\n\s*- ['"]https:\/\/checksops\.com['"]\s*\n\s*- ['"]https:\/\/www\.checksops\.com['"]/);
+    assert.match(source, /AllowOrigins:\s*\n\s*- ['"]https:\/\/checksops\.com['"]\s*\n\s*- ['"]https:\/\/www\.checksops\.com['"]\s*\n\s*- ['"]capacitor:\/\/localhost['"]\s*\n\s*- ['"]https:\/\/localhost['"]\s*\n\s*AllowHeaders:/);
     assert.doesNotMatch(source, /AllowOrigins:\s*\n\s*- ['"]\*['"]/);
   });
 }
