@@ -530,6 +530,17 @@ const SETTLEMENT_PREVIOUS_ROWS = Object.freeze({
 /** The local imports the settlement change added to a member (none before it): the tile's own selection function. */
 const SETTLEMENT_ADDED_IMPORTS = Object.freeze({ 'providers/production/moov-wallet-withdraw.mjs': Object.freeze(['providers/parity/sweep-read.mjs']) });
 const settlementApplied = (member) => SETTLEMENT.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+// Applied 2026-11-15 (production run 43707362722, VERIFIED by re-inspect run 43707456129): the row expects main's bytes and
+// names the applied record, which chains to the planning manifest (it keeps the pre-apply state). settlementRecordPre
+// restates the plan as it stood before that apply (expected_live back to the planning live bytes, manifest back to the
+// planning manifest); settlementPre, which rewrites the row whole, needs nothing first.
+const SETTLEMENT_APPLIED_REL = 'aws/tests/fixtures/production-transfer-to-bank-settlement-api-applied-manifest-2026-11-15.json';
+const settlementRecordPre = (plan) => {
+  for (const [name, entry] of Object.entries(SETTLEMENT.members)) {
+    plan.members[name] = { ...plan.members[name], expected_live_sha256: entry.live_sha256, manifest: SETTLEMENT_REL };
+  }
+  return plan;
+};
 const settlementPre = (plan) => {
   for (const [name, entry] of Object.entries(SETTLEMENT.members)) {
     const previous = SETTLEMENT_PREVIOUS_ROWS[name];
@@ -9392,7 +9403,8 @@ test('Transfer to bank (owner 2026-11-13): ADD wallet-withdraw-limits.mjs, fed-h
     assert.equal(result.mutation, false, name);
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: [name], add: [] }, name);
   }
-  const providersPlan = structuredClone(PLAN_SQL98_LIVE);
+  // (The settlement bank row, applied 2026-11-15 and recorded, reads as it stood before that record: settlementRecordPre.)
+  const providersPlan = settlementRecordPre(structuredClone(PLAN_SQL98_LIVE));
   providersPlan.members[PROVIDERS].expected_live_sha256 = T2B.members[PROVIDERS].live_sha256;
   await assert.rejects(
     run(applyEnv(PROVIDERS, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: T2B.members[PROVIDERS].live_sha256 }), { ...applyDeps(PROVIDERS, { sha256: T2B.members[PROVIDERS].live_sha256, pending: [WITHDRAW], plan: providersPlan }).deps, plan: providersPlan }),
@@ -9888,7 +9900,7 @@ test('Claim Ledger relink API (owner 2026-11-14, SQL 167): workflow-rpc.mjs REPL
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
 });
 
-test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withdraw.mjs REPLACEs the bytes the seventh production rebuild put live, no hold; planning only', async () => {
+test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withdraw.mjs REPLACEs the bytes the seventh production rebuild put live, no hold; production run 43707362722 applied it', async () => {
   const WITHDRAW = 'providers/production/moov-wallet-withdraw.mjs';
   const SWEEP_READ = 'providers/parity/sweep-read.mjs';
   const T2B_PLANNING_REL = 'aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json';
@@ -9904,6 +9916,26 @@ test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withd
   }
   assert.ok(PLAN.notes.includes('Transfer to bank settlement bank API (2026-11-15, owner "build the transfer-to-bank fix"'));
   assert.ok(PLAN.notes.includes(`Manifest ${SETTLEMENT_REL}. Planning only.`));
+  // Applied 2026-11-15 on main 9856b25b2 (owner "DEPLOY providers/production/moov-wallet-withdraw.mjs TO PRODUCTION"): the
+  // applied record chains the member to the planning manifest; the row expects main's bytes and names it. settlementRecordPre
+  // restates the plan as it stood before the apply.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, SETTLEMENT_APPLIED_REL), 'utf8'));
+  assert.equal(record.workstream_id, 'transfer-to-bank-settlement-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-15\)/);
+  assert.equal(record.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(record.members), [WITHDRAW]);
+  for (const runId of ['43706864876', '43706944586', '43707022275', '43707281247', '43707362722', '43707456129']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['9856b25b2f35b52f27742dfd7182f8ca58d34a88', '"DEPLOY providers/production/moov-wallet-withdraw.mjs TO PRODUCTION"',
+    'a354e0c0-8839-4dfb-bae5-f6a94af59a12', '5480c999-a830-4761-be0e-9b4ee5347d05', 'efd1147c-3134-43c2-9e23-17fdc50a13d6',
+    'bFVkLXRtMWejwcR0CRB7srmtJjUXfnIpf4NNyYkjvws=', 'VERIFIED', 'errors []', 'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${SETTLEMENT_APPLIED_REL}. The row expects the applied bytes and names the transfer to bank settlement applied record; no hold.`));
+  const preApply = settlementRecordPre(structuredClone(PLAN));
   // The REPLACE: from the ADD's bytes (the transfer to bank planning manifest), to main's; the row moves from that ADD.
   const before = settlementPre(structuredClone(PLAN));
   const t2bEntry = JSON.parse(fs.readFileSync(path.join(ROOT, T2B_PLANNING_REL), 'utf8')).members[WITHDRAW];
@@ -9914,7 +9946,11 @@ test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withd
   assert.deepEqual(entry, {
     live_sha256: t2bEntry.accepted_sha256, accepted_sha256: sha(`aws/functions/api/${WITHDRAW}`), operation: 'replace', previous_manifest: T2B_PLANNING_REL,
   });
+  assert.deepEqual(record.members[WITHDRAW], { live_sha256: entry.accepted_sha256, accepted_sha256: entry.accepted_sha256, operation: 'replace', previous_manifest: SETTLEMENT_REL });
   assert.deepEqual(PLAN.members[WITHDRAW], {
+    operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.accepted_sha256, sql_before: null, manifest: SETTLEMENT_APPLIED_REL,
+  });
+  assert.deepEqual(preApply.members[WITHDRAW], {
     operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: null, manifest: SETTLEMENT_REL,
   });
   assert.notEqual(entry.accepted_sha256, entry.live_sha256);
@@ -9945,20 +9981,22 @@ test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withd
   assert.deepEqual(PLAN.order, before.order);
   assert.equal(resolvePlannedMember(WITHDRAW, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(WITHDRAW), `DEPLOY ${WITHDRAW} TO PRODUCTION`);
-  // Inspect: READY on the rebuild's live bytes, ALREADY_ACCEPTED on main's, anything else a reconciliation stop.
+  // Inspect: before the apply READY on the rebuild's live bytes (production inspect run 43707281247, replayed on the pre-apply
+  // plan); now ALREADY_ACCEPTED on main's, and the pre-apply bytes, or anything else, a reconciliation stop.
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
-  const ready = await run(inspect(WITHDRAW), { root: ROOT, inspectLive: liveFor(WITHDRAW, { sha256: entry.live_sha256 }) });
+  const ready = await run(inspect(WITHDRAW), { root: ROOT, plan: preApply, inspectLive: liveFor(WITHDRAW, { sha256: entry.live_sha256, plan: preApply }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect(WITHDRAW), { root: ROOT, inspectLive: liveFor(WITHDRAW, { sha256: entry.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of ['c'.repeat(64)]) {
+  for (const other of [entry.live_sha256, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect(WITHDRAW), { root: ROOT, inspectLive: liveFor(WITHDRAW, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
     );
   }
-  // Apply (dry): no hold, so it passes the gates from the live bytes with no mutation and one receipt, REPLACE only.
-  const plan = structuredClone(PLAN);
+  // Apply as it stood (dry, the pre-apply plan): no hold, so it passes the gates from the live bytes with no mutation and one
+  // receipt, REPLACE only.
+  const plan = structuredClone(preApply);
   const { deps, calls } = applyDeps(WITHDRAW, { sha256: entry.live_sha256, plan });
   const result = await run(applyEnv(WITHDRAW, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: entry.live_sha256 }), { ...deps, plan });
   assert.equal(result.mutation, false);
