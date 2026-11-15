@@ -65,7 +65,21 @@ export interface SendLeg {
     recipient_name?: string | null;
   } | null;
   /** The sent check's number and carrier, attached by the reader (not a payment_transfers column). */
-  check?: { check_number?: string | null; carrier_name?: string | null } | null;
+  check?: SendLegCheck | null;
+}
+
+/**
+ * The sent check as the reader attaches it: number and carrier, plus the claim and payee columns the
+ * recipient report's client name reads (recipientDrilldown CHECK_CLIENT_COLUMNS) when it read them.
+ */
+export interface SendLegCheck {
+  check_number?: string | null;
+  carrier_name?: string | null;
+  claim_id?: string | null;
+  detected_claim_number?: string | null;
+  payee_line?: string | null;
+  claims?: { claim_number?: string | null; policyholder_name?: string | null } | null;
+  check_payees?: Array<{ payee_type?: string | null; payee_name?: string | null }> | null;
 }
 
 /** The columns a finance view selects for the sender's own send legs. */
@@ -83,7 +97,7 @@ export interface SentPayment {
   key: string;
   at: string | null;
   checkId: string | null;
-  check: { check_number?: string | null; carrier_name?: string | null } | null;
+  check: SendLegCheck | null;
   recipientName: string;
   /** "vendor": a vendor payee paid to its ChecksOps wallet (provider_metadata.recipient_kind 'vendor'). */
   recipientKind: "partner" | "vendor" | "stakeholder" | "recipient";

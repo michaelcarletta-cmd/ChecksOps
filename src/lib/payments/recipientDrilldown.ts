@@ -16,9 +16,14 @@
  * Totals count what the report counts: sent rows with status settled, received payments that were
  * not returned. Other rows (failed, returned, submitted) are listed with their status, not totaled.
  *
+ * Client (owner 2026-11-15: "For the recipient report how can we show the exact client name the
+ * payment was for."): each row carries the insured/homeowner of the check it was paid from, by the
+ * check file's rule (checkClientName). Payroll has no check, so no client.
+ *
  * Pure: no data access.
  */
 
+import { extractInsuredName } from "../../features/check-command/status.ts";
 import { recipientNameKey } from "./activeStakeholders.ts";
 import { incomingPayments, sentPayments, type IncomingTransferRow, type SendLeg } from "./transferFinanceRows.ts";
 
@@ -40,6 +45,11 @@ export interface RecipientTransaction {
   statusLabel: string;
   /** Check number and/or claim number when the data has one. */
   reference: string | null;
+  /** The client (insured/homeowner) the payment was for, by checkClientName; null when unknown. */
+  clientName: string | null;
+  /** The check number and claim number on their own, for the search. */
+  checkNumber: string | null;
+  claimNumber: string | null;
   /** The other organization's tenant id, when the row records one. */
   orgId: string | null;
   /** Counted in the totals (the report's rule). */
@@ -58,7 +68,70 @@ export interface ReportSentRow {
   acct4?: string | null;
   /** disbursement_splits.external_check_number, or the batch's check number. */
   reference?: string | null;
+  /** The client of the deposited check the split paid from (checkClientName). */
+  clientName?: string | null;
+  /** The claim number of that check (linked claim, else the detected one). */
+  claimNumber?: string | null;
 }
+
+/**
+ * The check columns the client name and claim number read, for a check_intake_items embed or read:
+ * the linked claim (claims:claim_id), the payees (check_payees, a has-many on check_id) and the
+ * printed payee line. Embeds the AWS data API resolves (aws/functions/api/data.mjs).
+ */
+export const CHECK_CLIENT_COLUMNS =
+  "claim_id, detected_claim_number, payee_line, claims:claim_id (claim_number, policyholder_name), check_payees (payee_type, payee_name)";
+
+/**
+ * The recipient report's disbursement_splits read: the report's columns, the check number the
+ * reference shows, and the deposited check's client columns (CHECK_CLIENT_COLUMNS).
+ */
+export const RECIPIENT_REPORT_SPLIT_SELECT = `
+          id, amount, status, method, recipient_name, recipient_type, created_at, settled_at, external_check_number,
+          stakeholder_accounts (id, nickname, custname, account_type, chk_acct),
+          disbursement_batches (check_intake_items:check_intake_item_id (check_number, ${CHECK_CLIENT_COLUMNS}))
+        `;
+
+/** A check as a read or an RPC returns it; every field optional. */
+export interface ClientNameCheck {
+  /** The linked claim (an embed may return an object or a one-row array). */
+  claims?: { claim_number?: string | null; policyholder_name?: string | null } | Array<{ claim_number?: string | null; policyholder_name?: string | null }> | null;
+  /** Flat claim columns, as get_tenant_incoming_transfers returns them. */
+  policyholder_name?: string | null;
+  claim_number?: string | null;
+  detected_claim_number?: string | null;
+  check_payees?: Array<{ payee_type?: string | null; payee_name?: string | null } | null> | null;
+  payee_line?: string | null;
+}
+
+const clean = (value: unknown): string | null => {
+  const s = String(value ?? "").replace(/\s+/g, " ").trim();
+  return s || null;
+};
+const linkedClaim = (check: ClientNameCheck) => (Array.isArray(check.claims) ? check.claims[0] : check.claims) ?? null;
+
+/**
+ * The client a check was for, by the check file's rule (CheckCommandCenter): the linked claim's
+ * policyholder_name, else the check_payees row with payee_type "insured", else the insured parsed
+ * from the payee line (extractInsuredName). Null when none of them gives a name.
+ */
+export function checkClientName(check: ClientNameCheck | null | undefined): string | null {
+  if (!check) return null;
+  return (
+    clean(linkedClaim(check)?.policyholder_name ?? check.policyholder_name)
+    || clean((check.check_payees ?? []).find((p) => p?.payee_type === "insured")?.payee_name)
+    || clean(extractInsuredName(check.payee_line))
+  );
+}
+
+/** The check's claim number: the linked claim's, else the one detected on the check. */
+export function checkClaimNumber(check: ClientNameCheck | null | undefined): string | null {
+  if (!check) return null;
+  return clean(linkedClaim(check)?.claim_number ?? check.claim_number) || clean(check.detected_claim_number);
+}
+
+const referenceOf = (checkNumber: string | null, claimNumber: string | null): string | null =>
+  [checkNumber ? `Ck #${checkNumber}` : null, claimNumber ? `Claim ${claimNumber}` : null].filter(Boolean).join(" · ") || null;
 
 const METHOD_LABELS: Record<string, string> = {
   ach: "ACH",
@@ -117,7 +190,8 @@ export function sentTransactions(rows: ReportSentRow[] | null | undefined, legs?
     const send = method === "send" ? sends.get(sendKey(r.id)) : undefined;
     const wallet = send?.recipientKind === "partner" ? "Partner wallet" : send?.recipientKind === "vendor" ? "Vendor wallet" : "Wallet send";
     const status = send ? (send.completed ? "settled" : "in_transit") : lower(r.status);
-    const checkNumber = send?.check?.check_number ?? null;
+    const checkNumber = clean(send ? send.check?.check_number : r.reference);
+    const claimNumber = send ? checkClaimNumber(send.check) : clean(r.claimNumber);
     out.push({
       id: r.id,
       date: r.date,
@@ -128,7 +202,11 @@ export function sentTransactions(rows: ReportSentRow[] | null | undefined, legs?
       methodLabel: method === "send" ? wallet : drilldownMethodLabel(method),
       status,
       statusLabel: drilldownStatusLabel(status),
-      reference: send ? (checkNumber ? `Ck #${checkNumber}` : null) : r.reference ? `Ck #${r.reference}` : null,
+      reference: referenceOf(checkNumber, claimNumber),
+      // Payroll has no check, so no client.
+      clientName: method === "payroll" ? null : send ? checkClientName(send.check) : clean(r.clientName),
+      checkNumber,
+      claimNumber,
       orgId: send && (send.recipientKind === "partner" || send.recipientKind === "vendor") ? send.partnerTenantId : null,
       // The report counts settled rows; a send it lists is counted (accepted by Moov).
       counted: method === "send" ? true : lower(r.status) === "settled",
@@ -146,9 +224,8 @@ export function receivedTransactions(
   for (const p of incomingPayments(rows)) {
     const at = p.at ?? p.createdAt;
     if (!at || !keep(at)) continue;
-    const check = p.check?.check_number ? `Ck #${p.check.check_number}` : null;
-    const claimNumber = p.check?.claim_number || p.check?.detected_claim_number || null;
-    const claim = claimNumber ? `Claim ${claimNumber}` : null;
+    const checkNumber = clean(p.check?.check_number);
+    const claimNumber = checkClaimNumber(p.check);
     out.push({
       id: p.key,
       date: at,
@@ -159,7 +236,12 @@ export function receivedTransactions(
       methodLabel: METHOD_LABELS.partner_wallet,
       status: p.status,
       statusLabel: drilldownStatusLabel(p.status),
-      reference: [check, claim].filter(Boolean).join(" · ") || null,
+      reference: referenceOf(checkNumber, claimNumber),
+      // get_tenant_incoming_transfers returns policyholder_name and payee_line when the sender
+      // shares the check (SQL 144); no check_payees, so the rule's middle step is skipped.
+      clientName: checkClientName(p.check),
+      checkNumber,
+      claimNumber,
       orgId: p.senderTenantId,
       counted: p.counted,
     });
@@ -179,6 +261,17 @@ export function recipientTransactions(name: string, transactions: RecipientTrans
   const orgIds = new Set(byName.map((t) => lower(t.orgId)).filter(Boolean));
   const matched = transactions.filter((t) => keyOf(t) === key || (!!t.orgId && orgIds.has(lower(t.orgId))));
   return [...matched].sort((a, b) => time(b.date) - time(a.date) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * Rows whose client name, check number or claim number contains the query (case-insensitive; a
+ * leading "#" and "Ck"/"Claim" prefixes are ignored). An empty query keeps every row.
+ */
+export function searchTransactions(transactions: RecipientTransaction[], query: string | null | undefined): RecipientTransaction[] {
+  const q = lower(query).replace(/^(ck|check|claim)\b\s*/, "").replace(/^#\s*/, "").replace(/\s+/g, " ");
+  if (!q) return transactions;
+  return transactions.filter((t) =>
+    [t.clientName, t.checkNumber, t.claimNumber].some((value) => lower(value).replace(/\s+/g, " ").includes(q)));
 }
 
 export const filterByDirection = (transactions: RecipientTransaction[], filter: DrilldownFilter): RecipientTransaction[] =>

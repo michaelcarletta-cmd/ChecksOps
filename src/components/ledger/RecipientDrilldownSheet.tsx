@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Search, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { displayCase } from "@/lib/displayCase";
 import {
   drilldownTotals,
   filterByDirection,
   recipientTransactions,
+  searchTransactions,
   type DrilldownFilter,
   type RecipientTransaction,
 } from "@/lib/payments/recipientDrilldown";
+import { ReportExportMenu, type ReportExportKind } from "./ReportExportMenu";
 
 const money = (n: number) => `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -25,12 +30,16 @@ const STATUS_TONE: Record<string, string> = {
 
 /**
  * Every transaction between this organization and one recipient (owner 2026-11-15), from the rows
- * the recipient report already loaded. Sent and Received filter, with totals for each.
+ * the recipient report already loaded. Sent and Received filter, with totals for each. Each row shows
+ * the client the payment was for; the search narrows by client, check or claim number, and the
+ * totals count the rows it leaves.
  */
 export function RecipientDrilldownSheet({
   name,
   transactions,
   rangeLabel,
+  fileRange,
+  companyName,
   onClose,
 }: {
   /** The recipient's name as the report shows it; null when closed. */
@@ -39,14 +48,41 @@ export function RecipientDrilldownSheet({
   transactions: RecipientTransaction[];
   /** The report's date range, shown in the header. */
   rangeLabel: string;
+  /** The date range for file names (2026-01-01-to-2026-12-31, all-time). */
+  fileRange: string;
+  /** This organization's name, for the export title. */
+  companyName?: string | null;
   onClose: () => void;
 }) {
   const [filter, setFilter] = useState<DrilldownFilter>("all");
-  useEffect(() => { if (name) setFilter("all"); }, [name]);
+  const [query, setQuery] = useState("");
+  useEffect(() => { if (name) { setFilter("all"); setQuery(""); } }, [name]);
 
   const mine = useMemo(() => (name ? recipientTransactions(name, transactions) : []), [name, transactions]);
-  const totals = useMemo(() => drilldownTotals(mine), [mine]);
-  const shown = useMemo(() => filterByDirection(mine, filter), [mine, filter]);
+  // The search first, so the All/Sent/Received totals count the rows it leaves.
+  const matching = useMemo(() => searchTransactions(mine, query), [mine, query]);
+  const totals = useMemo(() => drilldownTotals(matching), [matching]);
+  const shown = useMemo(() => filterByDirection(matching, filter), [matching, filter]);
+  const searching = query.trim().length > 0;
+
+  // Excel and PDF of exactly what is shown: the search and the All/Sent/Received filter applied.
+  const [exporting, setExporting] = useState<ReportExportKind | null>(null);
+  const exportShown = async (kind: ReportExportKind) => {
+    if (!name) return;
+    setExporting(kind);
+    try {
+      const { recipientDrilldownTable, reportTablePdf, reportTableXlsx, reportFileName, PDF_MIME, XLSX_MIME } = await import("@/lib/payments/recipientReportExport");
+      const { downloadReportFile } = await import("@/lib/depositedChecksExport");
+      const table = recipientDrilldownTable({ recipient: name, transactions: shown, filter, search: query, rangeLabel, companyName });
+      const file = reportFileName(["recipient", name, filter === "all" ? null : filter, fileRange], kind);
+      if (kind === "pdf") downloadReportFile(reportTablePdf(table), file, PDF_MIME);
+      else downloadReportFile(await reportTableXlsx(table), file, XLSX_MIME);
+    } catch (e) {
+      toast({ title: "Export failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const filters: Array<{ value: DrilldownFilter; label: string; rows: number; amount: string }> = [
     { value: "all", label: "All", rows: totals.rows.all, amount: `${totals.net < 0 ? "−" : "+"}${money(totals.net)} net` },
@@ -58,19 +94,46 @@ export function RecipientDrilldownSheet({
     <Sheet open={!!name} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="w-full max-w-full sm:max-w-xl p-4 sm:p-6" data-testid="recipient-drilldown">
         <SheetHeader className="pr-8 text-left">
-          <SheetTitle className="text-base sm:text-lg break-words">{name}</SheetTitle>
+          <div className="flex items-start justify-between gap-2">
+            <SheetTitle className="min-w-0 text-base sm:text-lg break-words">{name}</SheetTitle>
+            <ReportExportMenu onExport={exportShown} busy={exporting} label={`Export transactions with ${name ?? "recipient"}`} />
+          </div>
           <SheetDescription className="text-xs">
             Every payment sent to and received from this recipient in the report's date range: <span className="font-medium text-foreground">{rangeLabel}</span>.
             Totals count settled payments sent and payments received that were not returned.
           </SheetDescription>
         </SheetHeader>
 
+        <div className="relative mt-4">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search client, check # or claim #"
+            aria-label="Search transactions by client name, check number or claim number"
+            className="h-9 pl-8 pr-8 text-sm"
+          />
+          {searching && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
         <ToggleGroup
           type="single"
           value={filter}
           onValueChange={(v) => v && setFilter(v as DrilldownFilter)}
           aria-label="Show sent, received or all transactions"
-          className="mt-4 grid grid-cols-3 gap-2"
+          className="mt-3 grid grid-cols-3 gap-2"
         >
           {filters.map((f) => (
             <ToggleGroupItem
@@ -87,7 +150,9 @@ export function RecipientDrilldownSheet({
 
         {shown.length === 0 ? (
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            {filter === "all" ? "No transactions with this recipient in this range." : `Nothing ${filter} in this range.`}
+            {searching
+              ? `No ${filter === "all" ? "transactions" : `${filter} transactions`} match “${query.trim()}”.`
+              : filter === "all" ? "No transactions with this recipient in this range." : `Nothing ${filter} in this range.`}
           </p>
         ) : (
           <ul className="mt-4 divide-y rounded-lg border" aria-label={`Transactions with ${name ?? "recipient"}`}>
@@ -110,6 +175,11 @@ export function RecipientDrilldownSheet({
                         {sent ? "−" : "+"}{money(t.amount)}
                       </p>
                     </div>
+                    {t.clientName && (
+                      <p className="mt-0.5 truncate text-xs" title={displayCase(t.clientName)}>
+                        <span className="text-muted-foreground">For:</span> <span className="font-medium">{displayCase(t.clientName)}</span>
+                      </p>
+                    )}
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                       <span>{format(new Date(t.date), "MMM d, yyyy")}</span>
                       <Badge variant="outline" className={`h-4 py-0 text-[9px] ${STATUS_TONE[t.status] ?? ""}`}>{t.statusLabel}</Badge>

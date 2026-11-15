@@ -184,8 +184,9 @@ test('wiring: the recipient rows open the drill-down; the rename action still wo
   assert.match(report, /\.\.\.sentTransactions\(normalized, sentLegs\),/);
   assert.match(report, /\.\.\.receivedTransactions\(incomingTransfers, \(at\) => inRange\(\[at\], \(x\) => x, dateFilters\)\.length > 0\),/);
   assert.match(report, /<RecipientDrilldownSheet\s+name=\{drillName\}\s+transactions=\{drillTransactions\}\s+rangeLabel=\{rangeLabel\}/);
-  // The one field added to the existing split read: the check reference.
-  assert.match(report, /external_check_number,\n\s+stakeholder_accounts \(id, nickname, custname, account_type, chk_acct\),\n\s+disbursement_batches \(check_intake_items:check_intake_item_id \(check_number\)\)/);
+  // The split read is RECIPIENT_REPORT_SPLIT_SELECT: the check reference, and since the client name
+  // (recipient-drilldown-client-name.test.mjs) the deposited check's client columns.
+  assert.match(report, /\.select\(RECIPIENT_REPORT_SPLIT_SELECT\)/);
   // No write besides the existing rename.
   assert.equal((report.match(/\.update\(/g) ?? []).length, 1);
 
@@ -193,8 +194,10 @@ test('wiring: the recipient rows open the drill-down; the rename action still wo
   assert.match(sheet, /from "@\/components\/ui\/sheet"/);
   assert.match(sheet, /<ToggleGroup\s+type="single"/);
   for (const value of ['all', 'sent', 'received']) assert.match(sheet, new RegExp(`value: "${value}"`));
-  assert.match(sheet, /filterByDirection\(mine, filter\)/);
-  assert.match(sheet, /drilldownTotals\(mine\)/);
+  // The search narrows first; the filter and the totals read what it leaves.
+  assert.match(sheet, /searchTransactions\(mine, query\)/);
+  assert.match(sheet, /filterByDirection\(matching, filter\)/);
+  assert.match(sheet, /drilldownTotals\(matching\)/);
   assert.match(sheet, /in the report's date range: <span[^>]*>\{rangeLabel\}<\/span>/);
   assert.match(sheet, /className="w-full max-w-full sm:max-w-xl/);
   assert.doesNotMatch(sheet, /supabase|useQuery/);
