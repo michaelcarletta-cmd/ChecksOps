@@ -21,7 +21,7 @@ import {
   payrollRecipientReportRows,
 } from "@/lib/payments/payrollRows";
 import { SEND_SOURCE_LABEL, incomingBySender, sendRecipientReportRows } from "@/lib/payments/transferFinanceRows";
-import { inRange, useIncomingTransfers, useSentPaymentLegs } from "@/hooks/useTransferFinance";
+import { inRange, useIncomingTransfers, useSendRecipientOrgNames, useSentPaymentLegs } from "@/hooks/useTransferFinance";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -161,6 +161,9 @@ export function RecipientReport() {
   // Sends from the Funds tab (payment_transfers legs, not splits) are payments to their recipient
   // (owner 2026-11-06); partner payments into this wallet are listed apart, as Received from.
   const { data: sentLegs } = useSentPaymentLegs();
+  // A partner or vendor send is named after the organization's ChecksOps name, not the Moov account
+  // name recorded at send time, so it groups with that company's other payments (owner 2026-11-15).
+  const { data: sendOrgNames } = useSendRecipientOrgNames(sentLegs);
   const { data: incomingTransfers } = useIncomingTransfers();
   const receivedFrom = useMemo(
     () => incomingBySender(incomingTransfers, (p) => inRange([p], (x) => x.at, dateFilters).length > 0),
@@ -184,9 +187,9 @@ export function RecipientReport() {
         method: r.method ?? "ach",
       };
     });
-    const sendRows = inRange(sendRecipientReportRows(sentLegs), (r) => r.date, dateFilters);
+    const sendRows = inRange(sendRecipientReportRows(sentLegs, sendOrgNames), (r) => r.date, dateFilters);
     return [...splitRows, ...payrollRecipientReportRows(payrollRuns), ...sendRows];
-  }, [rows, payrollRuns, sentLegs, dateFilters]);
+  }, [rows, payrollRuns, sentLegs, sendOrgNames, dateFilters]);
 
   const filtered = useMemo(() => normalized.filter((r) => {
     const matchSearch = !search || r.name.toLowerCase().includes(search.toLowerCase());

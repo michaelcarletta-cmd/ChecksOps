@@ -1,12 +1,15 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import {
   ACCEPTED_SEND_STATUSES,
   fetchIncomingTransfers,
+  fetchOrganizationNames,
   fetchSharedCheckSourceSends,
   SEND_LEG_COLUMNS,
   SEND_LEG_ROLES,
+  sendRecipientOrganizationIds,
   type SendLeg,
 } from "@/lib/payments/transferFinanceRows";
 
@@ -71,6 +74,23 @@ export function useSentPaymentLegs() {
       const byId = new Map(((checks ?? []) as Array<{ id: string; check_number: string | null; carrier_name: string | null }>).map((c) => [c.id, c]));
       return legs.map((leg) => ({ ...leg, check: leg.check_id ? byId.get(leg.check_id) ?? null : null }));
     },
+  });
+}
+
+/**
+ * ChecksOps names (tenants_public) of the organizations the given send legs paid as a partner or
+ * vendor, keyed by lower-case id. Empty while loading or when the lookup fails.
+ */
+export function useSendRecipientOrgNames(legs: SendLeg[] | null | undefined) {
+  const { tenant } = useTenant();
+  const tenantId = tenant?.id ?? null;
+  const ids = useMemo(() => sendRecipientOrganizationIds(legs), [legs]);
+  return useQuery({
+    queryKey: [TRANSFER_FINANCE_QUERY_KEY, "send-recipient-org-names", tenantId, ids],
+    enabled: !!tenantId && ids.length > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: () => fetchOrganizationNames(supabase, ids),
   });
 }
 
