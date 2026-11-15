@@ -1,0 +1,15 @@
+{
+  "workstream_id": "transfer-to-bank-settlement-api-applied",
+  "authorization": "Record only (2026-11-15): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Transfer to bank settlement bank API (#1923, merged as 9b5047cc7) applied. Owner 2026-11-15: \"DEPLOY providers/production/moov-wallet-withdraw.mjs TO PRODUCTION\". Applied 2026-11-15 from main 9856b25b2f35b52f27742dfd7182f8ca58d34a88 (the #1924 merge). Staging (main 9856b25b2, checksops-staging-api): inspect run 43706864876 read 22c6c779 live (CodeSha256 65TrtxCSbqreeUtP8mf1RioBT+sYCcroh0xnzi2QESI=, RevisionId 05c10ae8-84a8-4375-ba9a-e0fd51916fab); staging apply run 43706944586 (-> CodeSha256 bFVkLXRtMWejwcR0CRB7srmtJjUXfnIpf4NNyYkjvws=, RevisionId 94263551-1c11-4b93-acb9-1e0043b739de), ok true, errors [], with the public staging smoke /health, /db-health and /db-readonly-validate 200; staging re-inspect run 43707022275 read a0570f41 live (CodeSha256 bFVkLXRt...). Production preflight inspect run 43707281247: 22c6c779 live, CodeSha256 65TrtxCSbqreeUtP8mf1RioBT+sYCcroh0xnzi2QESI=, RevisionId a354e0c0-8839-4dfb-bae5-f6a94af59a12. providers/production/moov-wallet-withdraw.mjs REPLACE 22c6c779 -> a0570f41: production apply run 43707362722 with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43706944586, expected live 22c6c779, ok true, errors [], before CodeSha256 65TrtxCSbqreeUtP8mf1RioBT+sYCcroh0xnzi2QESI= RevisionId a354e0c0-8839-4dfb-bae5-f6a94af59a12, after CodeSha256 bFVkLXRtMWejwcR0CRB7srmtJjUXfnIpf4NNyYkjvws= RevisionId 5480c999-a830-4761-be0e-9b4ee5347d05; the public production smoke (/health and /db-health 200) passed. VERIFIED: production re-inspect run 43707456129 read a0570f41 live, CodeSha256 bFVkLXRtMWejwcR0CRB7srmtJjUXfnIpf4NNyYkjvws= (equal to the staging package after run 43706944586), RevisionId efd1147c-3134-43c2-9e23-17fdc50a13d6. No hold (no SQL). index.mjs is untouched. The website (#1924: the dialog starts on the settlement bank and sends bank_id) ships with the SPA and is not live through this record. Not verified by this record: a transfer to bank exercised in production. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains the member to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "providers/production/moov-wallet-withdraw.mjs": {
+      "live_sha256": "a0570f4145efc4bcd82ba6fd6d2a0f009672c4a2500cfc32083b584308e4c1b7",
+      "accepted_sha256": "a0570f4145efc4bcd82ba6fd6d2a0f009672c4a2500cfc32083b584308e4c1b7",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-transfer-to-bank-settlement-api-manifest-2026-11-15.json"
+    }
+  }
+}
