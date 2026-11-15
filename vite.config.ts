@@ -72,15 +72,19 @@ export default defineConfig(({ mode }) => {
     const clientId = required("VITE_COGNITO_USER_POOL_CLIENT_ID");
     if (!clientId) missing.push("VITE_COGNITO_USER_POOL_CLIENT_ID");
 
-    // Production AWS frontend uses same-origin `/prep`.
+    // Production AWS frontend uses same-origin `/prep`. The iOS/Android app build (Codemagic
+    // *-production, CHECKSOPS_NATIVE_APP_BUILD=1) is served from capacitor://localhost or
+    // https://localhost, where /prep cannot resolve, so it alone takes the exact full address.
     try {
       const url = new URL(appUrl);
       const host = url.hostname.toLowerCase();
       const isProdChecksOps = host === "checksops.com" || host === "www.checksops.com";
       if (isProdChecksOps) {
         const token = apiUrl.trim().toLowerCase();
-        const ok = token === "/prep" || token === "same-origin" || token === "same-origin:/prep";
-        if (!ok) missing.push("VITE_CHECKSOPS_API_URL=/prep");
+        const nativeAppBuild = String(process.env.CHECKSOPS_NATIVE_APP_BUILD || "") === "1";
+        const ok = token === "/prep" || token === "same-origin" || token === "same-origin:/prep"
+          || (nativeAppBuild && token === "https://checksops.com/prep");
+        if (!ok) missing.push(nativeAppBuild ? "VITE_CHECKSOPS_API_URL=https://checksops.com/prep" : "VITE_CHECKSOPS_API_URL=/prep");
       }
     } catch {
       /* ignore */
