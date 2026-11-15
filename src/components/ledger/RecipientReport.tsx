@@ -30,6 +30,7 @@ import {
   sentTransactions,
 } from "@/lib/payments/recipientDrilldown";
 import { RecipientDrilldownSheet } from "./RecipientDrilldownSheet";
+import { ReportExportMenu, type ReportExportKind } from "./ReportExportMenu";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -251,6 +252,36 @@ export function RecipientReport() {
     ? `${DATE_RANGE_LABELS[dateRange]} (${format(dateFilters.from, "MMM d, yyyy")} – ${format(dateFilters.to, "MMM d, yyyy")})`
     : DATE_RANGE_LABELS[dateRange];
 
+  // The date range in file names: 2026-01-01-to-2026-12-31, or all-time.
+  const fileRange = dateFilters
+    ? `${format(dateFilters.from, "yyyy-MM-dd")}-to-${format(dateFilters.to, "yyyy-MM-dd")}`
+    : "all-time";
+
+  // Excel and PDF of Per-Recipient Detail as shown: the search and type filters applied (owner 2026-11-15).
+  const [exporting, setExporting] = useState<ReportExportKind | null>(null);
+  const exportReport = async (kind: ReportExportKind) => {
+    setExporting(kind);
+    try {
+      const { recipientReportTable, reportTablePdf, reportTableXlsx, reportFileName, PDF_MIME, XLSX_MIME } = await import("@/lib/payments/recipientReportExport");
+      const { downloadReportFile } = await import("@/lib/depositedChecksExport");
+      const table = recipientReportTable({
+        rows: byRecipient,
+        typeLabel: (t) => TYPE_LABELS[t] ?? t,
+        rangeLabel,
+        typeFilterLabel: typeFilter === "all" ? "All types" : TYPE_LABELS[typeFilter] ?? typeFilter,
+        search,
+        companyName: tenant?.name ?? "",
+      });
+      const name = reportFileName(["recipient-report", fileRange], kind);
+      if (kind === "pdf") downloadReportFile(reportTablePdf(table), name, PDF_MIME);
+      else downloadReportFile(await reportTableXlsx(table), name, XLSX_MIME);
+    } catch (e) {
+      toast({ title: "Export failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const exportCSV = () => {
     const headers = ["Recipient", "Type", "Total Paid", "Payment Count", "Last Paid"];
     const rs = byRecipient.map((r) => [
@@ -396,8 +427,9 @@ export function RecipientReport() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <CardTitle className="text-sm">Per-Recipient Detail</CardTitle>
+          <ReportExportMenu onExport={exportReport} busy={exporting} disabled={isLoading} label="Export Per-Recipient Detail" />
         </CardHeader>
         <CardContent className="p-0">
           {byRecipient.length === 0 ? (
@@ -530,6 +562,8 @@ export function RecipientReport() {
         name={drillName}
         transactions={drillTransactions}
         rangeLabel={rangeLabel}
+        fileRange={fileRange}
+        companyName={tenant?.name ?? ""}
         onClose={() => setDrillName(null)}
       />
 

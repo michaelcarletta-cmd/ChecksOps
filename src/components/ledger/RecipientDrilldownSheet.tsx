@@ -4,6 +4,7 @@ import { ArrowDownLeft, ArrowUpRight, Search, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { displayCase } from "@/lib/displayCase";
 import {
@@ -14,6 +15,7 @@ import {
   type DrilldownFilter,
   type RecipientTransaction,
 } from "@/lib/payments/recipientDrilldown";
+import { ReportExportMenu, type ReportExportKind } from "./ReportExportMenu";
 
 const money = (n: number) => `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -36,6 +38,8 @@ export function RecipientDrilldownSheet({
   name,
   transactions,
   rangeLabel,
+  fileRange,
+  companyName,
   onClose,
 }: {
   /** The recipient's name as the report shows it; null when closed. */
@@ -44,6 +48,10 @@ export function RecipientDrilldownSheet({
   transactions: RecipientTransaction[];
   /** The report's date range, shown in the header. */
   rangeLabel: string;
+  /** The date range for file names (2026-01-01-to-2026-12-31, all-time). */
+  fileRange: string;
+  /** This organization's name, for the export title. */
+  companyName?: string | null;
   onClose: () => void;
 }) {
   const [filter, setFilter] = useState<DrilldownFilter>("all");
@@ -57,6 +65,25 @@ export function RecipientDrilldownSheet({
   const shown = useMemo(() => filterByDirection(matching, filter), [matching, filter]);
   const searching = query.trim().length > 0;
 
+  // Excel and PDF of exactly what is shown: the search and the All/Sent/Received filter applied.
+  const [exporting, setExporting] = useState<ReportExportKind | null>(null);
+  const exportShown = async (kind: ReportExportKind) => {
+    if (!name) return;
+    setExporting(kind);
+    try {
+      const { recipientDrilldownTable, reportTablePdf, reportTableXlsx, reportFileName, PDF_MIME, XLSX_MIME } = await import("@/lib/payments/recipientReportExport");
+      const { downloadReportFile } = await import("@/lib/depositedChecksExport");
+      const table = recipientDrilldownTable({ recipient: name, transactions: shown, filter, search: query, rangeLabel, companyName });
+      const file = reportFileName(["recipient", name, filter === "all" ? null : filter, fileRange], kind);
+      if (kind === "pdf") downloadReportFile(reportTablePdf(table), file, PDF_MIME);
+      else downloadReportFile(await reportTableXlsx(table), file, XLSX_MIME);
+    } catch (e) {
+      toast({ title: "Export failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const filters: Array<{ value: DrilldownFilter; label: string; rows: number; amount: string }> = [
     { value: "all", label: "All", rows: totals.rows.all, amount: `${totals.net < 0 ? "−" : "+"}${money(totals.net)} net` },
     { value: "sent", label: "Sent", rows: totals.rows.sent, amount: `−${money(totals.sent.total)}` },
@@ -67,7 +94,10 @@ export function RecipientDrilldownSheet({
     <Sheet open={!!name} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="w-full max-w-full sm:max-w-xl p-4 sm:p-6" data-testid="recipient-drilldown">
         <SheetHeader className="pr-8 text-left">
-          <SheetTitle className="text-base sm:text-lg break-words">{name}</SheetTitle>
+          <div className="flex items-start justify-between gap-2">
+            <SheetTitle className="min-w-0 text-base sm:text-lg break-words">{name}</SheetTitle>
+            <ReportExportMenu onExport={exportShown} busy={exporting} label={`Export transactions with ${name ?? "recipient"}`} />
+          </div>
           <SheetDescription className="text-xs">
             Every payment sent to and received from this recipient in the report's date range: <span className="font-medium text-foreground">{rangeLabel}</span>.
             Totals count settled payments sent and payments received that were not returned.
