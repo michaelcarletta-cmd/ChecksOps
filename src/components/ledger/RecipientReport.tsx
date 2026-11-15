@@ -22,6 +22,8 @@ import {
 } from "@/lib/payments/payrollRows";
 import { SEND_SOURCE_LABEL, incomingBySender, sendRecipientReportRows } from "@/lib/payments/transferFinanceRows";
 import { inRange, useIncomingTransfers, useSendRecipientOrgNames, useSentPaymentLegs } from "@/hooks/useTransferFinance";
+import { receivedTransactions, sentTransactions } from "@/lib/payments/recipientDrilldown";
+import { RecipientDrilldownSheet } from "./RecipientDrilldownSheet";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -65,6 +67,13 @@ const TYPE_COLORS: Record<string, string> = {
 
 type DateRange = "this_month" | "last_month" | "this_year" | "all";
 
+const DATE_RANGE_LABELS: Record<DateRange, string> = {
+  this_month: "This month",
+  last_month: "Last month",
+  this_year: "This year",
+  all: "All time",
+};
+
 export function RecipientReport() {
   const { tenant } = useTenant();
   const qc = useQueryClient();
@@ -75,6 +84,8 @@ export function RecipientReport() {
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("other");
   const [editSaving, setEditSaving] = useState(false);
+  // The recipient whose transactions the drill-down sheet lists (owner 2026-11-15).
+  const [drillName, setDrillName] = useState<string | null>(null);
 
   const openEdit = (name: string, type: string, variants: Array<{ name: string; type: string; count: number }>) => {
     setEditTarget({ name, type, count: variants.reduce((n, v) => n + v.count, 0), variants });
@@ -130,8 +141,9 @@ export function RecipientReport() {
       let q = (supabase as any)
         .from("disbursement_splits")
         .select(`
-          id, amount, status, method, recipient_name, recipient_type, created_at, settled_at,
-          stakeholder_accounts (id, nickname, custname, account_type, chk_acct)
+          id, amount, status, method, recipient_name, recipient_type, created_at, settled_at, external_check_number,
+          stakeholder_accounts (id, nickname, custname, account_type, chk_acct),
+          disbursement_batches (check_intake_items:check_intake_item_id (check_number))
         `)
         .eq("tenant_id", tenant!.id)
         .neq("status", "pending")
@@ -185,6 +197,8 @@ export function RecipientReport() {
         amount: Number(r.amount ?? 0),
         status: r.status,
         method: r.method ?? "ach",
+        // The drill-down's check reference: the outside check, else the deposited check paid from.
+        reference: r.external_check_number ?? r.disbursement_batches?.check_intake_items?.check_number ?? null,
       };
     });
     const sendRows = inRange(sendRecipientReportRows(sentLegs, sendOrgNames), (r) => r.date, dateFilters);
@@ -222,6 +236,15 @@ export function RecipientReport() {
   }, [filtered, stakeholders, search, typeFilter]);
 
   const grandTotal = byType.reduce((s, t) => s + t.total, 0);
+
+  // Drill-down: every row the report loaded for this date range, all types, sent and received.
+  const drillTransactions = useMemo(() => [
+    ...sentTransactions(normalized, sentLegs),
+    ...receivedTransactions(incomingTransfers, (at) => inRange([at], (x) => x, dateFilters).length > 0),
+  ], [normalized, sentLegs, incomingTransfers, dateFilters]);
+  const rangeLabel = dateFilters
+    ? `${DATE_RANGE_LABELS[dateRange]} (${format(dateFilters.from, "MMM d, yyyy")} – ${format(dateFilters.to, "MMM d, yyyy")})`
+    : DATE_RANGE_LABELS[dateRange];
 
   const exportCSV = () => {
     const headers = ["Recipient", "Type", "Total Paid", "Payment Count", "Last Paid"];
@@ -389,9 +412,16 @@ export function RecipientReport() {
                 </thead>
                 <tbody>
                   {byRecipient.map((r, i) => (
-                    <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                    <tr key={i} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setDrillName(r.name)}>
                       <td className="p-3 font-medium text-xs">
-                        {r.name}
+                        <button
+                          type="button"
+                          className="text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                          aria-label={`Show transactions with ${r.name}`}
+                          onClick={(e) => { e.stopPropagation(); setDrillName(r.name); }}
+                        >
+                          {r.name}
+                        </button>
                         {(r.payrollCount ?? 0) > 0 && (
                           <Badge variant="outline" className="ml-1.5 text-[9px] py-0 h-4 align-middle">
                             {PAYROLL_SOURCE_LABEL}{r.payrollCount !== r.count ? ` ×${r.payrollCount}` : ""}
@@ -427,7 +457,8 @@ export function RecipientReport() {
                             variant="ghost"
                             className="h-7 w-7 p-0"
                             title="Edit recipient"
-                            onClick={() => openEdit(r.name, r.type, r.splitVariants ?? [])}
+                            aria-label={`Edit recipient ${r.name}`}
+                            onClick={(e) => { e.stopPropagation(); openEdit(r.name, r.type, r.splitVariants ?? []); }}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -463,8 +494,17 @@ export function RecipientReport() {
                 </thead>
                 <tbody>
                   {receivedFrom.map((r) => (
-                    <tr key={r.name} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="p-3 font-medium text-xs">{r.name}</td>
+                    <tr key={r.name} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setDrillName(r.name)}>
+                      <td className="p-3 font-medium text-xs">
+                        <button
+                          type="button"
+                          className="text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                          aria-label={`Show transactions with ${r.name}`}
+                          onClick={(e) => { e.stopPropagation(); setDrillName(r.name); }}
+                        >
+                          {r.name}
+                        </button>
+                      </td>
                       <td className="p-3 text-right text-xs hidden sm:table-cell">{r.count}</td>
                       <td className="p-3 text-right font-semibold text-sm text-emerald-600">
                         +${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
@@ -480,6 +520,13 @@ export function RecipientReport() {
           </CardContent>
         </Card>
       )}
+
+      <RecipientDrilldownSheet
+        name={drillName}
+        transactions={drillTransactions}
+        rangeLabel={rangeLabel}
+        onClose={() => setDrillName(null)}
+      />
 
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
         <DialogContent className="max-w-md">
