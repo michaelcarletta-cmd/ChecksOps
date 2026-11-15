@@ -43,8 +43,8 @@ test('origin/main-based manifest validates fail-closed with production-spa PRODU
   assert.deepEqual(locked.map((c) => c.id).sort(), ['moov-production-invoice', 'production-spa']);
   const spa = locked.find((c) => c.id === 'production-spa');
   assert.equal(spa.production_active, true);
-  assert.equal(spa.artifact.name, '/assets/index-FRM97skm.js');
-  assert.equal(spa.rollback.artifact, '/assets/index-C7oRqjMH.js');
+  assert.equal(spa.artifact.name, '/assets/index-Dvi_Ghrs.js');
+  assert.equal(spa.rollback.artifact, '/assets/index-FRM97skm.js');
   const invoice = locked.find((c) => c.id === 'moov-production-invoice');
   assert.equal(invoice.production_active, true);
   assert.deepEqual(invoice.missing_evidence, []);
