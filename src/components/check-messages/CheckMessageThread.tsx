@@ -9,6 +9,8 @@ import { Loader2, Send, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { displayCheckMessageBody } from "@/lib/mortgageDeskReturn";
+import { isMortgageDeskThreadMessage } from "@/lib/mortgageDeskNoteDisplay";
+import { MortgageDeskNoteRow } from "@/components/loss-draft/MortgageDeskNoteRow";
 
 interface Props {
   checkId: string;
@@ -236,6 +238,19 @@ export function CheckMessageThread({ checkId, active = true, className }: Props)
             const profile = profiles[m.sender_id];
             const tenantName = m.sender_tenant_id ? tenants[m.sender_tenant_id] : null;
             const displayName = profile?.name || profile?.email || (isMe ? "You" : "Teammate");
+            // A Mortgage Desk note renders as one compact, accented row (owner 2026-11-15), not a
+            // full bubble; the full text stays reachable through "Show more".
+            if (!isMe && isMortgageDeskThreadMessage(m.body)) {
+              return (
+                <div key={m.id} className="flex justify-start">
+                  <MortgageDeskNoteRow
+                    body={m.body}
+                    createdAt={m.created_at}
+                    className="max-w-[90%] rounded-r-md bg-card/60 pr-2"
+                  />
+                </div>
+              );
+            }
             return (
               <div key={m.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                 <div
