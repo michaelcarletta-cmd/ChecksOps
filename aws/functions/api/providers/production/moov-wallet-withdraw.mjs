@@ -16,10 +16,18 @@
  * - Moov's own idempotency key is the transfer row id.
  * - An error that does not prove Moov refused the transfer is recorded as
  *   `unknown` and is never retried automatically.
- * - The destination is never chosen by the browser: it is the tenant's default
- *   connected bank (owner decision 2026-11-13: "transfers go to default bank"),
- *   verified at Moov, with an ach-credit-same-day payment method. Without a
- *   default bank nothing is sent. Never a recipient method.
+ * - The destination is the tenant's settlement bank (owner 2026-11-15: "The
+ *   default bank should be the settlement bank that each tenant sets up"): the
+ *   same row the Wallet & Treasury "Settlement bank" tile shows, picked by the
+ *   same function (pickSettlementMethod, sweep-read.mjs) from the same rows, so
+ *   the two cannot drift. is_default is only its tiebreak. The caller may name
+ *   another bank (`bank_id`, a payment_provider_methods id); it is used only if
+ *   it is one of this tenant's own Moov bank rows (the tenant comes from the
+ *   verified identity, never the body), for this environment and the tenant's
+ *   provider account, connected, never a recipient's, and Moov lists a verified
+ *   ach-credit-same-day method for it. Otherwise nothing is sent and the reason
+ *   is named: no_settlement_bank, bank_not_found, settlement_bank_not_linked,
+ *   settlement_bank_not_verified or same_day_unavailable.
  * - SQL 164 (the limit columns, and the webhook writer owning the
  *   wallet_withdrawal leg) is applied in staging and production (record #1875).
  *   The 503 withdrawal_not_ready guard stays as a fallback: if the columns were
@@ -39,6 +47,7 @@ import {
 } from '../parity/moov-client.mjs';
 import { fail, jsonResult, moovProductionReadContext } from '../parity/caller.mjs';
 import { loadMoovAccount, sanitize } from '../parity/db.mjs';
+import { pickSettlementMethod } from '../parity/sweep-read.mjs';
 import { syncWalletReadOnly } from '../parity/moov-wallet.mjs';
 import { isBankingDay, nextBankingDay } from '../../fed-holidays.mjs';
 import { sameDayWindowOpen } from '../parity/rail-router.mjs';
@@ -120,16 +129,51 @@ const transferByKey = async (client, tenantId, key) => (await client.query(
   [tenantId, key],
 )).rows[0] || null;
 
-/** The tenant's own connected banks (never a recipient's), default first. */
-const connectedBanks = async (client, tenantId, providerAccountId) => (await client.query(
-  `SELECT id, provider_bank_account_id, is_default
-   FROM public.payment_provider_methods
-   WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
-     AND provider_account_id = $3 AND connection_status = 'connected'
-     AND external_recipient_id IS NULL
-   ORDER BY is_default DESC NULLS LAST, created_at DESC NULLS LAST`,
-  [tenantId, ENVIRONMENT, providerAccountId],
-)).rows;
+/**
+ * The tenant's own Moov bank rows (never a recipient's), with the same filter and
+ * order as the Settlement bank tile (sweep-read.mjs loadLocalMethods), so
+ * pickSettlementMethod picks the same row here as there.
+ */
+export const TENANT_BANKS_SQL = `SELECT id, provider_account_id, provider_bank_account_id, bank_name, last_four,
+            is_default, connection_status, verification_status
+     FROM public.payment_provider_methods
+     WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
+       AND external_recipient_id IS NULL
+     ORDER BY is_default DESC NULLS LAST, created_at DESC NULLS LAST`;
+
+const tenantBanks = async (client, tenantId) => (await client.query(TENANT_BANKS_SQL, [tenantId, ENVIRONMENT])).rows;
+
+/** Refusals of the destination bank, with the words the dialog shows. */
+export const DESTINATION_REFUSALS = Object.freeze({
+  invalid_bank_id: { status: 400, message: 'bank_id must be one of your bank ids. Nothing was sent.' },
+  no_settlement_bank: { status: 409, message: 'Add and verify a settlement bank in Payment Account before transferring. Nothing was sent.' },
+  bank_not_found: { status: 404, message: "That bank is not one of your organization's banks. Nothing was sent." },
+  settlement_bank_not_linked: { status: 409, message: 'This bank is not linked to your payment account. Reconnect it in Payment Account. Nothing was sent.' },
+  settlement_bank_not_verified: { status: 409, message: 'This bank is not verified yet. Nothing was sent.' },
+  same_day_unavailable: { status: 409, message: 'This bank does not accept same-day transfers yet. Nothing was sent.' },
+});
+
+/**
+ * The bank to credit, from the tenant's own rows (TENANT_BANKS_SQL). Pure.
+ * Without `bankId`: the settlement bank, by pickSettlementMethod (the tile's rule).
+ * With `bankId`: that row, only if it is one of `rows`. Either way the row must be
+ * linked: connected, for the tenant's provider account, with a Moov bank id.
+ */
+export function resolveDestinationBank(rows, { bankId = null, providerAccountId } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  let bank;
+  if (bankId) {
+    bank = list.find((row) => String(row?.id) === String(bankId)) || null;
+    if (!bank) return { error: 'bank_not_found' };
+  } else {
+    bank = pickSettlementMethod(list);
+    if (!bank) return { error: 'no_settlement_bank' };
+  }
+  const linked = String(bank.connection_status ?? '').toLowerCase() === 'connected'
+    && !!providerAccountId && String(bank.provider_account_id ?? '') === String(providerAccountId)
+    && !!bank.provider_bank_account_id;
+  return linked ? { bank } : { error: 'settlement_bank_not_linked', bank };
+}
 
 /**
  * The tenant's own transfer-to-bank limits (SQL 164). null means no limit.
@@ -175,17 +219,27 @@ const methodIdOf = (method) => String(method?.paymentMethodID ?? method?.payment
 const bankVerified = (method) => String(method?.bankAccount?.status ?? '').toLowerCase() === 'verified';
 
 /**
- * The bank to credit: the tenant's default bank only. Moov must list an
- * ach-credit-same-day method for that bank, on a bank Moov reports verified.
- * With no default bank, `default_bank_required`; never another bank.
+ * The ach-credit-same-day method of the chosen bank, on a bank Moov reports
+ * verified; never another bank's. Otherwise why not:
+ * - settlement_bank_not_linked: Moov lists no method for this bank;
+ * - settlement_bank_not_verified: Moov does not report the bank verified;
+ * - same_day_unavailable: verified, but no same-day credit method.
  */
-export function selectSameDayCreditMethod(methods, defaultBankId) {
-  if (!defaultBankId) return { error: 'default_bank_required' };
-  const credits = (Array.isArray(methods) ? methods : [])
-    .filter((m) => String(m?.paymentMethodType) === WALLET_WITHDRAW_RAIL && methodIdOf(m) && bankVerified(m));
-  const preferred = credits.find((m) => bankIdOf(m) === String(defaultBankId));
-  return preferred ? { method: preferred } : { error: 'same_day_unavailable' };
+export function selectSameDayCreditMethod(methods, bankId) {
+  if (!bankId) return { error: 'settlement_bank_not_linked' };
+  const forBank = (Array.isArray(methods) ? methods : []).filter((m) => bankIdOf(m) === String(bankId));
+  const sameDay = forBank.filter((m) => String(m?.paymentMethodType) === WALLET_WITHDRAW_RAIL && methodIdOf(m));
+  const verified = sameDay.find(bankVerified);
+  if (verified) return { method: verified };
+  if (sameDay.length) return { error: 'settlement_bank_not_verified' };
+  if (!forBank.length) return { error: 'settlement_bank_not_linked' };
+  if (forBank.some(bankVerified)) return { error: 'same_day_unavailable' };
+  return { error: 'settlement_bank_not_verified' };
 }
+
+const refuseDestination = (error) => fail(error, DESTINATION_REFUSALS[error].status, {
+  message: DESTINATION_REFUSALS[error].message,
+});
 
 const easternDate = (now) => new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -271,6 +325,11 @@ async function withdrawProductionWallet({ client, mapping, claims, ctx, body, fe
   const clickKey = String(body.idempotency_key || '').trim();
   if (!isUuid(clickKey)) return fail('idempotency_key is required', 400);
   const key = `${WALLET_WITHDRAW_KEY_PREFIX}${clickKey.toLowerCase()}`;
+  // An optional bank chosen in the dialog: only an id here; whose bank it is comes from the database.
+  const chosenBankId = body.bank_id === undefined || body.bank_id === null || body.bank_id === ''
+    ? null
+    : String(body.bank_id).trim().toLowerCase();
+  if (chosenBankId !== null && !isUuid(chosenBankId)) return refuseDestination('invalid_bank_id');
 
   // The same two-factor step-up as funding and sends (owner decision 7).
   const loginSession = loginSessionBinding(claims);
@@ -318,31 +377,22 @@ async function withdrawProductionWallet({ client, mapping, claims, ctx, body, fe
     return fail('wallet_not_ready', 409, { message: 'Your balance account is not ready yet. Nothing was sent.' });
   }
 
-  const banks = await connectedBanks(client, tenantId, account.provider_account_id);
-  const settlement = banks.find((b) => b.is_default === true) || null;
-  if (!settlement) {
-    return fail('default_bank_required', 409, {
-      message: 'Choose a default settlement bank before transferring. Nothing was sent.',
-    });
-  }
+  const destination = resolveDestinationBank(await tenantBanks(client, tenantId), {
+    bankId: chosenBankId,
+    providerAccountId: account.provider_account_id,
+  });
+  if (destination.error) return refuseDestination(destination.error);
+  const settlement = destination.bank;
   const methods = await moovFetch(`/accounts/${account.provider_account_id}/payment-methods`, {
     scopes: scopes.paymentMethodsRead(account.provider_account_id),
     fetchImpl,
   });
-  const picked = selectSameDayCreditMethod(methods, settlement?.provider_bank_account_id);
-  if (picked.error) {
-    return fail(picked.error, 409, {
-      message: picked.error === 'default_bank_required'
-        ? 'Choose a default settlement bank before transferring. Nothing was sent.'
-        : 'Your default settlement bank is not verified for same-day transfers yet. Nothing was sent.',
-    });
-  }
+  const picked = selectSameDayCreditMethod(methods, settlement.provider_bank_account_id);
+  if (picked.error) return refuseDestination(picked.error);
   const destinationMethodId = methodIdOf(picked.method);
   const bankId = bankIdOf(picked.method);
   const destinationLocal = String(settlement.provider_bank_account_id) === bankId ? settlement : null;
-  if (!destinationLocal) {
-    return fail('same_day_unavailable', 409, { message: 'Your default settlement bank is not connected in ChecksOps. Nothing was sent.' });
-  }
+  if (!destinationLocal) return refuseDestination('settlement_bank_not_linked');
   const facilitatorId = resolveFacilitatorId(ctx.moovContext.productionPlatformAccountId, methods, wallet.provider_payment_method_id);
   if (!facilitatorId) {
     return fail('facilitator_unavailable', 503, { message: 'Payments are not configured correctly. Nothing was sent.' });
@@ -403,6 +453,7 @@ async function withdrawProductionWallet({ client, mapping, claims, ctx, body, fe
             rail: WALLET_WITHDRAW_RAIL,
             source_moov_payment_method_id: wallet.provider_payment_method_id,
             destination_moov_payment_method_id: destinationMethodId,
+            destination_choice: chosenBankId ? 'caller' : 'settlement_bank',
             expected_arrival: arrival,
             stepup_id: stepUp.id,
           }),

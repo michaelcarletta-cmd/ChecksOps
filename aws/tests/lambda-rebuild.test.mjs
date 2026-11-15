@@ -302,6 +302,21 @@ const CHANGED_SINCE_FIFTH_SECTION = new Set([
   // No additional-check charge (2026-11-14, planning only): an additional check's accept records nothing.
   'mortgage-ops-usage.mjs',
 ]);
+// Transfer to bank to the settlement bank (2026-11-15, owner "build the transfer-to-bank fix"; "The default bank should be the
+// settlement bank that each tenant sets up"): providers/production/moov-wallet-withdraw.mjs REPLACEs the bytes the seventh
+// production rebuild ADDed (apply 43464046767) through the production overlay plan, no hold, planning only. The seventh
+// sections keep the hash they recorded as evidence (listed here as changed since); the eighth count it as same.
+const SETTLEMENT_API_MANIFEST = 'aws/tests/fixtures/production-transfer-to-bank-settlement-api-manifest-2026-11-15.json';
+const CHANGED_SINCE_SEVENTH_SECTION = new Set(['providers/production/moov-wallet-withdraw.mjs']);
+/** A seventh-section file's bytes as that section accepted them: main's, unless listed as changed since. */
+const seventhSectionBytes = (apiRoot, name) => {
+  const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
+  if (!CHANGED_SINCE_SEVENTH_SECTION.has(name)) return onMain;
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, SETTLEMENT_API_MANIFEST), 'utf8')).members[name];
+  assert.equal(planned.accepted_sha256, onMain, `${name}: main's bytes are the settlement plan's accepted bytes`);
+  assert.notEqual(planned.live_sha256, onMain, `${name} is listed as changed but main still has the section's bytes`);
+  return planned.live_sha256;
+};
 // Claim Ledger relink API (2026-11-14, owner "Need to be able to change/correct claim number once edited for ledger to link
 // to existing claim"; SQL 167): workflow-rpc.mjs REPLACEs its vendor payments API applied bytes through the production overlay
 // plan (held on SQL 167), planning only. The eighth sections count workflow-rpc.mjs as same (those applied bytes); no
@@ -332,6 +347,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   // ALREADY_ACCEPTED, 0 changed) shows production runs main's previous bytes 4da8e0c0...; the sixth staging
   // section (inspect 43416770262) lists it.
   'providers/parity/sweep-read.mjs',
+  // Transfer to bank to the settlement bank (2026-11-15, planning only): a REPLACE row of the production plan.
+  'providers/production/moov-wallet-withdraw.mjs',
   'providers/production/checkalt-eligibility.mjs',
   'providers/production/checkalt-poll.mjs',
   'providers/production/checkalt-status-read.mjs',
@@ -1351,7 +1368,7 @@ test('the staging history keeps the seventh section (inspect 43458069245, apply 
   for (const [name, [live, accepted]] of Object.entries(INSPECTED)) {
     const listed = live === null ? section.added[name] : section.members[name].accepted_sha256;
     assert.equal(listed, accepted, name);
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), accepted, name);
+    assert.equal(seventhSectionBytes(apiRoot, name), accepted, name);
     if (live !== null) assert.equal(section.members[name].live_sha256, live, name);
   }
   // Another live hash is a collision.
@@ -1599,7 +1616,7 @@ test('the production history keeps the seventh section (inspect 43461114623, app
   assert.deepEqual(section.added, staging.added);
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
   for (const name of CHANGED) assert.equal(section.members[name].accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, name))), name);
-  for (const name of ADDED) assert.equal(section.added[name], sha256(fs.readFileSync(path.join(apiRoot, name))), name);
+  for (const name of ADDED) assert.equal(section.added[name], seventhSectionBytes(apiRoot, name), name);
   // The plan as committed makes the inspected live package READY; other live bytes and an unlisted member refuse.
   const live = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].live_sha256]));
   const candidate = {
@@ -1998,8 +2015,9 @@ test('transfer to bank (2026-11-13, planning only): its seven API files wait for
   assert.equal(manifest.deploy_authorized, false);
   assert.ok(manifest.notes.includes('full-package API rebuild'));
   for (const [name, entry] of Object.entries(manifest.members)) {
-    // Main's bytes are the accepted bytes; each REPLACE starts from the bytes its overlay row recorded live, never main's.
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    // Main's bytes are the accepted bytes (unless main changed the file since, listed); each REPLACE starts from the bytes its
+    // overlay row recorded live, never main's.
+    assert.equal(seventhSectionBytes(apiRoot, name), entry.accepted_sha256, name);
     assert.equal(entry.operation, ADDS.includes(name) ? 'add' : 'replace', name);
     if (entry.operation === 'replace') assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
     else assert.equal(entry.live_sha256, null, name);
@@ -2128,4 +2146,34 @@ test('desk set monitoring API (2026-11-14, SQL 166): its two REPLACEs went throu
       }
     }
   }
+});
+
+test('transfer to bank settlement bank API (2026-11-15, planning only): moov-wallet-withdraw.mjs REPLACEs the seventh rebuild\'s bytes through the production overlay plan; no section after the seventh lists it', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, SETTLEMENT_API_MANIFEST), 'utf8'));
+  const t2b = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, TRANSFER_TO_BANK_MANIFEST), 'utf8'));
+  const overlay = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  const NAME = 'providers/production/moov-wallet-withdraw.mjs';
+  assert.deepEqual(Object.keys(manifest.members), [NAME]);
+  assert.equal(manifest.deploy_authorized, false);
+  const entry = manifest.members[NAME];
+  assert.deepEqual(entry, { live_sha256: t2b.members[NAME].accepted_sha256, accepted_sha256: sha256(fs.readFileSync(path.join(apiRoot, NAME))), operation: 'replace', previous_manifest: TRANSFER_TO_BANK_MANIFEST });
+  assert.deepEqual(overlay.members[NAME], { operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: null, manifest: SETTLEMENT_API_MANIFEST });
+  assert.ok(OVERLAY_PLAN_CHANGES.has(NAME));
+  assert.ok(CHANGED_SINCE_SEVENTH_SECTION.has(NAME));
+  // The seventh sections (history[6] in both environments) ADDed the bytes the REPLACE expects live; the eighth and current
+  // sections list nothing for it (counted as same), so both functions run those bytes.
+  for (const environment of ['staging', 'production']) {
+    const env = raw.environments[environment];
+    assert.equal(env.history[6].added[NAME], entry.live_sha256, environment);
+    assert.equal(env.history[6].status, 'applied', environment);
+    for (const section of [...env.history.slice(7), env]) {
+      for (const key of ['members', 'added', 'removed']) assert.equal(section[key]?.[NAME], undefined, `${environment} ${key}`);
+    }
+  }
+  // The rebuild plan is not changed by this plan; sweep-read.mjs, which the new bytes import, is unchanged since the sixth
+  // sections put it live.
+  const sixth = raw.environments.production.history[5];
+  assert.equal(sixth.members['providers/parity/sweep-read.mjs'].accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, 'providers/parity/sweep-read.mjs'))));
 });
