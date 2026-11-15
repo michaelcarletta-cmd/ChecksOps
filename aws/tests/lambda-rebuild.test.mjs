@@ -308,6 +308,20 @@ const CHANGED_SINCE_FIFTH_SECTION = new Set([
 // sections keep the hash they recorded as evidence (listed here as changed since); the eighth count it as same.
 const SETTLEMENT_API_MANIFEST = 'aws/tests/fixtures/production-transfer-to-bank-settlement-api-manifest-2026-11-15.json';
 const CHANGED_SINCE_SEVENTH_SECTION = new Set(['providers/production/moov-wallet-withdraw.mjs']);
+// Applied 2026-11-15 (production run 43707362722, VERIFIED by re-inspect run 43707456129): the row expects main's bytes and
+// names the applied record, whose previous_manifest is the planning manifest. settlementRecordPre reads such a row as it
+// stood before that apply (the planning row).
+const SETTLEMENT_API_APPLIED_MANIFEST = 'aws/tests/fixtures/production-transfer-to-bank-settlement-api-applied-manifest-2026-11-15.json';
+const settlementRecordPre = (row) => {
+  if (!row || row.manifest !== SETTLEMENT_API_APPLIED_MANIFEST) return row;
+  const applied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, SETTLEMENT_API_APPLIED_MANIFEST), 'utf8')).members;
+  const entry = Object.values(applied).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
+  assert.ok(entry, 'a transfer to bank settlement applied row names its record entry');
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, entry.previous_manifest), 'utf8')).members;
+  const plannedEntry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256);
+  assert.ok(plannedEntry, 'the applied record chains to its planning entry');
+  return { ...row, expected_live_sha256: plannedEntry.live_sha256, manifest: entry.previous_manifest };
+};
 /** A seventh-section file's bytes as that section accepted them: main's, unless listed as changed since. */
 const seventhSectionBytes = (apiRoot, name) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
@@ -2148,7 +2162,7 @@ test('desk set monitoring API (2026-11-14, SQL 166): its two REPLACEs went throu
   }
 });
 
-test('transfer to bank settlement bank API (2026-11-15, planning only): moov-wallet-withdraw.mjs REPLACEs the seventh rebuild\'s bytes through the production overlay plan; no section after the seventh lists it', () => {
+test('transfer to bank settlement bank API (2026-11-15): moov-wallet-withdraw.mjs REPLACEd the seventh rebuild\'s bytes through the production overlay plan (production run 43707362722, recorded applied); no section after the seventh lists it', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, SETTLEMENT_API_MANIFEST), 'utf8'));
   const t2b = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, TRANSFER_TO_BANK_MANIFEST), 'utf8'));
@@ -2159,7 +2173,10 @@ test('transfer to bank settlement bank API (2026-11-15, planning only): moov-wal
   assert.equal(manifest.deploy_authorized, false);
   const entry = manifest.members[NAME];
   assert.deepEqual(entry, { live_sha256: t2b.members[NAME].accepted_sha256, accepted_sha256: sha256(fs.readFileSync(path.join(apiRoot, NAME))), operation: 'replace', previous_manifest: TRANSFER_TO_BANK_MANIFEST });
-  assert.deepEqual(overlay.members[NAME], { operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: null, manifest: SETTLEMENT_API_MANIFEST });
+  // Applied 2026-11-15: the row expects main's bytes and names the applied record; read before the apply, it is the planning
+  // row (the bytes the seventh rebuild put live expected, the planning manifest named).
+  assert.deepEqual(overlay.members[NAME], { operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.accepted_sha256, sql_before: null, manifest: SETTLEMENT_API_APPLIED_MANIFEST });
+  assert.deepEqual(settlementRecordPre(overlay.members[NAME]), { operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: null, manifest: SETTLEMENT_API_MANIFEST });
   assert.ok(OVERLAY_PLAN_CHANGES.has(NAME));
   assert.ok(CHANGED_SINCE_SEVENTH_SECTION.has(NAME));
   // The seventh sections (history[6] in both environments) ADDed the bytes the REPLACE expects live; the eighth and current
