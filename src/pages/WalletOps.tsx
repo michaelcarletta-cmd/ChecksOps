@@ -579,7 +579,6 @@ export default function WalletOps() {
               <TransferToBankDialog
                 availableCents={syncFailed ? 0 : (wallet?.available_cents ?? 0)}
                 walletActive={wallet?.status === "active" && !setupRequired}
-                paymentsHref={`${tenantBase}/payments`}
                 onTransferred={() => refreshWallet.mutateAsync()}
               />
             )}

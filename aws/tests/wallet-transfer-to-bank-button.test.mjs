@@ -1,18 +1,23 @@
 // Wallet & Treasury "Transfer to bank" (owner, 2026-11-13: "Start the transfer to bank button"), the website
 // side of the moov-wallet-withdraw API (#1876, docs/WALLET_TO_BANK_TRANSFER_DESIGN.md §6). Owner decisions:
 // no fee; limits set by the tenant (empty = no limit); any member; no admin approval; same-day ACH; the same
-// wallet.fund two-factor as Add funds; no email; operating wallet only; the default bank only, never a picker;
-// the arrival estimate comes from the API; changing the limits needs the two-factor code.
+// wallet.fund two-factor as Add funds; no email; operating wallet only; the arrival estimate comes from the API;
+// changing the limits needs the two-factor code. The bank (owner 2026-11-15: "The default bank should be the
+// settlement bank that each tenant sets up"): the dialog starts on the settlement bank, the same row the Settlement
+// bank tile shows, and offers a picker of the organization's banks; the picked bank's id is sent to the API.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   arrivalText,
+  bankIneligibility,
   defaultSettlementBank,
+  initialTransferBankId,
   limitInputToCents,
   maskedBankLabel,
   parseDollarsToCents,
   precheckWithdrawAmount,
+  transferBankOptions,
   WALLET_WITHDRAW_FUNCTION,
   WALLET_WITHDRAW_LIMITS_FUNCTION,
   WALLET_WITHDRAW_TOTP_ACTION,
@@ -20,6 +25,7 @@ import {
   withdrawErrorMessage,
 } from '../../src/lib/payments/walletWithdraw.ts';
 import { summarizeWalletOps } from '../../src/lib/payments/walletRelativeTransfers.ts';
+import { pickSettlementMethod } from '../functions/api/providers/parity/sweep-read.mjs';
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 
@@ -56,34 +62,108 @@ test('placement: the button sits in Wallet & Treasury next to Add funds and Mana
   assert.match(page, /<WalletPanel \/>/);
 });
 
-test('default bank only: no bank picker, the masked default bank, an explanation and a link when there is none', () => {
-  // The browser never sends a bank: the request has no destination field.
+test('settlement bank by default, a picker of the organization\'s banks, the picked bank sent; no dead link', () => {
+  // The browser sends the picked bank's row id, and nothing else that names a destination.
   const fn = wallets.slice(wallets.indexOf('export function withdrawToBank'), wallets.indexOf('const limitsOf'));
   const requestBody = fn.slice(fn.indexOf('WALLET_WITHDRAW_FUNCTION,'), fn.indexOf('},', fn.indexOf('WALLET_WITHDRAW_FUNCTION,')));
   const fields = [...requestBody.matchAll(/^\s*([a-z_]+):/gm)].map((m) => m[1]);
-  assert.deepEqual(fields, ['tenant_id', 'wallet_type', 'amount_cents', 'idempotency_key', 'description']);
+  assert.deepEqual(fields, ['tenant_id', 'wallet_type', 'amount_cents', 'idempotency_key', 'bank_id', 'description']);
   assert.match(requestBody, /wallet_type: "operating",/);
-  assert.doesNotMatch(requestBody, /bank_|destination|payment_method/);
-  // No picker of any kind in the dialog.
-  assert.doesNotMatch(dialog, /<Select|SelectItem|RadioGroup|bank_account_id|setBank/);
-  assert.match(dialog, /To \(default bank\)/);
-  assert.match(dialog, /Transfers go to the default bank only\./);
-  assert.match(dialog, /No default bank/);
-  assert.match(dialog, /<Link to=\{paymentsHref\}/);
-  assert.match(page, /paymentsHref=\{`\$\{tenantBase\}\/payments`\}/);
+  assert.match(requestBody, /bank_id: input\.bankId,/);
+  assert.doesNotMatch(requestBody, /destination|payment_method|provider_bank/);
+  // The dialog: a picker of every bank, ineligible ones disabled with the reason; it sends the picked bank.
+  assert.match(dialog, /<Select\b/);
+  assert.match(dialog, /<SelectItem key=\{option\.bank\.id\} value=\{option\.bank\.id\} disabled=\{option\.disabled\}>/);
+  assert.match(dialog, /option\.reason \? ` — \$\{option\.reason\}` : ""/);
+  assert.match(dialog, /option\.settlement \? " · Settlement bank" : ""/);
+  assert.match(dialog, /setBankId\(initialTransferBankId\(banks\.data \?\? \[\]\)\)/);
+  assert.match(dialog, /withdraw\.mutateAsync\(\{ amountCents, idempotencyKey, bankId: bank\.id \}\)/);
+  assert.match(dialog, /const canSend = walletActive && !!bank && available > 0;/);
+  // The dead "choose a default bank" link is gone; a plain message says what to do instead.
+  assert.doesNotMatch(dialog, /Choose a default bank|default bank only|<Link|paymentsHref/);
+  assert.doesNotMatch(page, /paymentsHref/);
+  assert.match(dialog, /Your settlement bank cannot receive transfers yet/);
+  assert.match(dialog, /No settlement bank/);
+  assert.match(dialog, /Add a bank in Payment Account and verify it/);
+  // The rows: the tile's (this environment, never a recipient's, default first, then newest), not only connected ones.
   assert.match(hook, /\.eq\("environment", walletEnvironment\)/);
-  assert.match(hook, /return defaultSettlementBank\(/);
+  assert.match(hook, /\.is\("external_recipient_id", null\)/);
+  assert.match(hook, /\.order\("is_default", \{ ascending: false, nullsFirst: false \}\)\s*\.order\("created_at", \{ ascending: false, nullsFirst: false \}\)/);
+  assert.doesNotMatch(hook, /\.eq\("connection_status"/);
+  assert.match(hook, /return transferBankOptions\(/);
 
-  const own = { id: 'a', bank_name: 'FIRST BANK', last_four: '1234', is_default: true, connection_status: 'connected', external_recipient_id: null };
-  const other = { id: 'b', bank_name: 'OTHER', last_four: '9999', is_default: false, connection_status: 'connected', external_recipient_id: null };
-  assert.equal(defaultSettlementBank([other, own])?.id, 'a');
-  // Never a fallback to another bank, a disconnected default, or a recipient's bank.
-  assert.equal(defaultSettlementBank([other]), null);
-  assert.equal(defaultSettlementBank([{ ...own, connection_status: 'pending' }, other]), null);
-  assert.equal(defaultSettlementBank([{ ...own, external_recipient_id: 'r1' }]), null);
+  const row = (id, extra = {}) => ({
+    id, bank_name: 'FIRST BANK', last_four: id.slice(-4).padStart(4, '0'), is_default: false,
+    connection_status: 'connected', verification_status: 'verified', external_recipient_id: null, ...extra,
+  });
+  // The settlement bank is used even when is_default is false (rows a legacy sync or a re-add left that way).
+  assert.equal(defaultSettlementBank([row('a')])?.id, 'a');
+  // is_default is only the tiebreak: connected or verified wins first.
+  assert.equal(defaultSettlementBank([row('d', { is_default: true, connection_status: 'pending', verification_status: 'pending' }), row('a')])?.id, 'a');
+  assert.equal(defaultSettlementBank([row('a'), row('d', { is_default: true })])?.id, 'd');
+  // A recipient's bank is never the organization's.
+  assert.equal(defaultSettlementBank([row('r', { external_recipient_id: 'r1', is_default: true })]), null);
   assert.equal(defaultSettlementBank([]), null);
-  assert.equal(maskedBankLabel(own), 'FIRST BANK ••1234');
-  assert.equal(maskedBankLabel(null), 'No default bank');
+  assert.equal(defaultSettlementBank(null), null);
+  assert.equal(maskedBankLabel(row('1234')), 'FIRST BANK ••1234');
+  assert.equal(maskedBankLabel(null), 'No bank');
+
+  // Eligibility as the browser can see it (the API checks Moov again): not linked, not verified, else pickable.
+  assert.equal(bankIneligibility(row('a')), null);
+  assert.equal(bankIneligibility(row('a', { verification_status: 'successful' })), null);
+  assert.equal(bankIneligibility(row('a', { verification_status: null })), null, 'an empty status is left to the server');
+  assert.deepEqual(bankIneligibility(row('a', { connection_status: 'disconnected' })), { code: 'not_linked', reason: 'Not linked' });
+  assert.deepEqual(bankIneligibility(row('a', { connection_status: 'pending' })), { code: 'not_linked', reason: 'Not linked' });
+  assert.deepEqual(bankIneligibility(row('a', { verification_status: 'pending_micro_deposit' })), { code: 'not_verified', reason: 'Not verified' });
+  assert.deepEqual(bankIneligibility(row('a', { verification_status: 'unverified' })), { code: 'not_verified', reason: 'Not verified' });
+
+  // The options: settlement bank first, every other bank listed, ineligible ones disabled with the reason.
+  const rows = [
+    row('d', { is_default: true, connection_status: 'pending', verification_status: 'pending' }),
+    row('a'),
+    row('u', { verification_status: 'unverified' }),
+    row('r', { external_recipient_id: 'r1' }),
+  ];
+  const options = transferBankOptions(rows);
+  assert.deepEqual(options.map((o) => [o.bank.id, o.settlement, o.disabled, o.reason]), [
+    ['a', true, false, null],
+    ['d', false, true, 'Not linked'],
+    ['u', false, true, 'Not verified'],
+  ]);
+  assert.equal(initialTransferBankId(options), 'a');
+  // When the settlement bank itself cannot receive, nothing is chosen for the user (the dialog explains).
+  const stuck = transferBankOptions([row('s', { connection_status: 'disconnected', verification_status: 'verified', is_default: true }), row('b', { verification_status: 'unverified' })]);
+  assert.equal(stuck[0].bank.id, 's');
+  assert.equal(stuck[0].disabled, true);
+  assert.equal(initialTransferBankId(stuck), null);
+  assert.equal(initialTransferBankId([]), null);
+});
+
+test('the dialog\'s settlement bank is the tile\'s: the same rule as sweep-read.mjs pickSettlementMethod on the same rows', () => {
+  const statuses = [
+    { connection_status: 'connected', verification_status: 'verified' },
+    { connection_status: 'connected', verification_status: null },
+    { connection_status: 'pending', verification_status: 'verified' },
+    { connection_status: 'disconnected', verification_status: 'successful' },
+    { connection_status: 'pending', verification_status: 'pending' },
+    { connection_status: null, verification_status: null },
+  ];
+  // Every list of up to three banks over these states, with and without is_default, in the tile's order.
+  const banks = [];
+  for (const [i, state] of statuses.entries()) for (const isDefault of [true, false, null]) banks.push({ id: `b${i}${isDefault}`, is_default: isDefault, ...state });
+  const ordered = (list) => [...list].sort((a, b) => Number(b.is_default === true) - Number(a.is_default === true));
+  let checked = 0;
+  for (const a of banks) {
+    for (const b of banks) {
+      for (const c of [null, ...banks.slice(0, 6)]) {
+        const list = ordered([a, b, c].filter(Boolean).filter((x, i, all) => all.findIndex((y) => y.id === x.id) === i));
+        assert.equal(defaultSettlementBank(list)?.id ?? null, pickSettlementMethod(list)?.id ?? null, JSON.stringify(list));
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked > 2000);
+  assert.equal(defaultSettlementBank([]), pickSettlementMethod([]));
 });
 
 test('two-factor: the transfer and the limits both use the wallet.fund step-up and retry with the same key', () => {
@@ -93,11 +173,11 @@ test('two-factor: the transfer and the limits both use the wallet.fund step-up a
   assert.match(hook, /requireStepUp\(\s*\{\s*actionKey: WALLET_WITHDRAW_TOTP_ACTION,/);
   assert.match(hook, /\{ force: true \}/);
   // Both mutations go through the step-up.
-  assert.match(hook, /withStepUp\(\s*\(\) => withdrawToBank\(\{ tenantId, amountCents: input\.amountCents, idempotencyKey: input\.idempotencyKey \}\),/);
+  assert.match(hook, /withStepUp\(\s*\(\) => withdrawToBank\(\{ tenantId, amountCents: input\.amountCents, idempotencyKey: input\.idempotencyKey, bankId: input\.bankId \}\),/);
   assert.match(hook, /withStepUp\(\(\) => saveWithdrawLimits\(tenantId, next\), "Confirm transfer limits"\)/);
   // One key per confirmation, made before Send and reused by the retry.
   assert.match(dialog, /setIdempotencyKey\(crypto\.randomUUID\(\)\);\s*setStep\("confirm"\);/);
-  assert.match(dialog, /withdraw\.mutateAsync\(\{ amountCents, idempotencyKey \}\)/);
+  assert.match(dialog, /withdraw\.mutateAsync\(\{ amountCents, idempotencyKey, bankId: bank\.id \}\)/);
   assert.match(dialog, /Saving asks for your two-factor code\./);
   // The API names and request fields as built (#1876).
   assert.equal(WALLET_WITHDRAW_FUNCTION, 'moov-wallet-withdraw');
