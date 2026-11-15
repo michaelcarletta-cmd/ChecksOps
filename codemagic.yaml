@@ -1,8 +1,11 @@
 # Codemagic builds for the ChecksOps iOS and Android apps (Capacitor shell in mobile/).
 #
 # No triggering section: every build is started by hand in Codemagic. Nothing here touches
-# AWS, the database or the website; the builds read the repo, build the staging website
-# bundle (.env.aws.example, public identifiers only) and package it into the apps.
+# AWS, the database or the website; the builds read the repo, build the website bundle and
+# package it into the apps. The *-staging workflows build against staging (.env.aws.example);
+# the *-production workflows build against production (the production Cognito pool and
+# https://checksops.com/prep, public identifiers only). Both ship as com.checksops.app, so the
+# last build installed is the one on the phone.
 #
 # Set up once in the Codemagic UI before the first build:
 #   - Team integrations > Developer Portal: an App Store Connect API key named "ChecksOps".
@@ -27,6 +30,22 @@ definitions:
         bun install --frozen-lockfile
         cp .env.aws.example .env.aws
         bun run build:aws
+    - &build_web_production
+      name: Build the production website bundle
+      # The app is served from capacitor://localhost (iOS) or https://localhost (Android), so the
+      # API is the full https://checksops.com/prep address, not the website's same-origin /prep.
+      # Same public Cognito values as the guarded production website upload.
+      script: |
+        bun install --frozen-lockfile
+        cat > .env.aws <<'ENV'
+        VITE_AUTH_PROVIDER=cognito
+        VITE_APP_URL=https://checksops.com
+        VITE_CHECKSOPS_API_URL=https://checksops.com/prep
+        VITE_AWS_REGION=us-east-1
+        VITE_COGNITO_USER_POOL_ID=us-east-1_h00WorYMT
+        VITE_COGNITO_USER_POOL_CLIENT_ID=3ja9fqaq2fjkv3i6up2varcqpe
+        ENV
+        CHECKSOPS_NATIVE_APP_BUILD=1 bun run build:aws
     - &install_capacitor
       name: Install Capacitor
       script: npm ci --prefix mobile
@@ -121,4 +140,66 @@ workflows:
         # Upload only. Internal testers see each build in TestFlight once Apple has processed it;
         # submitting to beta review is for external testers and needs the beta review details
         # filled in App Store Connect first.
+        submit_to_testflight: false
+
+  android-production:
+    name: Android (production)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      node: 22
+      java: 21
+      android_signing:
+        - checksops_upload
+      groups:
+        - google_play
+    scripts:
+      - *install_bun
+      - *build_web_production
+      - *install_capacitor
+      - name: Copy the website into the Android project
+        script: cd mobile && npx cap sync android
+      - name: Build the signed Android App Bundle
+        script: |
+          cd mobile/android
+          ./gradlew bundleRelease -PversionCode="$BUILD_NUMBER"
+    artifacts:
+      - mobile/android/app/build/outputs/**/*.aab
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
+
+  ios-production:
+    name: iOS (production)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: ChecksOps
+    environment:
+      node: 22
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.checksops.app
+    scripts:
+      - *install_bun
+      - *build_web_production
+      - *install_capacitor
+      - name: Copy the website into the iOS project
+        script: cd mobile && npx cap sync ios
+      - name: Apply the signing profile
+        script: xcode-project use-profiles
+      - name: Build the signed IPA
+        script: |
+          xcode-project build-ipa \
+            --project mobile/ios/App/App.xcodeproj \
+            --scheme App \
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
         submit_to_testflight: false

@@ -13,7 +13,6 @@ import { DisbursementConsole } from "@/components/disbursement/DisbursementConso
 import { InlineErrorBoundary } from "@/components/InlineErrorBoundary";
 import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeownerBankLinkDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
-import { ProjectPlanCard } from "@/components/homeowner-ledger/ProjectPlanCard";
 import { PartnerSendPanel } from "@/components/payments/PartnerSendPanel";
 
 import { useState, useMemo, useEffect, useRef } from "react";
@@ -645,9 +644,8 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       )}
 
-      {!readOnly && claimId && tenant?.id && (
-        <ProjectPlanCard claimId={claimId} tenantId={tenant.id} />
-      )}
+      {/* The project schedule is not repeated here: it has its own Project Schedule tab on the check
+          detail (owner 2026-11-15: "Remove project schedule from funds tab since it has its own tab"). */}
 
       {/* Payment list */}
       <div className="space-y-2">

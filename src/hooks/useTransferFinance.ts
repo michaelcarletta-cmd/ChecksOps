@@ -11,7 +11,9 @@ import {
   SEND_LEG_ROLES,
   sendRecipientOrganizationIds,
   type SendLeg,
+  type SendLegCheck,
 } from "@/lib/payments/transferFinanceRows";
+import { CHECK_CLIENT_COLUMNS } from "@/lib/payments/recipientDrilldown";
 
 /** Query-key prefix for the finance views' transfer reads; invalidate it after a send. */
 export const TRANSFER_FINANCE_QUERY_KEY = "transfer-finance";
@@ -44,6 +46,9 @@ export function useSharedCheckSourceSends(tenantIdOverride?: string | null) {
   });
 }
 
+/** The sent check's columns: number and carrier, and what the recipient report's client name reads. */
+export const SEND_CHECK_COLUMNS = `id, check_number, carrier_name, ${CHECK_CLIENT_COLUMNS}`;
+
 /** This organization's own send legs Moov accepted (the sender reads its own rows under RLS). */
 export function useSentPaymentLegs() {
   const { tenant } = useTenant();
@@ -63,15 +68,16 @@ export function useSentPaymentLegs() {
         .limit(1000);
       if (error) throw error;
       const legs = (data ?? []) as unknown as SendLeg[];
-      // The sent checks' number and carrier, for the rows (best effort: a failed read leaves them blank).
+      // The sent checks' number and carrier, for the rows, plus the claim and payees the recipient
+      // report's client name reads (best effort: a failed read leaves them blank).
       const ids = [...new Set(legs.map((leg) => leg.check_id).filter(Boolean))] as string[];
       if (!ids.length) return legs;
       const { data: checks } = await supabase
         .from("check_intake_items")
-        .select("id, check_number, carrier_name")
+        .select(SEND_CHECK_COLUMNS as string)
         .eq("tenant_id", tenantId!)
         .in("id", ids);
-      const byId = new Map(((checks ?? []) as Array<{ id: string; check_number: string | null; carrier_name: string | null }>).map((c) => [c.id, c]));
+      const byId = new Map(((checks ?? []) as unknown as Array<SendLegCheck & { id: string }>).map((c) => [c.id, c]));
       return legs.map((leg) => ({ ...leg, check: leg.check_id ? byId.get(leg.check_id) ?? null : null }));
     },
   });
