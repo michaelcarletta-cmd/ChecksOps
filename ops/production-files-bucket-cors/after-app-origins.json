@@ -1,0 +1,44 @@
+{
+  "CORSRules": [
+    {
+      "AllowedHeaders": [
+        "*"
+      ],
+      "AllowedMethods": [
+        "GET",
+        "HEAD"
+      ],
+      "AllowedOrigins": [
+        "https://checksops.com",
+        "https://www.checksops.com",
+        "capacitor://localhost",
+        "https://localhost"
+      ],
+      "ExposeHeaders": [
+        "Content-Type",
+        "Content-Length",
+        "ETag",
+        "Content-Disposition"
+      ],
+      "MaxAgeSeconds": 300
+    },
+    {
+      "AllowedHeaders": [
+        "content-type",
+        "content-length",
+        "x-amz-server-side-encryption",
+        "x-amz-server-side-encryption-aws-kms-key-id"
+      ],
+      "AllowedMethods": [
+        "PUT"
+      ],
+      "AllowedOrigins": [
+        "https://checksops.com",
+        "https://www.checksops.com",
+        "capacitor://localhost",
+        "https://localhost"
+      ],
+      "MaxAgeSeconds": 300
+    }
+  ]
+}
