@@ -22,7 +22,13 @@ import {
 } from "@/lib/payments/payrollRows";
 import { SEND_SOURCE_LABEL, incomingBySender, sendRecipientReportRows } from "@/lib/payments/transferFinanceRows";
 import { inRange, useIncomingTransfers, useSendRecipientOrgNames, useSentPaymentLegs } from "@/hooks/useTransferFinance";
-import { receivedTransactions, sentTransactions } from "@/lib/payments/recipientDrilldown";
+import {
+  RECIPIENT_REPORT_SPLIT_SELECT,
+  checkClaimNumber,
+  checkClientName,
+  receivedTransactions,
+  sentTransactions,
+} from "@/lib/payments/recipientDrilldown";
 import { RecipientDrilldownSheet } from "./RecipientDrilldownSheet";
 
 
@@ -140,11 +146,7 @@ export function RecipientReport() {
     queryFn: async () => {
       let q = (supabase as any)
         .from("disbursement_splits")
-        .select(`
-          id, amount, status, method, recipient_name, recipient_type, created_at, settled_at, external_check_number,
-          stakeholder_accounts (id, nickname, custname, account_type, chk_acct),
-          disbursement_batches (check_intake_items:check_intake_item_id (check_number))
-        `)
+        .select(RECIPIENT_REPORT_SPLIT_SELECT)
         .eq("tenant_id", tenant!.id)
         .neq("status", "pending")
         .order("created_at", { ascending: false });
@@ -199,6 +201,9 @@ export function RecipientReport() {
         method: r.method ?? "ach",
         // The drill-down's check reference: the outside check, else the deposited check paid from.
         reference: r.external_check_number ?? r.disbursement_batches?.check_intake_items?.check_number ?? null,
+        // The client the payment was for, and its claim: from the deposited check paid from.
+        clientName: checkClientName(r.disbursement_batches?.check_intake_items),
+        claimNumber: checkClaimNumber(r.disbursement_batches?.check_intake_items),
       };
     });
     const sendRows = inRange(sendRecipientReportRows(sentLegs, sendOrgNames), (r) => r.date, dateFilters);
