@@ -23,9 +23,12 @@ import {
   sendExpenseRows,
   sendExpenseTotal,
   sendLedgerRows,
+  fetchOrganizationNames,
+  sendRecipientOrganizationIds,
   sendRecipientReportRows,
   sentPayments,
 } from '../../src/lib/payments/transferFinanceRows.ts';
+import { recipientTotalsByName } from '../../src/lib/payments/activeStakeholders.ts';
 
 const read = (rel) => readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
 const send = read('aws/functions/api/providers/production/moov-send.mjs');
@@ -78,6 +81,61 @@ test('sender: the wallet and bank legs of one recipient are one payment and one 
   assert.ok(ledger.id.startsWith('send:'));
   const [byRecipient] = sendRecipientReportRows(FREEDOM_LEGS);
   assert.deepEqual([byRecipient.name, byRecipient.type, byRecipient.amount, byRecipient.status, byRecipient.method], ['Condition One Commrecial', 'partner', 8307, 'settled', 'send']);
+});
+
+// Owner 2026-11-15: Condition One was paid as a contractor (split rows) and as a partner (a send
+// recorded with its Moov account name "Condition One Commrecial") and showed as two recipients.
+const contractorSplitRow = { name: 'Condition One Commercial', type: 'contractor', amount: 500, date: '2026-11-08T10:00:00Z', status: 'settled', method: 'ach' };
+
+test('recipient report: a partner send is named after the partner organization and merges with its contractor rows', () => {
+  assert.deepEqual(sendRecipientOrganizationIds(FREEDOM_LEGS), ['c1-tenant']);
+  const orgNames = new Map([['c1-tenant', 'Condition One Commercial']]);
+  const sendRows = sendRecipientReportRows(FREEDOM_LEGS, orgNames);
+  assert.deepEqual(sendRows.map((r) => [r.name, r.type, r.amount]), [['Condition One Commercial', 'partner', 8307]]);
+  const rows = recipientTotalsByName([contractorSplitRow, ...sendRows]);
+  assert.equal(rows.length, 1);
+  assert.deepEqual({ name: rows[0].name, types: rows[0].types, total: rows[0].total, count: rows[0].count, sendCount: rows[0].sendCount }, {
+    name: 'Condition One Commercial', types: ['partner', 'contractor'], total: 8807, count: 2, sendCount: 1,
+  });
+  // The map is keyed by lower-case id; the leg's id is matched case-insensitively.
+  const upper = FREEDOM_LEGS.map((l) => ({ ...l, destination_tenant_id: 'C1-TENANT' }));
+  assert.equal(sendRecipientReportRows(upper, orgNames)[0].name, 'Condition One Commercial');
+  // Only partner and vendor sends take the organization name; a stakeholder send keeps its recorded name.
+  const stakeholder = leg('s', { destination_tenant_id: null, provider_metadata: { request_hash: 'h9', recipient_kind: 'stakeholder', recipient_id: 'c1-tenant', recipient_name: 'Roofer' } });
+  assert.equal(sendRecipientReportRows([stakeholder], orgNames)[0].name, 'Roofer');
+  // The other finance views keep the recorded name.
+  assert.equal(sendExpenseRows(FREEDOM_LEGS)[0].title, 'Condition One Commrecial');
+});
+
+test('recipient report: with no organization name the partner send keeps its recorded name', () => {
+  for (const orgNames of [undefined, null, new Map(), new Map([['other-tenant', 'Someone Else']]), new Map([['c1-tenant', '  ']])]) {
+    assert.equal(sendRecipientReportRows(FREEDOM_LEGS, orgNames)[0].name, 'Condition One Commrecial');
+  }
+  const rows = recipientTotalsByName([contractorSplitRow, ...sendRecipientReportRows(FREEDOM_LEGS)]);
+  assert.deepEqual(rows.map((r) => r.name).sort(), ['Condition One Commercial', 'Condition One Commrecial']);
+});
+
+test('recipient report: organization names come from tenants_public once for all ids; a failed lookup leaves them empty', async () => {
+  const calls = [];
+  const client = (result) => ({
+    from(table) {
+      return { select(columns) { return { in(column, ids) { calls.push([table, columns, column, ids]); return typeof result === 'function' ? result() : Promise.resolve(result); } }; } };
+    },
+  });
+  const names = await fetchOrganizationNames(client({ data: [{ id: 'C1-Tenant', name: 'Condition One Commercial' }, { id: 'x', name: null }], error: null }), ['C1-Tenant', 'x']);
+  assert.deepEqual([...names], [['c1-tenant', 'Condition One Commercial']]);
+  assert.deepEqual(calls, [['tenants_public', 'id, name', 'id', ['C1-Tenant', 'x']]]);
+  assert.equal((await fetchOrganizationNames(client({ data: null, error: { message: 'denied' } }), ['a'])).size, 0);
+  assert.equal((await fetchOrganizationNames(client(() => { throw new Error('offline'); }), ['a'])).size, 0);
+  calls.length = 0;
+  assert.equal((await fetchOrganizationNames(client({ data: [], error: null }), [])).size, 0);
+  assert.deepEqual(calls, []);
+
+  const report = read('src/components/ledger/RecipientReport.tsx');
+  assert.match(report, /const \{ data: sendOrgNames \} = useSendRecipientOrgNames\(sentLegs\);/);
+  assert.match(report, /sendRecipientReportRows\(sentLegs, sendOrgNames\)/);
+  const hook = read('src/hooks/useTransferFinance.ts');
+  assert.match(hook, /queryFn: \(\) => fetchOrganizationNames\(supabase, ids\)/);
 });
 
 const incoming = (id, extra = {}) => ({

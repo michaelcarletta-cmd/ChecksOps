@@ -200,14 +200,28 @@ export function sendLedgerRows(legs: SendLeg[] | null | undefined): SendLedgerRo
     }));
 }
 
-/** By Recipient rows for the paid sends (same shape as the split and payroll rows there). */
-export function sendRecipientReportRows(legs: SendLeg[] | null | undefined) {
+/** The receiving organization's ChecksOps name for a partner or vendor send, or null. */
+const organizationName = (p: SentPayment, orgNames: Map<string, string> | null | undefined): string | null => {
+  if (!orgNames || !p.partnerTenantId || (p.recipientKind !== "partner" && p.recipientKind !== "vendor")) return null;
+  return String(orgNames.get(lower(p.partnerTenantId)) ?? "").trim() || null;
+};
+
+/**
+ * By Recipient rows for the paid sends (same shape as the split and payroll rows there).
+ *
+ * `orgNames` (receiving organization id, lower-case -> name, from tenants_public): a partner or
+ * vendor send is named after the organization's ChecksOps name, so it groups with that company's
+ * other payments. The recorded provider_metadata.recipient_name is the payee's Moov account name at
+ * send time (owner 2026-11-15: "Condition One Commrecial" split Condition One into two rows); it is
+ * kept when no organization name is known.
+ */
+export function sendRecipientReportRows(legs: SendLeg[] | null | undefined, orgNames?: Map<string, string> | null) {
   return sentPayments(legs)
     .filter((p) => !!p.at)
     .map((p) => ({
       id: `send:${p.key}`,
       date: p.at as string,
-      name: p.recipientName,
+      name: organizationName(p, orgNames) ?? p.recipientName,
       type: p.recipientKind === "partner" || p.recipientKind === "vendor" ? p.recipientKind : "other",
       acct4: p.recipientKind === "partner" ? "Partner wallet" : p.recipientKind === "vendor" ? "Vendor wallet" : "—",
       amount: p.amountCents / 100,
@@ -263,6 +277,35 @@ type LegQuery = PromiseLike<{ data: unknown; error: unknown }> & {
   lte(column: string, value: string): LegQuery;
 };
 type LegClient = { from(table: string): { select(columns: string): LegQuery } };
+
+/** Ids of the organizations this organization's paid partner and vendor sends went to. */
+export function sendRecipientOrganizationIds(legs: SendLeg[] | null | undefined): string[] {
+  const ids = sentPayments(legs)
+    .filter((p) => p.recipientKind === "partner" || p.recipientKind === "vendor")
+    .map((p) => p.partnerTenantId)
+    .filter(Boolean) as string[];
+  return [...new Set(ids)].sort();
+}
+
+/**
+ * Organization names from tenants_public, keyed by lower-case id. Looked up once for all ids; a
+ * failed lookup leaves the map empty (callers fall back to the recorded name).
+ */
+export async function fetchOrganizationNames(client: unknown, ids: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (!ids.length) return names;
+  try {
+    const { data: rows, error } = await (client as LegClient).from("tenants_public").select("id, name").in("id", ids);
+    if (!error) {
+      for (const row of (rows as Array<{ id?: string; name?: string | null }> | null) ?? []) {
+        if (row?.id && row.name) names.set(lower(row.id), row.name);
+      }
+    }
+  } catch {
+    /* names stay empty */
+  }
+  return names;
+}
 
 /**
  * Tax & 1099: this organization's accepted send legs to another organization in [from, to], and the
