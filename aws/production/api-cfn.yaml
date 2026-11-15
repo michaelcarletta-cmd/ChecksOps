@@ -107,6 +107,8 @@ Resources:
         AllowOrigins:
           - 'https://checksops.com'
           - 'https://www.checksops.com'
+          - 'capacitor://localhost'
+          - 'https://localhost'
         AllowHeaders:
           - authorization
           - content-type

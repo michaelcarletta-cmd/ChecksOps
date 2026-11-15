@@ -32,7 +32,7 @@ import {
   validateTightenedSnapshot,
 } from './production-cors-update.mjs';
 
-export const APPROVAL_PHRASE = 'TIGHTEN PRODUCTION CORS';
+export const APPROVAL_PHRASE = 'ALLOW THE APP ON PRODUCTION API';
 const STAGING_ACCEPTANCE_RE = /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/(actions\/runs\/\d+(\/job\/\d+)?|pull\/\d+)$/;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 

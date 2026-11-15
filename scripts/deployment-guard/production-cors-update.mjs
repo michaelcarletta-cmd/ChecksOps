@@ -2,8 +2,12 @@
 /**
  * Receipt-gated, CORS-only production HTTP API writer.
  *
- * Exact permitted mutation:
- *   AllowOrigins: ["*"] -> ["https://checksops.com","https://www.checksops.com"]
+ * Exact permitted mutation (2026-11-15, the iOS/Android app as the production app):
+ *   AllowOrigins: ["https://checksops.com","https://www.checksops.com"]
+ *              -> ["https://checksops.com","https://www.checksops.com","capacitor://localhost","https://localhost"]
+ * The app serves the bundled website from capacitor://localhost (iOS) and https://localhost
+ * (Android). The previous permitted mutation ("*" -> the two site origins) was applied 2026-10-21
+ * (ops/production-cors-allowlist.md); its target is this one's baseline.
  *
  * The security-relevant shape (API id, execute-api state, CORS baseline, routes, authorizer,
  * CloudFront status and WAF) is pinned here. Values that move on every deploy (the Lambda
@@ -36,7 +40,7 @@ export const EXPECTED = Object.freeze({
   cors: {
     AllowHeaders: ['authorization','content-type','x-request-id','x-bridge-secret'],
     AllowMethods: ['GET','POST','OPTIONS'],
-    AllowOrigins: ['*'],
+    AllowOrigins: ['https://checksops.com','https://www.checksops.com'],
     MaxAge: 86400,
   },
   routes: [
@@ -49,7 +53,7 @@ export const EXPECTED = Object.freeze({
     WebACLId: 'arn:aws:wafv2:us-east-1:806168576068:global/webacl/checksops-production-cloudfront-waf/cc8aadde-2bab-4d5e-8144-7d8981f44ad7',
   },
 });
-export const TARGET_ORIGINS = Object.freeze(['https://checksops.com','https://www.checksops.com']);
+export const TARGET_ORIGINS = Object.freeze(['https://checksops.com','https://www.checksops.com','capacitor://localhost','https://localhost']);
 
 const hash = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b);

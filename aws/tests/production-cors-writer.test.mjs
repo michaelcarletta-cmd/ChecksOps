@@ -29,7 +29,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SHA = 'c'.repeat(40);
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/123';
 
-function live({ origins = ['*'], etag = 'E1VC38T7YXB528', revision = '58733b08-ef0a-4ab9-a47a-30fc15ebeafb' } = {}) {
+function live({ origins = EXPECTED.cors.AllowOrigins, etag = 'E1VC38T7YXB528', revision = '58733b08-ef0a-4ab9-a47a-30fc15ebeafb' } = {}) {
   return normalizeSnapshot({
     api: { ApiId: 'kiqojucc02', DisableExecuteApiEndpoint: false, CorsConfiguration: { ...structuredClone(EXPECTED.cors), AllowOrigins: [...origins] } },
     routes: { Items: [
@@ -96,7 +96,7 @@ test('classify: READY on the baseline, ALREADY_ACCEPTED once tightened, BLOCKED 
 
 test('apply inputs need the exact phrase, a staging acceptance URL and the inspect snapshot hash', () => {
   const fp = snapshotFingerprint(live());
-  assert.equal(APPROVAL_PHRASE, 'TIGHTEN PRODUCTION CORS');
+  assert.equal(APPROVAL_PHRASE, 'ALLOW THE APP ON PRODUCTION API');
   assert.throws(() => validateApplyInputs({ approval: 'tighten cors', stagingAcceptance: STAGING_REF, expectedFingerprint: fp, liveFingerprint: fp }), (e) => e.code === CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.throws(() => validateApplyInputs({ approval: APPROVAL_PHRASE, stagingAcceptance: 'staging ok', expectedFingerprint: fp, liveFingerprint: fp }), (e) => e.code === CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.throws(() => validateApplyInputs({ approval: APPROVAL_PHRASE, stagingAcceptance: STAGING_REF, expectedFingerprint: 'a'.repeat(64), liveFingerprint: fp }), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
@@ -253,4 +253,18 @@ test('receipt consumption is atomic and rejects replay', () => {
   assert.equal(replay.ok, false);
   assert.equal(replay.code, 'RECEIPT_REUSED');
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('the permitted change adds exactly the iOS and Android app origins to the 2026-10-21 allow-list', () => {
+  const SITE = ['https://checksops.com', 'https://www.checksops.com'];
+  // The baseline is what the 2026-10-21 apply left live (ops/production-cors-allowlist.md).
+  assert.deepEqual(EXPECTED.cors.AllowOrigins, SITE);
+  assert.deepEqual([...TARGET_ORIGINS], [...SITE, 'capacitor://localhost', 'https://localhost']);
+  for (const origin of TARGET_ORIGINS) assert.ok(!origin.includes('*'), origin);
+  // Headers, methods and max age are untouched by the change.
+  const { AllowOrigins: _a, ...rest } = desiredCors(structuredClone(EXPECTED.cors));
+  const { AllowOrigins: _b, ...baseline } = EXPECTED.cors;
+  assert.deepEqual(rest, baseline);
+  // The old "*" baseline is no longer something this writer will start from.
+  assert.equal(classify(live({ origins: ['*'] })).state, 'BLOCKED');
 });
