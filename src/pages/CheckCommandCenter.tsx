@@ -3933,7 +3933,7 @@ function CheckDetailPanel({
                   View Loss Draft
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden border-border bg-card">
+              <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-y-auto overscroll-contain md:overflow-hidden border-border bg-card">
                 <div className="p-4 bg-muted/30 border-b flex items-center justify-between">
                   <DialogTitle className="text-lg flex items-center gap-2">
                     <Landmark className="h-5 w-5 text-amber-400" />
@@ -4006,7 +4006,7 @@ function CheckDetailPanel({
             </TabsList>
           </div>
 
-          <ScrollArea className="h-[calc(100vh-340px)] min-h-[400px]">
+          <ScrollArea className="md:h-[calc(100vh-340px)] md:min-h-[400px]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
               <PostHomeownerUpdateCard
                 claimId={check.claim_id ?? null}

@@ -147,3 +147,13 @@ test('loss draft panel uses the compact returned banner', () => {
   const panel = read('src/components/loss-draft/LossDraftDetailPanel.tsx');
   assert.match(panel, /<MortgageDeskReturnedBanner\s*\n\s*compact\s*\n/);
 });
+
+test('check file: the View Loss Draft dialog and the tab area scroll on phones; desktop keeps its fixed heights', () => {
+  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src/pages/CheckCommandCenter.tsx'), 'utf8');
+  // The dialog scrolls itself below md and clips (inner panel scrolls) from md up.
+  assert.match(src, /<DialogContent className="max-w-4xl max-h-\[85vh\] p-0 overflow-y-auto overscroll-contain md:overflow-hidden border-border bg-card">/);
+  assert.doesNotMatch(src, /max-h-\[85vh\] p-0 overflow-hidden/);
+  // The check file's tab area has its fixed height only from md up; on a phone the page scrolls.
+  assert.match(src, /<ScrollArea className="md:h-\[calc\(100vh-340px\)\] md:min-h-\[400px\]">/);
+  assert.doesNotMatch(src, /<ScrollArea className="h-\[calc\(100vh-340px\)\] min-h-\[400px\]">/);
+});
