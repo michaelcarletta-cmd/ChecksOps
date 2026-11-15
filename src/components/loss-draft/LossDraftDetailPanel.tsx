@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Landmark, Pencil, Share2, MessageSquare } from "lucide-react";
+import { CheckCircle2, ChevronDown, Landmark, MoreHorizontal, Pencil, Share2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
@@ -83,6 +83,8 @@ export function LossDraftDetailPanel({
   const [lenderName, setLenderName] = useState("");
   const [savingLender, setSavingLender] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  // Owner 2026-11-15: only Share stays in view; the other check actions sit behind "More".
+  const [checkActionsOpen, setCheckActionsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("actions");
   const [ackBusy, setAckBusy] = useState(false);
   const { data: returnAlert } = useMortgageDeskReturnAlert(draft?.check_intake_item_id);
@@ -274,34 +276,6 @@ export function LossDraftDetailPanel({
 
         {draft.check_intake_item_id && (
           <div className="flex flex-wrap gap-2 pt-2">
-            <ViewCheckImageButton
-              checkId={draft.check_intake_item_id}
-              frontImagePath={draft.check_intake_items?.front_image_path ?? null}
-              backImagePath={draft.check_intake_items?.back_image_path ?? null}
-              backImageOriginalPath={(draft.check_intake_items as any)?.back_image_original_path ?? null}
-              backImageDepositPath={(draft.check_intake_items as any)?.back_image_deposit_path ?? null}
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-            />
-            <ReuploadCheckImageButton
-              checkId={draft.check_intake_item_id}
-              side="front"
-              imagePath={draft.check_intake_items?.front_image_path}
-              onUploaded={handleChanged}
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-            />
-            <ReuploadCheckImageButton
-              checkId={draft.check_intake_item_id}
-              side="back"
-              imagePath={draft.check_intake_items?.back_image_path}
-              onUploaded={handleChanged}
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-            />
             <Button
               variant="outline"
               size="sm"
@@ -311,13 +285,57 @@ export function LossDraftDetailPanel({
             >
               <Share2 className="h-3 w-3" /> Share
             </Button>
-            <AdminDeleteCheckButton
-              checkId={draft.check_intake_item_id}
-              onDeleted={handleChanged}
-              size="sm"
+            <Button
               variant="outline"
-              className="h-7 text-xs"
-            />
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setCheckActionsOpen((open) => !open)}
+              aria-expanded={checkActionsOpen}
+              aria-controls="loss-draft-check-actions"
+              title="Check images, replace and delete"
+            >
+              <MoreHorizontal className="h-3 w-3" /> More
+              <ChevronDown className={`h-3 w-3 transition-transform ${checkActionsOpen ? "rotate-180" : ""}`} />
+            </Button>
+            {checkActionsOpen && (
+              <div id="loss-draft-check-actions" className="flex w-full flex-wrap gap-2 rounded-md border border-dashed p-2">
+                <ViewCheckImageButton
+                  checkId={draft.check_intake_item_id}
+                  frontImagePath={draft.check_intake_items?.front_image_path ?? null}
+                  backImagePath={draft.check_intake_items?.back_image_path ?? null}
+                  backImageOriginalPath={(draft.check_intake_items as any)?.back_image_original_path ?? null}
+                  backImageDepositPath={(draft.check_intake_items as any)?.back_image_deposit_path ?? null}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                />
+                <ReuploadCheckImageButton
+                  checkId={draft.check_intake_item_id}
+                  side="front"
+                  imagePath={draft.check_intake_items?.front_image_path}
+                  onUploaded={handleChanged}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                />
+                <ReuploadCheckImageButton
+                  checkId={draft.check_intake_item_id}
+                  side="back"
+                  imagePath={draft.check_intake_items?.back_image_path}
+                  onUploaded={handleChanged}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                />
+                <AdminDeleteCheckButton
+                  checkId={draft.check_intake_item_id}
+                  onDeleted={handleChanged}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                />
+              </div>
+            )}
             {tenantId && (
               <SendToMortgageDeskButton
                 checkIntakeItemId={draft.check_intake_item_id}
