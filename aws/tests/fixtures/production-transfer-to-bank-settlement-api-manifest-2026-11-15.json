@@ -1,0 +1,15 @@
+{
+  "workstream_id": "transfer-to-bank-settlement-api",
+  "authorization": "Pending owner review (2026-11-15). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Transfer to bank goes to the settlement bank (owner 2026-11-15: \"build the transfer-to-bank fix\"; \"The default bank should be the settlement bank that each tenant sets up\"). providers/production/moov-wallet-withdraw.mjs picks the destination with pickSettlementMethod (providers/parity/sweep-read.mjs, the Wallet & Treasury Settlement bank tile's own function, imported, not copied) from the tile's rows (same filter and order as sweep-read.mjs loadLocalMethods), so is_default is only the tiebreak and a bank the legacy sync or a re-add left with is_default false is used. The caller may name another bank (bank_id): used only if it is one of the tenant's own Moov bank rows for this environment (the tenant from the verified identity), connected, on the tenant's provider account, not a recipient's, with a verified ach-credit-same-day method at Moov. Refusals name the reason (invalid_bank_id 400, bank_not_found 404, no_settlement_bank, settlement_bank_not_linked, settlement_bank_not_verified, same_day_unavailable 409); default_bank_required is gone. Every other guard, limit and idempotency rule is unchanged. One REPLACE from the bytes the seventh production rebuild put live (apply run 43464046767, main 4bcdd8db2, VERIFIED; it ADDed this file; the eighth production rebuild, inspect 43604759009, apply 43606264549, counted it as same): providers/production/moov-wallet-withdraw.mjs 22c6c779 -> a0570f41. The row moves from the 2026-11-13 ADD (manifest aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json) to a REPLACE. New local import providers/parity/sweep-read.mjs: not an overlay member; live in production at main's bytes 32d7ffae (sixth production rebuild, apply 43430080268; counted as same since), and its export pickSettlementMethod is unchanged; sweep-read.mjs is not changed. No sql_before (no SQL; SQL 164 applied in both environments, record #1875). No member is added; order unchanged; index.mjs is untouched. The website picker is its own change and needs this API live first. Planning only.",
+  "members": {
+    "providers/production/moov-wallet-withdraw.mjs": {
+      "live_sha256": "22c6c77990c54042ecd82ce13a119dadc84f34adcc9883df17d522e7471f64e0",
+      "accepted_sha256": "a0570f4145efc4bcd82ba6fd6d2a0f009672c4a2500cfc32083b584308e4c1b7",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json"
+    }
+  }
+}

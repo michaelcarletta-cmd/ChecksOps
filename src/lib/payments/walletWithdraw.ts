@@ -147,9 +147,15 @@ export const WITHDRAW_ERROR_MESSAGES: Record<string, string> = {
   totp_required: "Enter your two-factor code to transfer to your bank.",
   totp_not_enrolled: "Set up two-factor authentication before transferring to your bank.",
   step_up_cancelled: "Two-factor confirmation is required. Nothing was sent.",
-  // The default bank only.
+  // The destination bank: the settlement bank, or a bank picked in the dialog that the API accepts only if it is the
+  // organization's own (owner 2026-11-15). default_bank_required is the code of the API before that change.
   default_bank_required: "Choose a default settlement bank before transferring. Nothing was sent.",
-  same_day_unavailable: "Your default settlement bank is not verified for same-day transfers yet. Nothing was sent.",
+  no_settlement_bank: "Add and verify a settlement bank in Payment Account before transferring. Nothing was sent.",
+  bank_not_found: "That bank is not one of your organization's banks. Nothing was sent.",
+  invalid_bank_id: "bank_id must be one of your bank ids. Nothing was sent.",
+  settlement_bank_not_linked: "This bank is not linked to your payment account. Reconnect it in Payment Account. Nothing was sent.",
+  settlement_bank_not_verified: "This bank is not verified yet. Nothing was sent.",
+  same_day_unavailable: "This bank does not accept same-day transfers yet. Nothing was sent.",
   // Balance and the tenant's own limits.
   insufficient_available_balance:
     "That is more than your available balance. Pending funds cannot be transferred. Nothing was sent.",
