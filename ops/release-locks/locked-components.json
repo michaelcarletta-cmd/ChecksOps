@@ -23,7 +23,7 @@
       "environment": "production",
       "source": {
         "git_sha": "f5d616431642ce5938827379c9221c822fea5bf3",
-        "tree_hash": "2d7626383b0c638fbab545f92eabc3fe7e53513e8bd81c3dd3d21c810d68bf4c",
+        "tree_hash": "c2ce38db88c0090eaf1af2906e45a91b8313af4248b80c38a2a9c0b20237a6a9",
         "merged": false,
         "merged_pr": 501
       },
@@ -65,7 +65,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "c836643bf79dd82c1cb6d1d95d269afff10d3f8d",
-        "tree_hash": "438ebb4dcb3df4d11d072d80b2cab161ff344ed9dcd066b36aabbe8198c932db",
+        "tree_hash": "7ceac5adca54f7cee9e3ae7caf4fc061bceedef22128d93e32272b47898c4198",
         "merged": true,
         "merged_pr": null
       },

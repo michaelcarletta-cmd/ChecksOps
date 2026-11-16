@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isMasterMerchant } from "@/lib/masterMerchant";
+import { decideWorkspaceAccess, identityListsTenant } from "@/lib/workspaceAccess";
 import { loginPathWithNext, postLoginPath } from "@/lib/loginReturnPath";
 
 const Payments = lazy(() => import("@/pages/Payments"));
@@ -62,21 +63,34 @@ function WhiteLabelRoutes() {
   const location = useLocation();
   const basePath = useTenantBasePath(tenant?.slug);
 
-  // Check tenant membership
-  const { data: isTenantMember, isLoading: memberLoading } = useQuery({
+  // Membership: the server's organization list from /identity/me first, then the tenant_users
+  // read. A failed read is not "no row" (workspaceAccess.ts).
+  const identityListsThisTenant = identityListsTenant(
+    user?.app_metadata?.tenant_memberships,
+    tenant?.id,
+    tenant?.slug,
+  );
+  const {
+    data: membershipRead,
+    isLoading: memberQueryLoading,
+    isFetching: memberFetching,
+    refetch: refetchMembership,
+  } = useQuery({
     queryKey: ["tenant-membership", tenant?.id, user?.id],
     queryFn: async () => {
-      if (!tenant?.id || !user?.id) return false;
-      const { data } = await supabase
+      if (!tenant?.id || !user?.id) return { row: false, failed: false };
+      const { data, error } = await supabase
         .from("tenant_users")
         .select("id")
         .eq("tenant_id", tenant.id)
         .eq("user_id", user.id)
         .maybeSingle();
-      return !!data;
+      return { row: !!data, failed: !!error };
     },
     enabled: !!tenant?.id && !!user?.id,
   });
+  // The identity list already confirms membership: do not wait on the read.
+  const memberLoading = !identityListsThisTenant && memberQueryLoading;
 
   // tenants_public lists active tenants only, so an inactive organization looks
   // "not found". For a signed-in member, read the base tenant row (membership-
@@ -98,7 +112,15 @@ function WhiteLabelRoutes() {
     || (!!tenant && tenant.subscription_status !== "active");
 
   // Master merchant can preview any tenant's Check Center
-  const isMember = !!isTenantMember || isMasterMerchant(user?.email, user?.id);
+  const workspaceAccess = decideWorkspaceAccess({
+    tenantId: tenant?.id,
+    tenantSlug: tenant?.slug,
+    identityTenants: user?.app_metadata?.tenant_memberships,
+    tenantUsersRow: !!membershipRead?.row,
+    tenantUsersError: !!membershipRead?.failed,
+    isMasterMerchant: isMasterMerchant(user?.email, user?.id),
+  });
+  const isMember = workspaceAccess === "member";
 
 
   if (loading || authLoading || (user && memberLoading) || (user && !tenant && !!routeSlug && hiddenStatusLoading)) {
@@ -135,9 +157,27 @@ function WhiteLabelRoutes() {
     );
   }
 
-  // User is logged in but not a member of this tenant.
+  // The membership read failed and the identity list does not name this tenant: we do not
+  // know, so offer a retry instead of a false "Access Denied".
+  if (user && !memberLoading && workspaceAccess === "unconfirmed" && location.pathname !== `${basePath}/login`) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <h1 className="text-xl font-semibold">We couldn't confirm your access to {tenant.name}.</h1>
+          <p className="text-muted-foreground">
+            Check your connection and try again.
+          </p>
+          <Button onClick={() => void refetchMembership()} disabled={memberFetching}>
+            {memberFetching ? "Checking…" : "Retry"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // User is logged in but not a member of this tenant (the read succeeded with no row).
   // Let them reach the login screen so they can switch accounts instead of hard-blocking.
-  if (user && !memberLoading && !isMember && location.pathname !== `${basePath}/login`) {
+  if (user && !memberLoading && workspaceAccess === "denied" && location.pathname !== `${basePath}/login`) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">

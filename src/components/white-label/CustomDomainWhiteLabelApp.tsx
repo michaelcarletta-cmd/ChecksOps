@@ -12,6 +12,7 @@ import { Routes, Route, Navigate, useLocation, Link } from "react-router-dom";
 import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isMasterMerchant } from "@/lib/masterMerchant";
+import { decideWorkspaceAccess, identityListsTenant } from "@/lib/workspaceAccess";
 import { loginPathWithNext, postLoginPath } from "@/lib/loginReturnPath";
 
 const Payments = lazy(() => import("@/pages/Payments"));
@@ -46,23 +47,45 @@ function CustomDomainRoutes() {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
 
-  const { data: isTenantMember, isLoading: memberLoading } = useQuery({
+  // Membership: the server's organization list from /identity/me first, then the tenant_users
+  // read. A failed read is not "no row" (workspaceAccess.ts). Same query key and shape as
+  // WhiteLabelApp.
+  const identityListsThisTenant = identityListsTenant(
+    user?.app_metadata?.tenant_memberships,
+    tenant?.id,
+    tenant?.slug,
+  );
+  const {
+    data: membershipRead,
+    isLoading: memberQueryLoading,
+    isFetching: memberFetching,
+    refetch: refetchMembership,
+  } = useQuery({
     queryKey: ["tenant-membership", tenant?.id, user?.id],
     queryFn: async () => {
-      if (!tenant?.id || !user?.id) return false;
-      const { data } = await supabase
+      if (!tenant?.id || !user?.id) return { row: false, failed: false };
+      const { data, error } = await supabase
         .from("tenant_users")
         .select("id")
         .eq("tenant_id", tenant.id)
         .eq("user_id", user.id)
         .maybeSingle();
-      return !!data;
+      return { row: !!data, failed: !!error };
     },
     enabled: !!tenant?.id && !!user?.id,
   });
+  const memberLoading = !identityListsThisTenant && memberQueryLoading;
 
   // Master merchant can preview any tenant's Check Center
-  const isMember = !!isTenantMember || isMasterMerchant(user?.email, user?.id);
+  const workspaceAccess = decideWorkspaceAccess({
+    tenantId: tenant?.id,
+    tenantSlug: tenant?.slug,
+    identityTenants: user?.app_metadata?.tenant_memberships,
+    tenantUsersRow: !!membershipRead?.row,
+    tenantUsersError: !!membershipRead?.failed,
+    isMasterMerchant: isMasterMerchant(user?.email, user?.id),
+  });
+  const isMember = workspaceAccess === "member";
 
   if (loading || authLoading || (user && memberLoading)) {
     return (
@@ -96,7 +119,25 @@ function CustomDomainRoutes() {
     );
   }
 
-  if (user && !memberLoading && !isMember && location.pathname !== "/login") {
+  // The read failed and the identity list does not name this tenant: offer a retry, not a
+  // false "Access Denied".
+  if (user && !memberLoading && workspaceAccess === "unconfirmed" && location.pathname !== "/login") {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <h1 className="text-xl font-semibold">We couldn't confirm your access to {tenant.name}.</h1>
+          <p className="text-muted-foreground">
+            Check your connection and try again.
+          </p>
+          <Button onClick={() => void refetchMembership()} disabled={memberFetching}>
+            {memberFetching ? "Checking…" : "Retry"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !memberLoading && workspaceAccess === "denied" && location.pathname !== "/login") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">

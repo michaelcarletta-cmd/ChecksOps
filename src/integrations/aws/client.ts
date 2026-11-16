@@ -9,6 +9,7 @@ import {
   invokeAwsCheckAltProviderFunction,
   isLegacyCheckAltProviderFunction,
 } from "@/lib/awsCheckAltMoneyPath";
+import { identityTenantMemberships } from "@/lib/workspaceAccess";
 
 export {
   AWS_STAGING_AUTH_SESSION_KEY,
@@ -137,6 +138,9 @@ const toUser = (identity: Record<string, unknown>, emailFallback?: string | null
             .map((row) => (row as { role?: unknown })?.role)
             .filter((role): role is string => typeof role === "string" && Boolean(role.trim()))
         : [],
+      // The server's list of the user's organizations (tenant_id, tenant_slug, role), so
+      // workspace access does not hang on one client read of tenant_users (workspaceAccess.ts).
+      tenant_memberships: identityTenantMemberships(identity.tenants),
     },
     user_metadata: {
       email,

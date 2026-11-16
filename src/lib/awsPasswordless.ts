@@ -3,6 +3,7 @@ import {
   AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
   awsApiBaseUrl,
 } from "@/lib/awsStaging";
+import { identityTenantMemberships } from "@/lib/workspaceAccess";
 
 const PENDING_KEY_DEFAULT = "checksops.aws.staging.passwordless.pending";
 const PENDING_KEY_MORTGAGE = "checksops.aws.staging.passwordless.pending.mortgage-ops";
@@ -151,6 +152,8 @@ export async function verifyAwsEmailOtp(
             .map((row: { role?: unknown }) => row?.role)
             .filter((role: unknown): role is string => typeof role === "string" && Boolean(role.trim()))
         : [],
+      // Same as the AWS client's toUser: the server's organization list for workspace access.
+      tenant_memberships: identityTenantMemberships(identity?.tenants),
     },
     user_metadata: {
       email: mappedEmail,
