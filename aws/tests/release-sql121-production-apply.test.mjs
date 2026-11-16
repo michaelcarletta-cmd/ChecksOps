@@ -243,10 +243,10 @@ test('order: no predecessor and no order; the cash-job tables, columns, function
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL121_FILE), []);
   assert.equal(plan.members['workflow.mjs'].sql_before, 'aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql');
   // One public trigger more once applied: the DB validator followed the staging apply (run 40591140684),
-  // as #1309 did for SQL 120, and justifies it by name (183; 184 since SQL 123's trigger followed; 185 since SQL 143's; 187 since SQL 152's; 189 since SQL 154's; 190 since SQL 155's).
+  // as #1309 did for SQL 120, and justifies it by name (183; 184 since SQL 123's trigger followed; 185 since SQL 143's; 187 since SQL 152's; 189 since SQL 154's; 190 since SQL 155's; 192 since SQL 168's two).
   const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
   assert.match(validator, /trigger: 'aws_checkalt_deposit_cash_job_payment',\n\s+functionName: 'aws_record_cash_job_checkalt_payment'/);
-  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 190;/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 192;/);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
