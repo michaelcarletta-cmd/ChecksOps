@@ -40,7 +40,7 @@ refusing the delete of a charged check until its own later step (a Lambda overla
 this pin is applied in production. No API, Lambda or SPA change is part of this pin. Deposits, CheckAlt deposits,
 disbursements, payments and payment directions keep blocking a delete.
 
-**Status:** applied in staging (wave 61, 2026-11-16, apply run 43923431127); staging acceptance: the staging apply under the owner's run approval ("apply SQL 169 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `29ddf3f2-9ca8-467d-8877-a84e95294f14`, 2026-11-16) by the owner-reviewed pin change; not applied in production.
+**Status:** applied in staging (wave 61, 2026-11-16, apply run 43923431127); staging acceptance: the staging apply under the owner's run approval ("apply SQL 169 in staging"; no separate acceptance statement); applied to production (2026-11-16); the production pin is retired (`execute: false`). Deleting a charged check in the app is not part of this record: the delete-check API still lists `check_billing_events` as a blocker until its own later step (a guarded Lambda overlay of `workflow-delete-check.mjs`).
 
 **Staging read-live (2026-11-16).** Run 43919046029 (main `294055a93`, after executor inspect run 43917310640 and executor deploy
 run 43917926456 (executor CodeSha256 `aU0HiKBL…` -> `DA2QdHRx…`)), under the owner's words "apply SQL 169 in staging":
@@ -75,6 +75,28 @@ after that merge is on main and staged, under the owner's words for that run (ph
 **Not verified by the inspect** (it fingerprints only the foreign key): whether `public.check_billing_events.check_intake_item_id`
 is nullable on production (the file refuses with `sql169_column_not_nullable` at apply time if it is NOT NULL, applying nothing)
 and whether `checksops_admin` owns `check_billing_events` (the apply engine refuses if it does not).
+
+**Production apply (2026-11-16).** After the pin change (#1949, merged to main as `6641007ab` on the owner's words "merge the SQL 169
+production pin PR"), transfer run 43930251982 (`sql53-temporary-transfer.yml`) staged main `6641007ab` (tarball sha256
+`20b86c779cb709b2a6c7b09a2cd17c0ebbd00897b0c55c5330f57e29530107bd`, checked by `sha256sum -c` on the runner; `SOURCE_COMMIT`
+matched). Three AWS-managed SSM commands were listed InProgress on the stopped runner, queued at 18:03Z during the
+production inspect `29ddf3f2`: `23a4d3b2` AmazonInspector2-ConfigureInspectorSsmPluginLinux (Success), `4eb94d50` AmazonInspector2-ConfigureInspectorSsmPlugin (Success), `3effe72b` AWS-ConfigureAWSPackage (Success); as for SQL 166 and SQL 167, the runner was started and no SQL
+command was sent until nothing was in progress (20 s). Under the owner's words "apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED" (passed verbatim to
+this run), on `i-0c35557c4e5385406` (root volume 39% used): one-shot `--phase inspect`
+(SSM `40b64605-6154-413e-abbd-78cdc6643f51`, Success, exit 0, steps pin, source, inspect and contracts ok, nothing written) read live
+`f7530ea5…` (`live_matches_expected` true, `already_applied` false, `precondition_failures` `[]`); the apply command
+was sent only after that. Then `--phase apply` (SSM `9c92cb54-fc92-47b0-9fa1-cb7764b2f992`, Success, exit 0, run
+`d64ba504-e0e3-42ea-92d4-57ae4af26008`, workstream `prod-sql169-keep-charge-on-delete-20261116`, one_use_id
+`sql169-prod-91223610-db3b-4249-b7b3-59502f378d5d`): contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest
+`863032d4…`; receipt `f7530ea5…` → `30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969` (intended), result `applied`,
+unrelated catalog `9f8eca61…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`,
+`check_billing_events_check_intake_item_id_fkey` `intended` (ON DELETE SET NULL). The run's whole output arrived (17372 bytes, sha256
+`9705f1c56c96e5b973ac1d81e203b62efc3abca5fa1399d3bcc35ed537ff581a`; read back in compact form and re-serialized to that same size and
+sha256; the copy on the runner was removed afterwards). The two points the production inspect did not verify are inferred from the successful apply, not read
+separately: the file's NOT NULL guard did not refuse, so the column is nullable, and the engine's owner check did not refuse. A process check after the apply found no one-shot running and the runner
+was stopped afterwards. Recorded in the pin's `applied` and `production_evidence`; `execute` is false again. Production
+acceptance had not been reported by the owner when this record was written; this record does not claim it. Deleting a charged
+check in the app needs the later delete-check API step; it is not part of this record.
 
 ## Fingerprint
 
