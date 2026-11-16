@@ -4,7 +4,7 @@
  * deleting a check that has a ChecksOps charge: "Delete, keep charge (Recommended)".
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 169 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 61) from staging read-live run 43919046029, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the spec's one constraints entry (SQL 169 creates or replaces no function): the fingerprint is
  *     check_billing_events_check_intake_item_id_fkey's definition and validated flag;
@@ -119,7 +119,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 169 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 169 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -130,11 +130,15 @@ test('pin: SQL 169 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql169-check-billing-events-keep-charge-on-check-delete');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending until a reviewed pin change records a staging read-live.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-16) from staging read-live run 43919046029: already_applied false,
+  // precondition_failures []. It read the derived pre-state (the ON DELETE CASCADE key).
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-16: staging apply (wave 61) from staging read-live run 43919046029');
+  assert.equal(pin.expected_live_definition_sha256, CASCADE_PRE);
+  assert.equal(pin.expected_live_definition_sha256, 'f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-169-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 61\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-169-apply.md'), 'utf8'), /read-live \(2026-11-16\)\.\*\* Run 43919046029/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(CASCADE_PRE, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
@@ -301,7 +305,9 @@ test('PostgreSQL 16: SQL 169 through the executor from the Supabase CASCADE key:
   assert.equal(r.already_applied, false);
   // The live pre-state is the one the runbook and the pins name.
   assert.equal(r.live_definition_sha256, CASCADE_PRE);
-  // A pending pin cannot apply.
+  // The committed staging pin is authorized on exactly this pre-state (wave 61, read-live run 43919046029).
+  assert.equal(r.pin_executable, true);
+  // A pending pin cannot apply: a pending copy of the committed pin (the committed pin is staging-authorized, wave 61).
   const pendingCopy = pendingPin(PINS[KEY]);
   const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
