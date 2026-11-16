@@ -12,7 +12,10 @@
  *       after publish: each marketing path serves its own page, "/" and "/login" still serve
  *       index.html (the home og:title), the entry bundle loads, /prep/health is 200 ok.
  *   --origin https://checksops.com --expect home
- *       after revert: every marketing path is index.html again; the rest as after publish.
+ *       every marketing path is index.html (the pre-tool function); the rest as after publish.
+ *   --www redirect | --www serve (production only)
+ *       after publish: https://www.checksops.com/ and /login answer 301 to the same path (and query)
+ *       on https://checksops.com; after revert: they serve index.html. Both: www /prep/health 200 ok.
  * Retries the whole set (--attempts, --delay seconds) while CloudFront propagates.
  */
 import path from 'node:path';
@@ -20,6 +23,8 @@ import { fileURLToPath } from 'node:url';
 import { HOME_PAGE, MARKETING_PAGES } from '../../src/pages/marketing/marketingPages.ts';
 
 export const PRODUCTION_ORIGIN = 'https://checksops.com';
+export const WWW_ORIGIN = 'https://www.checksops.com';
+export const WWW_PATHS = Object.freeze(['/', '/login']);
 export const ORIGINS = Object.freeze([PRODUCTION_ORIGIN, 'https://staging.checksops.com']);
 
 // The same escaping marketingStaticHead.ts uses for attribute values.
@@ -50,10 +55,38 @@ export function entryBundlePath(html) {
 
 async function get(url) {
   const response = await fetch(url, { headers: { 'cache-control': 'no-cache' }, redirect: 'manual', signal: AbortSignal.timeout(20000) });
-  return { status: response.status, contentType: response.headers.get('content-type'), body: await response.text() };
+  return { status: response.status, contentType: response.headers.get('content-type'), location: response.headers.get('location'), body: await response.text() };
 }
 
-export async function probeOnce({ origin, expect, tag, fetcher = get }) {
+/** www.checksops.com: "redirect" = 301 to the same path and query on checksops.com; "serve" = index.html. */
+export async function probeWww({ www, tag, fetcher = get }) {
+  const problems = [];
+  const lines = [];
+  for (const pagePath of WWW_PATHS) {
+    const url = `${WWW_ORIGIN}${pagePath}?probe=${tag}`;
+    let response;
+    try { response = await fetcher(url); } catch (error) { problems.push(`www ${pagePath}: ${error?.message || error}`); continue; }
+    if (www === 'redirect') {
+      const want = `${PRODUCTION_ORIGIN}${pagePath}?probe=${tag}`;
+      if (response.status !== 301 || response.location !== want) problems.push(`www ${pagePath}: status ${response.status}, location ${response.location}`);
+      else lines.push(`www ${pagePath}: 301 -> ${want}`);
+    } else {
+      const found = checkPage(response, HOME_PAGE.title);
+      if (found.length) problems.push(`www ${pagePath}: ${found.join(', ')}`);
+      else lines.push(`www ${pagePath}: 200 ${response.contentType}, og:title "${HOME_PAGE.title}"`);
+    }
+  }
+  try {
+    const response = await fetcher(`${WWW_ORIGIN}/prep/health`);
+    let status = null;
+    try { status = JSON.parse(response.body)?.status; } catch { /* reported below */ }
+    if (response.status !== 200 || status !== 'ok') problems.push(`www /prep/health: status ${response.status}, body status ${status}`);
+    else lines.push('www /prep/health: 200 ok (not redirected)');
+  } catch (error) { problems.push(`www /prep/health: ${error?.message || error}`); }
+  return { problems, lines };
+}
+
+export async function probeOnce({ origin, expect, tag, www = null, fetcher = get }) {
   const production = origin === PRODUCTION_ORIGIN;
   const problems = [];
   const lines = [];
@@ -84,6 +117,11 @@ export async function probeOnce({ origin, expect, tag, fetcher = get }) {
       else lines.push('/prep/health: 200 ok');
     } catch (error) { problems.push(`/prep/health: ${error?.message || error}`); }
   }
+  if (production && www) {
+    const checked = await probeWww({ www, tag, fetcher });
+    problems.push(...checked.problems);
+    lines.push(...checked.lines);
+  }
   return { ok: problems.length === 0, problems, lines };
 }
 
@@ -98,6 +136,7 @@ export function parseArgs(argv) {
     else if (flag === '--attempts') args.attempts = Number(value);
     else if (flag === '--delay') args.delay = Number(value);
     else if (flag === '--tag') args.tag = value;
+    else if (flag === '--www') args.www = value;
     else throw new Error(`unknown_argument:${flag}`);
   }
   if (!ORIGINS.includes(args.origin)) throw new Error(`origin_invalid:${args.origin}`);
@@ -105,6 +144,7 @@ export function parseArgs(argv) {
   if (!Number.isInteger(args.attempts) || args.attempts < 1 || args.attempts > 40) throw new Error('attempts_invalid');
   if (!Number.isFinite(args.delay) || args.delay < 0 || args.delay > 120) throw new Error('delay_invalid');
   if (!/^[A-Za-z0-9-]+$/.test(args.tag)) throw new Error('tag_invalid');
+  if (args.www !== undefined && (!['redirect', 'serve'].includes(args.www) || args.origin !== PRODUCTION_ORIGIN)) throw new Error(`www_invalid:${args.www}`);
   return args;
 }
 
@@ -115,7 +155,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   for (let attempt = 1; attempt <= args.attempts; attempt += 1) {
     last = await probeOnce({ ...args, tag: `${args.tag}-${attempt}`, fetcher: deps.fetcher });
     if (last.ok) {
-      process.stdout.write(`- ${args.origin}, expect ${args.expect} (attempt ${attempt}):\n${last.lines.map((line) => `  - ${line}`).join('\n')}\n`);
+      process.stdout.write(`- ${args.origin}, expect ${args.expect}${args.www ? `, www ${args.www}` : ''} (attempt ${attempt}):\n${last.lines.map((line) => `  - ${line}`).join('\n')}\n`);
       return 0;
     }
     if (attempt < args.attempts) await sleep(args.delay * 1000);

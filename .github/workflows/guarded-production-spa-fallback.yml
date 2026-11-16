@@ -3,8 +3,9 @@ name: Guarded production SPA fallback
 # Runbook ops/deployment-guard/PRODUCTION_SPA_FALLBACK.md: the CloudFront Function
 # checksops-production-spa-fallback (viewer-request on the default behavior of distribution
 # E1B0ZWWO5559U5, checksops.com). publish puts aws/cloudfront/spa-fallback.js LIVE, which passes the
-# public marketing pages through to their own S3 objects instead of rewriting them to /index.html;
-# revert puts aws/cloudfront/spa-fallback.baseline.js (the code LIVE before this tool) back.
+# public marketing pages through to their own S3 objects instead of rewriting them to /index.html
+# and answers www.checksops.com with a 301 to the same path on checksops.com (never /prep);
+# revert puts aws/cloudfront/spa-fallback.baseline.js (the code LIVE before the www redirect) back.
 # The distribution is never changed and no function is created or deleted. Code comes only from
 # those two repository files.
 # inspect reads both function stages, the distribution and the page objects, and probes the public
@@ -244,14 +245,15 @@ jobs:
         if: ${{ inputs.mode != 'inspect' }}
         shell: bash
         env:
-          PROBE_EXPECT: ${{ inputs.mode == 'publish' && 'own' || 'home' }}
+          PROBE_WWW: ${{ inputs.mode == 'publish' && 'redirect' || 'serve' }}
         run: |
           set -euo pipefail
-          # publish: each marketing path serves its own page; revert: index.html again. Both: "/" and
-          # "/login" serve index.html, the entry bundle loads, /prep/health is 200 ok. CloudFront
-          # propagates a function change to edges over a few minutes.
+          # Both versions serve each marketing path's own page, "/" and "/login" as index.html, the
+          # entry bundle and /prep/health 200 ok. publish: www.checksops.com answers 301 to the same
+          # path on checksops.com; revert: www serves index.html again. www /prep is never
+          # redirected. CloudFront propagates a function change to edges over a few minutes.
           echo "### Public production check" >> "$GITHUB_STEP_SUMMARY"
-          node --experimental-strip-types scripts/deployment-guard/spa-fallback-public-probe.mjs --origin https://checksops.com --expect "$PROBE_EXPECT" --attempts 20 --delay 30 --tag "$GITHUB_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+          node --experimental-strip-types scripts/deployment-guard/spa-fallback-public-probe.mjs --origin https://checksops.com --expect own --www "$PROBE_WWW" --attempts 20 --delay 30 --tag "$GITHUB_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup ephemeral deployment-guard state
         if: ${{ always() }}
