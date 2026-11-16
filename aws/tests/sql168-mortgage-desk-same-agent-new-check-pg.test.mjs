@@ -17,7 +17,10 @@
  * Proves: the file refuses without its prerequisites and from a login that cannot reach the relations; it installs two
  * DEFINER functions (search_path public, pg_temp; row_security on; EXECUTE for the owner only) and two triggers; a re-run
  * leaves the same functions and triggers; the routing creates one in_progress request, assigned to the agent, accepted
- * now, with the claim, endorsement order 1, the source's details and one audit row, on a loss draft insert by the API
+ * now, with the claim, endorsement order 1, the source's details, one check_messages row on the new check sent by the
+ * agent ("ChecksOps Mortgage Desk added this check to <name>'s file automatically (same claim).", the agent's profile
+ * name or "the agent already handling this claim") and one audit row, and no message when nothing is routed or the
+ * routing fails, on a loss draft insert by the API
  * login, on trg_auto_create_loss_draft, on a claim link (Review save, the auto-link set in a BEFORE trigger, SQL 167's
  * relink run with row_security = off); it picks the most recent in-progress request whose agent is active, else the
  * most recent completed one, never a 2nd mortgagee's, a cancelled or queued request, an inactive agent or one without
@@ -122,6 +125,16 @@ CREATE TABLE public.mortgage_ops_request_audit (
   tenant_billing_event_id uuid, payload jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE public.mortgage_agent_accounts (application_user_id uuid PRIMARY KEY,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')));
+-- The check thread (sql98To100Schema's shape) and the profiles SQL 158 reads the agent's name from.
+CREATE TABLE public.check_messages (
+  id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  check_id uuid NOT NULL REFERENCES public.check_intake_items(id) ON DELETE CASCADE,
+  sender_id uuid NOT NULL,
+  body text NOT NULL CHECK (length(trim(body)) > 0 AND length(body) <= 5000),
+  is_deleted boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.profiles (id uuid PRIMARY KEY, email text, full_name text);
 -- SQL 160's billing tables (its PostgreSQL test's shapes).
 CREATE TABLE public.deposit_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), check_id uuid, provider public.deposit_provider);
 CREATE TABLE public.check_billing_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid, check_intake_item_id uuid,
@@ -208,6 +221,8 @@ ALTER TABLE public.loss_draft_tracking ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mortgage_handling_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mortgage_ops_request_audit ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mortgage_agent_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.check_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY api_checks ON public.check_intake_items FOR ALL TO checksops USING (true) WITH CHECK (true);
 CREATE POLICY api_loss_drafts ON public.loss_draft_tracking FOR ALL TO checksops USING (true) WITH CHECK (true);
 GRANT SELECT, INSERT, UPDATE ON public.check_intake_items, public.loss_draft_tracking TO checksops;
@@ -220,6 +235,8 @@ INSERT INTO public.mortgage_ops_billing_launch VALUES (true, '2026-01-01T00:00:0
 INSERT INTO public.mortgage_agent_compensation_rates VALUES (true, 1000, 500);
 INSERT INTO public.user_roles (user_id, role) VALUES ('${A1}', 'mortgage_agent'), ('${A2}', 'mortgage_agent'), ('${A3}', 'mortgage_agent'), ('${A4}', 'staff');
 INSERT INTO public.mortgage_agent_accounts VALUES ('${A2}', 'active'), ('${A3}', 'inactive');
+-- A1 has a name on file; A2 has a profile with a blank name (the message then names no one).
+INSERT INTO public.profiles (id, full_name) VALUES ('${A1}', ' Alex Agent '), ('${A2}', '  ');
 INSERT INTO public.tenant_documents (tenant_id, file_path) VALUES ('${T}', 'library/mortgage/w9.pdf');
 INSERT INTO public.claims (id, org_id, claim_number, policyholder_name) VALUES ('${K}', '${T}', 'CLM-K', 'Kay'), ('${KX}', '${T}', 'CLM-X', 'Ex');
 `;
@@ -252,7 +269,7 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     // Without its prerequisites the file refuses and installs nothing.
     await assert.rejects(owner.query(fileText), (error) => {
       assert.equal(error.code, '55000');
-      assert.match(error.message, /^sql168_prerequisite_missing: .*missing public\.check_intake_items, public\.has_role\(uuid, public\.app_role\), public\.loss_draft_tracking, public\.mortgage_agent_accounts, public\.mortgage_handling_requests, public\.mortgage_ops_request_audit$/);
+      assert.match(error.message, /^sql168_prerequisite_missing: .*missing public\.check_intake_items, public\.check_messages, public\.has_role\(uuid, public\.app_role\), public\.loss_draft_tracking, public\.mortgage_agent_accounts, public\.mortgage_handling_requests, public\.mortgage_ops_request_audit, public\.profiles$/);
       return true;
     });
     await admin.query(SCHEMA);
@@ -265,11 +282,14 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     await owner.query('ALTER TABLE public.mortgage_handling_requests RENAME COLUMN homeowner_ssn_last_four TO ssn_moved');
     await assert.rejects(owner.query(fileText), /sql168_prerequisite_missing: .*missing column public\.mortgage_handling_requests\.homeowner_ssn_last_four$/);
     await owner.query('ALTER TABLE public.mortgage_handling_requests RENAME COLUMN ssn_moved TO homeowner_ssn_last_four');
+    await owner.query('ALTER TABLE public.check_messages RENAME COLUMN sender_id TO sender_moved');
+    await assert.rejects(owner.query(fileText), /sql168_prerequisite_missing: .*missing column public\.check_messages\.sender_id$/);
+    await owner.query('ALTER TABLE public.check_messages RENAME COLUMN sender_moved TO sender_id');
 
     // A login that does not own the relations cannot install the DEFINER, nor can the owner while one is FORCE RLS.
     const other = await connect('other_admin');
     clients.push(other);
-    await assert.rejects(other.query(fileText), /sql168_definer_cannot_reach: the login running SQL 168 must own check_intake_items, loss_draft_tracking, mortgage_agent_accounts, mortgage_handling_requests, mortgage_ops_request_audit/);
+    await assert.rejects(other.query(fileText), /sql168_definer_cannot_reach: the login running SQL 168 must own check_intake_items, check_messages, loss_draft_tracking, mortgage_agent_accounts, mortgage_handling_requests, mortgage_ops_request_audit, profiles/);
     await owner.query('ALTER TABLE public.mortgage_ops_request_audit FORCE ROW LEVEL SECURITY');
     await assert.rejects(owner.query(fileText), /sql168_definer_cannot_reach: .*must own mortgage_ops_request_audit \(without FORCE/);
     await owner.query('ALTER TABLE public.mortgage_ops_request_audit NO FORCE ROW LEVEL SECURITY');
@@ -320,6 +340,14 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     clients.push(api);
     const requestsOf = async (checkId) => (await admin.query(`SELECT *, date_of_loss::text AS date_of_loss_text FROM public.mortgage_handling_requests WHERE check_intake_item_id = $1 ORDER BY created_at`, [checkId])).rows;
     const auditOf = async (requestId) => (await admin.query(`SELECT actor_id, action, reason, from_status, to_status, payload FROM public.mortgage_ops_request_audit WHERE mortgage_request_id = $1`, [requestId])).rows;
+    const messagesOf = async (checkId) => (await admin.query(`SELECT id, check_id, sender_id, body, is_deleted FROM public.check_messages WHERE check_id = $1 ORDER BY created_at`, [checkId])).rows;
+    const NAMED = (name) => `ChecksOps Mortgage Desk added this check to ${name}'s file automatically (same claim).`;
+    const UNNAMED = "ChecksOps Mortgage Desk added this check to the agent already handling this claim's file automatically (same claim).";
+    /** Nothing routed: no request and no message on the check. */
+    const assertNotRouted = async (n, label = `check ${n}`) => {
+      assert.deepEqual(await requestsOf(check(n)), [], label);
+      assert.deepEqual(await messagesOf(check(n)), [], label);
+    };
     const eventsOf = async (checkId) => (await admin.query(`SELECT event_type, unit_price_cents FROM public.check_billing_events WHERE check_intake_item_id = $1 ORDER BY event_type`, [checkId])).rows;
     const snapshotRequests = async () => (await admin.query(`SELECT jsonb_object_agg(id, jsonb_build_object('xmin', xmin::text, 'row', to_jsonb(r))) AS m FROM public.mortgage_handling_requests r`)).rows[0].m;
     const addCheck = async (n, { tenant = T, claim = K, stage = 'review', deposited = null, status = 'review' } = {}) => owner.query(
@@ -328,7 +356,7 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     const addLossDraft = async (n, client = api) => client.query(
       `INSERT INTO public.loss_draft_tracking (check_intake_item_id, mortgage_servicer) VALUES ($1, 'Servicer')`, [check(n)]);
     /** A request the routing created: in progress, the agent, accepted now, the claim, order 1, the source's details, one audit row. */
-    const assertRouted = async (n, { agent, claim, source, firedBy, details = DETAILS }) => {
+    const assertRouted = async (n, { agent, claim, source, firedBy, details = DETAILS, body = agent === A1 ? NAMED('Alex Agent') : UNNAMED }) => {
       const rows = await requestsOf(check(n));
       assert.equal(rows.length, 1, `check ${n}: ${JSON.stringify(rows)}`);
       const [r] = rows;
@@ -349,10 +377,15 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
              WHERE c.claim_id = $1 AND r.check_intake_item_id <> $2 AND r.status = 'in_progress' AND COALESCE(r.endorsement_order, 1) = 1
                AND r.assigned_employee_id = $3 AND r.accepted_at < $4 ORDER BY r.accepted_at DESC LIMIT 1`, [claim, check(n), agent, r.accepted_at])).rows[0] }
         : source;
+      // One message on the new check's thread, sent by the agent, visible (not deleted), naming the agent when it can.
+      const messages = await messagesOf(check(n));
+      assert.equal(messages.length, 1, `check ${n} messages: ${JSON.stringify(messages)}`);
+      assert.deepEqual({ ...messages[0], id: undefined }, { id: undefined, check_id: check(n), sender_id: agent, body, is_deleted: false });
+      assert.match(messages[0].body, /^ChecksOps Mortgage Desk added this check to .+'s file automatically \(same claim\)\.$/);
       assert.deepEqual(await auditOf(r.id), [{
         actor_id: null, action: 'auto_route_same_agent', reason: 'Routed to the agent who handled an earlier check on this claim',
         from_status: 'requested', to_status: 'in_progress',
-        payload: { agent_id: agent, source_request_id: expected.id, source_check_id: expected.check, source_request_status: expected.status, claim_id: claim, fired_by: firedBy, source: 'sql168' },
+        payload: { agent_id: agent, source_request_id: expected.id, source_check_id: expected.check, source_request_status: expected.status, claim_id: claim, message_id: messages[0].id, fired_by: firedBy, source: 'sql168' },
       }]);
       return r;
     };
@@ -374,6 +407,7 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     assert.deepEqual(afterMain[req(1)], beforeMain[req(1)]);
     // Again (a direct call, as the owner): the check now has an open request; nothing.
     assert.equal((await owner.query(`SELECT public.aws_mortgage_desk_route_same_agent($1, 'test') AS r`, [check(2)])).rows[0].r, null);
+    assert.equal((await messagesOf(check(2))).length, 1);
     assert.deepEqual(await snapshotRequests(), afterMain);
 
     // 2) Never: locked checks, no loss draft, no claim, a request already requested / in progress / completed.
@@ -392,8 +426,9 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     await owner.query(`INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_id, claim_id, status, endorsement_order, total_mortgagees) VALUES ('${req(9)}', '${T}', '${check(9)}', '${K}', 'requested', 2, 2)`);
     const beforeNever = await snapshotRequests();
     for (const n of [7, 8, 9]) await addLossDraft(n);
-    for (const n of [3, 4, 5, 6]) assert.deepEqual(await requestsOf(check(n)), [], `locked check ${n}`);
+    for (const n of [3, 4, 5, 6]) await assertNotRouted(n, `locked check ${n}`);
     assert.deepEqual(await snapshotRequests(), beforeNever, 'existing requests untouched, none added');
+    for (const n of [7, 8, 9]) assert.deepEqual(await messagesOf(check(n)), [], `check ${n} has a request: no message`);
     // A cancelled request does not count: the check is routed.
     await addCheck(10);
     await owner.query(`INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_id, claim_id, status, cancelled_at) VALUES ('${req(10)}', '${T}', '${check(10)}', '${K}', 'cancelled', now())`);
@@ -402,13 +437,13 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     // A check with a claim but no loss draft: nothing (its claim is set; the loss draft is the other half).
     await addCheck(11, { claim: null });
     await api.query(`UPDATE public.check_intake_items SET claim_id = '${K}' WHERE id = $1`, [check(11)]);
-    assert.deepEqual(await requestsOf(check(11)), []);
+    await assertNotRouted(11);
 
     // 3) The claim link fire points, on checks that already have their loss draft.
     // a. The Review save: claim_id set from NULL by the API.
     await addCheck(12, { claim: null });
     await addLossDraft(12);
-    assert.deepEqual(await requestsOf(check(12)), [], 'no claim yet');
+    await assertNotRouted(12, 'no claim yet');
     await api.query(`UPDATE public.check_intake_items SET claim_id = '${K}' WHERE id = $1`, [check(12)]);
     await assertRouted(12, { agent: A1, claim: K, source: LATEST, firedBy: 'check_intake_items' });
     // b. SQL 41's auto-link: claim_id is not in the UPDATE; the BEFORE trigger sets it, the WHEN sees it.
@@ -423,7 +458,7 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     await owner.query('ROLLBACK');
     await addCheck(14, { claim: KX });
     await addLossDraft(14);
-    assert.deepEqual(await requestsOf(check(14)), [], 'no handled check on the wrong claim');
+    await assertNotRouted(14, 'no handled check on the wrong claim');
     const relinked = (await api.query(`SELECT public.claim_ledger_relink_check($1, $2, 'CLM-K', 'relink', $3) AS r`, [check(14), T, ACTOR])).rows[0].r;
     assert.equal(relinked.code, 'relinked');
     await assertRouted(14, { agent: A1, claim: K, source: LATEST, firedBy: 'check_intake_items' });
@@ -431,10 +466,10 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     await addCheck(15, { claim: KX });
     await addLossDraft(15);
     await api.query(`UPDATE public.check_intake_items SET status = 'review_saved' WHERE id = $1`, [check(15)]);
-    assert.deepEqual(await requestsOf(check(15)), []);
+    await assertNotRouted(15);
     // e. trg_auto_create_loss_draft: the check becomes loss_draft_required; the loss draft it inserts fires the routing.
     await addCheck(16);
-    assert.deepEqual(await requestsOf(check(16)), []);
+    await assertNotRouted(16);
     await api.query(`UPDATE public.check_intake_items SET status = 'loss_draft_required' WHERE id = $1`, [check(16)]);
     assert.equal((await admin.query('SELECT count(*)::int AS n FROM public.loss_draft_tracking WHERE check_intake_item_id = $1', [check(16)])).rows[0].n, 1);
     await assertRouted(16, { agent: A1, claim: K, source: LATEST, firedBy: 'loss_draft_tracking' });
@@ -458,6 +493,7 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     const k2 = (await requestsOf(check(25)))[0];
     assert.deepEqual([k2.assigned_employee_id, k2.loan_number], [A1, 'LN-22']);
     assert.equal((await auditOf(k2.id))[0].payload.source_request_id, req(22));
+    assert.deepEqual((await messagesOf(check(25))).map((m) => [m.sender_id, m.body]), [[A1, NAMED('Alex Agent')]]);
     // Claim K3: no in-progress request; completed by A2 (earlier) and by A4 (later, but not a mortgage agent), a cancelled
     // one by A1: the most recent completed whose agent is active, A2.
     await source(30, K3, 'completed', A2, '2026-10-01T00:00:00Z');
@@ -466,16 +502,18 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     await addCheck(33, { claim: K3 });
     await addLossDraft(33);
     assert.deepEqual((await requestsOf(check(33))).map((r) => [r.status, r.assigned_employee_id, r.loan_number]), [['in_progress', A2, 'LN-30']]);
+    // A2's profile has no name: the message names no one.
+    assert.deepEqual((await messagesOf(check(33))).map((m) => [m.sender_id, m.body]), [[A2, UNNAMED]]);
     // Claim K4: only an inactive agent's and a queued request: nothing, the tenant sends as today.
     await source(40, K4, 'completed', A3, '2026-10-01T00:00:00Z');
     await source(41, K4, 'requested', null, null);
     await addCheck(42, { claim: K4 });
     await addLossDraft(42);
-    assert.deepEqual(await requestsOf(check(42)), []);
+    await assertNotRouted(42);
     // Another tenant's check on claim K (a legacy claim both link): never routed from tenant T's request.
     await addCheck(43, { tenant: T2, claim: K });
     await addLossDraft(43);
-    assert.deepEqual(await requestsOf(check(43)), []);
+    await assertNotRouted(43);
     // The source's agent deactivated after the routing: later checks fall back (here: none left on K but A2's completed
     // request on C8, so A2).
     await owner.query(`INSERT INTO public.mortgage_agent_accounts VALUES ('${A1}', 'inactive')`);
@@ -490,9 +528,18 @@ test('SQL 168: a new check with a loss draft on a claim the Desk handles is rout
     await addCheck(50);
     await addLossDraft(50);
     assert.equal((await admin.query('SELECT count(*)::int AS n FROM public.loss_draft_tracking WHERE check_intake_item_id = $1', [check(50)])).rows[0].n, 1);
-    assert.deepEqual(await requestsOf(check(50)), []);
+    await assertNotRouted(50);
     assert.deepEqual(await eventsOf(check(50)), []);
     await owner.query('DROP TRIGGER fail_audit ON public.mortgage_ops_request_audit; DROP FUNCTION public.fail_audit();');
+    // A failed message rolls back the request and its accept too (the same subtransaction).
+    await owner.query(`CREATE FUNCTION public.fail_message() RETURNS trigger LANGUAGE plpgsql AS $f$ BEGIN RAISE EXCEPTION 'thread down'; END $f$;
+      CREATE TRIGGER fail_message BEFORE INSERT ON public.check_messages FOR EACH ROW EXECUTE FUNCTION public.fail_message();`);
+    await addCheck(51);
+    await addLossDraft(51);
+    assert.equal((await admin.query('SELECT count(*)::int AS n FROM public.loss_draft_tracking WHERE check_intake_item_id = $1', [check(51)])).rows[0].n, 1);
+    await assertNotRouted(51);
+    assert.deepEqual(await eventsOf(check(51)), []);
+    await owner.query('DROP TRIGGER fail_message ON public.check_messages; DROP FUNCTION public.fail_message();');
 
     // 6) Billing through SQL 160, unchanged. The claim's first charge is R1's; the routed checks record none. A claim
     // whose handled check was accepted before the Mortgage Ops billing launch has no charge: the routed check records

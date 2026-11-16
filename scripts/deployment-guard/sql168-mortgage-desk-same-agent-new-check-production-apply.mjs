@@ -6,8 +6,8 @@
  * (EXECUTE for the owner only), and two triggers (AFTER INSERT ON loss_draft_tracking; AFTER UPDATE ON
  * check_intake_items when claim_id is set or changed): a check with a claim and a loss draft, not deposited,
  * voided or returned, with no request, gets one request accepted for the still-active agent of the same
- * tenant's in-progress (else completed) request on that claim, its details copied, with one
- * mortgage_ops_request_audit row; no predecessor (owner 2026-11-16, "We need to make sure once a mortgage
+ * tenant's in-progress (else completed) request on that claim, its details copied, with one check-thread
+ * message from the agent and one mortgage_ops_request_audit row; no predecessor (owner 2026-11-16, "We need to make sure once a mortgage
  * agent handles a check, if another check comes in they handle each one for that check file"); see
  * ops/production-sql-168-apply.md.
  *

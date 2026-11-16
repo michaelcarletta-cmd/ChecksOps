@@ -8,7 +8,8 @@
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the file and spec: two new SECURITY DEFINER functions, public.aws_mortgage_desk_route_same_agent(uuid, text) and
  *     public.aws_mortgage_desk_route_same_agent_trigger(), with SQL 167's lock rule, SQL 158's active-agent rule, the
- *     tenant's insert shape, the agent's accept row change and one audit row, and two triggers; the prerequisite block,
+ *     tenant's insert shape, the agent's accept row change, one check-thread message (SQL 166's columns) and one audit
+ *     row, and two triggers; the prerequisite block,
  *     the REVOKEs (EXECUTE for the owner only), nothing else; pre- and post-conditions;
  *   - on PostgreSQL 16 (the release fixture plus SQL 166's Desk and loss draft schema and the columns and table SQL 168
  *     reads): the absent state read back as derived; refused while a column is missing, a relation is under FORCE ROW
@@ -63,7 +64,7 @@ const ROUTE = 'public.aws_mortgage_desk_route_same_agent(uuid, text)';
 const ROUTE_TRIGGER = 'public.aws_mortgage_desk_route_same_agent_trigger()';
 const IDENTITIES = Object.freeze([ROUTE, ROUTE_TRIGGER]);
 const RELATIONS = Object.freeze(['public.check_intake_items', 'public.loss_draft_tracking', 'public.mortgage_handling_requests',
-  'public.mortgage_ops_request_audit', 'public.mortgage_agent_accounts']);
+  'public.mortgage_ops_request_audit', 'public.mortgage_agent_accounts', 'public.check_messages', 'public.profiles']);
 const TRIGGER_TABLES = Object.freeze(['public.loss_draft_tracking', 'public.check_intake_items']);
 const ACL = Object.freeze(['owner EXECUTE']);
 const REVOKES = Object.freeze(['PUBLIC EXECUTE', 'anon EXECUTE', 'authenticated EXECUTE', 'service_role EXECUTE', 'checksops EXECUTE']);
@@ -258,7 +259,12 @@ test('reviewed file and spec: two new DEFINER functions with SQL 167\'s lock rul
   assert.match(body, /INSERT INTO public\.mortgage_ops_request_audit \(mortgage_request_id, actor_id, action, reason, from_status, to_status, payload\)\s+VALUES \(\s+v_new, NULL, 'auto_route_same_agent',/);
   // Writes: the new request (insert, then its accept) and one audit row; never a DELETE or another table.
   assert.deepEqual([...body.matchAll(/\b(UPDATE|INSERT INTO|DELETE FROM)\s+public\.([a-z_]+)/g)].map((m) => `${m[1]} ${m[2]}`),
-    ['INSERT INTO mortgage_handling_requests', 'UPDATE mortgage_handling_requests', 'INSERT INTO mortgage_ops_request_audit']);
+    ['INSERT INTO mortgage_handling_requests', 'UPDATE mortgage_handling_requests', 'INSERT INTO check_messages', 'INSERT INTO mortgage_ops_request_audit']);
+  // The check-thread message: SQL 166's columns, sent by the agent, the agent's profile name or the fallback.
+  const sql166 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/166_mortgage_desk_set_monitoring.sql'), 'utf8');
+  assert.ok(sql166.includes('INSERT INTO public.check_messages (check_id, sender_id, body, is_deleted, created_at)'));
+  assert.match(body, /SELECT NULLIF\(btrim\(COALESCE\(p\.full_name, ''\)\), ''\) INTO v_agent_name\s+FROM public\.profiles p\s+WHERE p\.id = v_src\.assigned_employee_id;/);
+  assert.match(body, /INSERT INTO public\.check_messages \(check_id, sender_id, body, is_deleted, created_at\)\s+VALUES \(\s+_check_id, v_src\.assigned_employee_id,\s+'ChecksOps Mortgage Desk added this check to '\s+\|\| COALESCE\(v_agent_name \|\| '''s', 'the agent already handling this claim''s'\)\s+\|\| ' file automatically \(same claim\)\.',\s+false, clock_timestamp\(\)\)/);
   assert.doesNotMatch(body, /\bDELETE\b|check_billing_events|endorsement_order, 1\) = 2|predecessor_request_id/);
   // The trigger function: the row's check, the routing in its own subtransaction, a WARNING with the SQLSTATE only.
   const trig = defs.aws_mortgage_desk_route_same_agent_trigger.prosrc.replace(/--[^\n]*/g, '');
@@ -270,11 +276,11 @@ test('reviewed file and spec: two new DEFINER functions with SQL 167\'s lock rul
   assert.deepEqual(spec.functions, IDENTITIES.map((identity) => ({ identity, acl: [...ACL], revokes: [...REVOKES] })));
   assert.deepEqual(spec.triggers, TRIGGERS);
   assert.deepEqual(spec.altered_relations, [...TRIGGER_TABLES]);
-  assert.deepEqual(spec.prerequisites.slice(0, 6), [...RELATIONS, 'public.has_role(uuid, public.app_role)']);
+  assert.deepEqual(spec.prerequisites.slice(0, 8), [...RELATIONS, 'public.has_role(uuid, public.app_role)']);
   // Every column the file's prerequisite block checks is a spec prerequisite, and nothing else.
-  const fileColumns = [...TEXT.matchAll(/\('(check_intake_items|loss_draft_tracking|mortgage_handling_requests|mortgage_ops_request_audit|mortgage_agent_accounts)', '([a-z_0-9]+)'\)/g)]
+  const fileColumns = [...TEXT.matchAll(/\('(check_intake_items|loss_draft_tracking|mortgage_handling_requests|mortgage_ops_request_audit|mortgage_agent_accounts|check_messages|profiles)', '([a-z_0-9]+)'\)/g)]
     .map((m) => `column public.${m[1]}.${m[2]}`);
-  assert.deepEqual(spec.prerequisites.slice(6), fileColumns);
+  assert.deepEqual(spec.prerequisites.slice(8), fileColumns);
   for (const column of COPIED) assert.ok(spec.prerequisites.includes(`column public.mortgage_handling_requests.${column}`), column);
   assert.deepEqual(spec.predecessors, []);
   assert.deepEqual(spec.definer_writes, [...RELATIONS]);

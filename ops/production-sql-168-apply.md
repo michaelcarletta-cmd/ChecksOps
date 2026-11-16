@@ -2,7 +2,7 @@
 
 | key | file | what it does |
 |---|---|---|
-| `sql168` | `aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql` (sha256 `3cd74219ec9a5c0a0901fd950ac8da395b18b540f72802f3e0e87949ab8970c6`, authored by `2943f86f1`) | Refuses without its prerequisites (`55000 sql168_prerequisite_missing`) or unless the applying login can reach `check_intake_items`, `loss_draft_tracking`, `mortgage_handling_requests`, `mortgage_ops_request_audit` and `mortgage_agent_accounts` past RLS (`55000 sql168_definer_cannot_reach`); then two new SECURITY DEFINER functions, EXECUTE for the owner only, and two new triggers. |
+| `sql168` | `aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql` (sha256 `5d0d8e9de8df9b90089618d799cca835580c1aaf59f1140ee07ba5de1b577d15`, authored by `5bdff4117`) | Refuses without its prerequisites (`55000 sql168_prerequisite_missing`) or unless the applying login can reach `check_intake_items`, `loss_draft_tracking`, `mortgage_handling_requests`, `mortgage_ops_request_audit`, `mortgage_agent_accounts`, `check_messages` and `profiles` past RLS (`55000 sql168_definer_cannot_reach`); then two new SECURITY DEFINER functions, EXECUTE for the owner only, and two new triggers. |
 
 **Why.** Today every check needs its own Send to Mortgage Desk (`SendToMortgageDeskButton`; the API inserts the request
 as `requested`, unassigned, SQL 100's tenant rule) and any agent may accept it from the shared queue, so a second check
@@ -37,11 +37,16 @@ agent handles a check, if another check comes in they handle each one for that c
   `homeowner_email`, `homeowner_phone`, `property_address` and `homeowner_ssn_last_four`; the agent's accept, the row
   change of `accept_mortgage_handling_request` and SQL 158's assign (`assigned_employee_id`, `in_progress`,
   `accepted_at = COALESCE(accepted_at, now())`, `updated_at`), guarded on still `requested` and unassigned; one
-  `mortgage_ops_request_audit` row (`action` `auto_route_same_agent`, `actor_id` NULL, `requested` to `in_progress`,
-  `payload` with the agent, the source request and check, the claim and what fired it). Idempotent: once it has run the
+  `check_messages` row on the new check so the tenant sees it (owner 2026-11-16: a short automatic message, no email to
+  the agent), in the columns SQL 166's Desk message writes (`check_id`, `sender_id` the agent, `body`, `is_deleted`
+  false, `created_at` `clock_timestamp()`): "ChecksOps Mortgage Desk added this check to <name>'s file automatically
+  (same claim)." with the agent's `profiles.full_name` (trimmed, as SQL 158 shows it), or "the agent already handling
+  this claim" when there is none; one `mortgage_ops_request_audit` row (`action` `auto_route_same_agent`, `actor_id`
+  NULL, `requested` to `in_progress`, `payload` with the agent, the source request and check, the claim, the message and
+  what fired it). Idempotent: once it has run the
   check has an open request, so a second call does nothing.
 - `aws_mortgage_desk_route_same_agent_trigger()` (RETURNS trigger) runs it for the row's check inside its own
-  subtransaction: any error rolls back only the routing and is reported as a WARNING carrying the SQLSTATE only; the
+  subtransaction: any error rolls back only the routing (the request, its accept, the message and the audit row) and is reported as a WARNING carrying the SQLSTATE only; the
   tenant's write goes through and the tenant can send as today.
 - Trigger `aws_loss_draft_route_same_agent`, AFTER INSERT ON `loss_draft_tracking` FOR EACH ROW (the API's loss draft
   insert, and `trg_auto_create_loss_draft` when the check becomes `loss_draft_required`).
@@ -54,7 +59,9 @@ agent handles a check, if another check comes in they handle each one for that c
   `service_role` and `checksops`; the owner keeps its own. A trigger runs its function without an EXECUTE check, and
   nothing calls them directly.
 
-Never: a 2nd-mortgagee request; any change to an existing request; a deposited, voided or returned check; a check with
+The message fires the live `check_messages` triggers unchanged, as SQL 166's and SQL 122's Desk messages do.
+
+Never: an email to the agent; a 2nd-mortgagee request; any change to an existing request; a deposited, voided or returned check; a check with
 no claim or no loss draft; another tenant's request or agent; an inactive agent. There is no per-tenant Mortgage Ops
 access flag in the schema; a tenant reaches this only through a request it sent itself on an earlier check of the claim.
 Existing checks are not back-filled: the triggers act on new events only.
@@ -86,11 +93,11 @@ wave 60 when approved (wave 59 is SQL 167, the highest on main).
 ## Fingerprint
 
 Code-derived on the release engine (`scripts/deployment-guard/lib/release-sql-state.mjs`, spec `sql168` in
-`release-sql-specs.mjs`). Intended `5536690fc45f29ebc1c481dcd54265543f7ddc0735277f2571fd7d63e87941ea`:
+`release-sql-specs.mjs`). Intended `6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166`:
 
 ```
 release sql168 v1
-function public.aws_mortgage_desk_route_same_agent(uuid, text): lang=plpgsql vol=v parallel=u secdef=true result=uuid config=row_security=on;search_path=public, pg_temp prosrc=4a6b258397258964cd70536feac0458344cba9fbdd326c68e64001e98e4a8597 acl=owner EXECUTE
+function public.aws_mortgage_desk_route_same_agent(uuid, text): lang=plpgsql vol=v parallel=u secdef=true result=uuid config=row_security=on;search_path=public, pg_temp prosrc=ed48550667547efc48bb81a2c87d347cf33bd2e58ff001e2a2196279aafc4b82 acl=owner EXECUTE
 function public.aws_mortgage_desk_route_same_agent_trigger(): lang=plpgsql vol=v parallel=u secdef=true result=trigger config=row_security=on;search_path=public, pg_temp prosrc=e38f3c2c99fbbb90fc2d2297f57b29e135ee5e78e5c8758e416f959488a6a713 acl=owner EXECUTE
 trigger public.loss_draft_tracking aws_loss_draft_route_same_agent: enabled=O def=3769e9227a22fb610c63abb8c589b9ead1a0306ce5e38b8255ce7b79e0e8b288
 trigger public.check_intake_items aws_check_claim_route_same_agent: enabled=O def=e51b64d909084de0d479ee33def3fd71d44ab3437fde3314a65662dfa27d0165
@@ -111,12 +118,12 @@ into a pin before a run reads it. A pre-state other than this one is a stop.
 
 ## Preconditions (both environments; production adds the pinned `checksops_admin` login)
 
-`prerequisites_present` (the five relations, `has_role(uuid, public.app_role)` and every column the file reads or
-copies, `homeowner_ssn_last_four` and the typed claim fields among them); `function_acl_replaceable`,
+`prerequisites_present` (the seven relations, `has_role(uuid, public.app_role)` and every column the file reads or
+copies or posts, `homeowner_ssn_last_four`, the typed claim fields, `check_messages` and `profiles.full_name` among them); `function_acl_replaceable`,
 `functions_owned_by_login` and `function_results_match` (where present); `altered_relations_owned_by_login` on
 `loss_draft_tracking` and `check_intake_items` (the triggers' tables); `definer_can_write_relations` on
-`check_intake_items`, `loss_draft_tracking`, `mortgage_handling_requests`, `mortgage_ops_request_audit` and
-`mortgage_agent_accounts` (the DEFINER functions must reach them as their owner).
+`check_intake_items`, `loss_draft_tracking`, `mortgage_handling_requests`, `mortgage_ops_request_audit`,
+`mortgage_agent_accounts`, `check_messages` and `profiles` (the DEFINER functions must reach them as their owner).
 
 Post-conditions: the intended fingerprint; everything else in schema `public` unchanged. The tools roll back otherwise.
 

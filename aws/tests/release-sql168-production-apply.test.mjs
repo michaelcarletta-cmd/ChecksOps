@@ -169,10 +169,11 @@ test('order: no predecessor; two new SECURITY DEFINER functions with their ACL a
     'public.mortgage_agent_accounts', 'public.has_role(uuid, public.app_role)', 'column public.check_intake_items.deposited_at',
     'column public.check_intake_items.check_stage', 'column public.loss_draft_tracking.check_intake_item_id',
     'column public.mortgage_handling_requests.endorsement_order', 'column public.mortgage_handling_requests.homeowner_ssn_last_four',
-    'column public.mortgage_agent_accounts.status']) {
+    'column public.mortgage_agent_accounts.status', 'public.check_messages', 'column public.check_messages.sender_id', 'public.profiles',
+    'column public.profiles.full_name']) {
     assert.ok(spec.prerequisites.includes(name), name);
   }
-  assert.deepEqual(spec.definer_writes, ['public.check_intake_items', 'public.loss_draft_tracking', 'public.mortgage_handling_requests', 'public.mortgage_ops_request_audit', 'public.mortgage_agent_accounts']);
+  assert.deepEqual(spec.definer_writes, ['public.check_intake_items', 'public.loss_draft_tracking', 'public.mortgage_handling_requests', 'public.mortgage_ops_request_audit', 'public.mortgage_agent_accounts', 'public.check_messages', 'public.profiles']);
   for (const absent of ['tables', 'views', 'policies', 'table_privileges', 'column_acl', 'dropped_functions', 'acl_functions', 'indexes', 'added_columns', 'constraints', 'dropped_triggers']) assert.equal(spec[absent], undefined, absent);
   // No other release migration defines or touches the functions or the triggers.
   for (const key of Object.keys(RELEASE_SQL_SPECS).filter((k) => k !== KEY)) {

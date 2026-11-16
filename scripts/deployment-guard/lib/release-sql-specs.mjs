@@ -10050,12 +10050,13 @@ export const RELEASE_SQL_SPECS = deepFreeze({
   // text) inserts one request for a check that has a claim_id and a loss draft, is not deposited, voided or returned (SQL
   // 167's rule) and has no requested, in-progress or completed request, when the same tenant's 1st-mortgagee request on
   // another check of that claim is in progress (most recent first) or completed and its agent is active (SQL 158's rule),
-  // copying its details, then runs the agent's accept on it (in_progress, accepted_at now) and writes one
+  // copying its details, then runs the agent's accept on it (in_progress, accepted_at now), posts one check_messages
+  // row on the check's thread from the agent (owner 2026-11-16: the tenant sees it; no email) and writes one
   // mortgage_ops_request_audit row; public.aws_mortgage_desk_route_same_agent_trigger() runs it in a subtransaction for
   // aws_loss_draft_route_same_agent (AFTER INSERT ON loss_draft_tracking) and aws_check_claim_route_same_agent (AFTER
   // UPDATE ON check_intake_items WHEN claim_id is set or changed). EXECUTE for the owner only (PUBLIC, anon, authenticated,
-  // service_role and checksops revoked). definer_writes: the five relations the file's sql168_definer_cannot_reach check
-  // names; altered_relations: the two tables the triggers are on. No predecessor; no table, column, policy or grant change.
+  // service_role and checksops revoked). definer_writes: the seven relations the file's sql168_definer_cannot_reach
+  // check names; altered_relations: the two tables the triggers are on. No predecessor; no table, column, policy or grant change.
   sql168: {
     "key": "sql168",
     "label": "SQL 168",
@@ -10068,6 +10069,8 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.mortgage_handling_requests",
       "public.mortgage_ops_request_audit",
       "public.mortgage_agent_accounts",
+      "public.check_messages",
+      "public.profiles",
       "public.has_role(uuid, public.app_role)",
       "column public.check_intake_items.id",
       "column public.check_intake_items.tenant_id",
@@ -10107,7 +10110,15 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "column public.mortgage_ops_request_audit.to_status",
       "column public.mortgage_ops_request_audit.payload",
       "column public.mortgage_agent_accounts.application_user_id",
-      "column public.mortgage_agent_accounts.status"
+      "column public.mortgage_agent_accounts.status",
+      "column public.check_messages.id",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at",
+      "column public.profiles.id",
+      "column public.profiles.full_name"
     ],
     "predecessors": [],
     "functions": [
@@ -10155,7 +10166,9 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.loss_draft_tracking",
       "public.mortgage_handling_requests",
       "public.mortgage_ops_request_audit",
-      "public.mortgage_agent_accounts"
+      "public.mortgage_agent_accounts",
+      "public.check_messages",
+      "public.profiles"
     ],
     "altered_relations": [
       "public.loss_draft_tracking",

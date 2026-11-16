@@ -3881,20 +3881,21 @@ export const AUTHORIZED_SQL167_CLAIM_LEDGER_RELINK_CHECK = Object.freeze({
 // DEFINER, EXECUTE for the owner only) and the triggers aws_loss_draft_route_same_agent (loss_draft_tracking) and
 // aws_check_claim_route_same_agent (check_intake_items): a new check with a claim and a loss draft, not deposited, voided or
 // returned, and no request, gets one request accepted for the active agent of the claim's in-progress (else completed)
-// request, its details copied, with one mortgage_ops_request_audit row. No predecessor (release-sql-specs.mjs). Pending until
-// a reviewed pin change records a staging read-live; staging wave 60 when approved (ops/production-sql-168-apply.md).
+// request, its details copied, with one check_messages row on the check's thread and one mortgage_ops_request_audit row.
+// No predecessor (release-sql-specs.mjs). Pending until a reviewed pin change records a staging read-live; staging wave 60
+// when approved (ops/production-sql-168-apply.md).
 export const AUTHORIZED_SQL168_MORTGAGE_DESK_SAME_AGENT_NEW_CHECK = Object.freeze({
   key: 'sql168',
   filename: 'aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql',
   migration_id: '168_mortgage_desk_same_agent_new_check',
   // The commit that last authored the file bytes.
-  commit: '2943f86f1ed9fccc70119670db67a6e15ddfa096',
-  source_sha256: '3cd74219ec9a5c0a0901fd950ac8da395b18b540f72802f3e0e87949ab8970c6',
+  commit: '5bdff411789307ba38c6e72c532f3f0dedf455cf',
+  source_sha256: '5d0d8e9de8df9b90089618d799cca835580c1aaf59f1140ee07ba5de1b577d15',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql168', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: '5536690fc45f29ebc1c481dcd54265543f7ddc0735277f2571fd7d63e87941ea',
+  intended_replacement_sha256: '6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166',
   function_identities: Object.freeze([
     'public.aws_mortgage_desk_route_same_agent(uuid, text)',
     'public.aws_mortgage_desk_route_same_agent_trigger()',
