@@ -3882,8 +3882,8 @@ export const AUTHORIZED_SQL167_CLAIM_LEDGER_RELINK_CHECK = Object.freeze({
 // aws_check_claim_route_same_agent (check_intake_items): a new check with a claim and a loss draft, not deposited, voided or
 // returned, and no request, gets one request accepted for the active agent of the claim's in-progress (else completed)
 // request, its details copied, with one check_messages row on the check's thread and one mortgage_ops_request_audit row.
-// No predecessor (release-sql-specs.mjs). Pending until a reviewed pin change records a staging read-live; staging wave 60
-// when approved (ops/production-sql-168-apply.md).
+// No predecessor (release-sql-specs.mjs). Staging apply authorized (wave 60) from staging read-live run 43878936321: the
+// functions and triggers absent, equal to the derived pre-state (ops/production-sql-168-apply.md).
 export const AUTHORIZED_SQL168_MORTGAGE_DESK_SAME_AGENT_NEW_CHECK = Object.freeze({
   key: 'sql168',
   filename: 'aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql',
@@ -3891,9 +3891,11 @@ export const AUTHORIZED_SQL168_MORTGAGE_DESK_SAME_AGENT_NEW_CHECK = Object.freez
   // The commit that last authored the file bytes.
   commit: '5bdff411789307ba38c6e72c532f3f0dedf455cf',
   source_sha256: '5d0d8e9de8df9b90089618d799cca835580c1aaf59f1140ee07ba5de1b577d15',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-16: staging apply (wave 60) from staging read-live run 43878936321',
+  execute: true,
+  // Staging read-live run 43878936321 (main 5e2d6fe4e, executor deploy run 43872142937): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (the functions and triggers absent).
+  expected_live_definition_sha256: 'a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33',
   // Code-derived: releaseIntendedHash('sql168', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166',
   function_identities: Object.freeze([

@@ -87,8 +87,15 @@ billing, SQL 167's relink keep their bodies). Two public triggers are added: the
 expected trigger count follow after the apply, in their own change (as SQL 121). No API, Lambda or SPA change is part of
 this pin: the API calls nothing new.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 60 when approved (wave 59 is SQL 167, the highest on main).
+**Status:** staging pin execute-authorized (wave 60); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-16).** Run 43878936321 (main `5e2d6fe4e`, after executor inspect run 43871619672 and executor deploy
+run 43872142937 (executor CodeSha256 `0KNPXGrb…` -> `Ul6WPHdS…`)), under the owner's words "apply SQL 168 in staging":
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; the functions and triggers absent. Live
+`a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33`, equal to the derived pre-state; intended `60326558…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 60). An earlier read-live attempt (run 43878762111) was refused at the
+workflow's input check (`approved_commit` missing) before reaching the database. The staging apply is a separate run after this
+pin is merged and the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
 
 ## Fingerprint
 
