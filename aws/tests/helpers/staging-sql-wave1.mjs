@@ -314,7 +314,9 @@ export const STAGING_WAVE1 = Object.freeze({
   // handles is routed to the same active agent. Read at main 5e2d6fe4e with the executor current (inspect run 43871619672,
   // deploy run 43872142937, CodeSha256 0KNPXGrb... -> Ul6WPHdS...): already_applied false, precondition_failures [],
   // prerequisites_missing [], the functions and triggers absent. Equal to the derived pre-state.
-  sql168: Object.freeze({ wave: 60, approved: '2026-11-16', run: '43878936321', live: 'a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33' }),
+  // Applied in staging by run 43882991880 (receipt a364af9a... -> 60326558... = intended; read-live 43883462531 already_applied
+  // true; recorded as staging_acceptance in ops/deployment-guard/sql168-mortgage-desk-same-agent-new-check-production-apply.json).
+  sql168: Object.freeze({ wave: 60, approved: '2026-11-16', run: '43878936321', live: 'a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33', apply_run: '43882991880' }),
   // Wave 61 (owner approved 2026-11-16, "apply SQL 169 in staging"): SQL 169, deleting a check keeps its charges
   // (check_billing_events_check_intake_item_id_fkey ON DELETE SET NULL). Read at main 294055a93 with the executor current
   // (inspect run 43917310640, deploy run 43917926456, CodeSha256 aU0HiKBL... -> DA2QdHRx...): already_applied false,

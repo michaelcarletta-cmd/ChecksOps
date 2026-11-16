@@ -132,6 +132,10 @@
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql166-mortgage-desk-set-monitoring on 2026-11-14 (run 43627727453, main 84dd7e549, wave 58, executor deploy run 43626936092, staging pin PR #1908; pre-apply read-live run 43627497816 precondition_failures [], read-live run 43627956591 already_applied true; recorded in the production pin's staging_acceptance, #1909): receipt before 11a10b33…, after 5c8e030f… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
+    "aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql168-mortgage-desk-same-agent-new-check on 2026-11-16 (run 43882991880, main bc52a5889, wave 60, executor deploy run 43882354934; read-live run 43883462531 already_applied true): receipt before a364af9a…, after 60326558… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
     "aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql169-check-billing-events-keep-charge-on-check-delete on 2026-11-16 (run 43923431127, main 96981921a, wave 61, executor deploy run 43922432721; read-live run 43923909951 already_applied true): receipt before f7530ea5\u2026, after 30fc8ed4\u2026 = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."

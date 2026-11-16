@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-db-validator-sql168-trigger",
+  "authorization": "Pending owner review (2026-11-16). Planning only: nothing is live or verified in production. The production apply needs its own owner approval, a staging acceptance reference, SQL 168 recorded live in production and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "SQL 168 (168_mortgage_desk_same_agent_new_check.sql) adds two public triggers, loss_draft_tracking.aws_loss_draft_route_same_agent and check_intake_items.aws_check_claim_route_same_agent (both executing aws_mortgage_desk_route_same_agent_trigger). Applied to staging 2026-11-16 (apply run 43882991880, wave 60, read-live run 43883462531 already_applied true); production pending (pin #1939 execute true, not applied). Owner 2026-11-16: \"fix the staging validator\". Observed 2026-11-16: the guarded staging Lambda overlay inspect of workflow.mjs (run 43943414468, main d7a6a1cf8) read the expected live member and failed its public smoke: /health and /db-health 200, /db-readonly-validate 503 unhealthy. The smoke withholds the response body, so the trigger the validator rejected was not read; SQL 168's two triggers are the public triggers staging gained since the SQL 155 validator bytes (096aae7a, the named 190-set, #1784/#1785) went live. SQL 169 (applied to staging run 43923431127 and production SSM 9c92cb54-fc92-47b0-9fa1-cb7764b2f992) changes one foreign key and adds no trigger; the validator's only foreign-key probe counts keys referencing auth.users, which SQL 169 does not touch. These bytes add SQL 168's two triggers to the justified set and raise EXPECTED_PUBLIC_TRIGGERS to 192. REPLACE db-readonly-validate.mjs 096aae7a -> bdb818b5: live_sha256 is the SQL 155 validator production run 43101262577 applied (previous_manifest, the applied record). sql_before is SQL 168, not yet recorded verified live in production, so the production apply is refused until SQL 168's production apply is recorded; in staging SQL 168 is recorded live (ops/deployment-guard/staging-sql-live.json). The validator keeps its place after tenant-billing-handlers.mjs. Whether these bytes bring staging /db-readonly-validate to 200 is not verified: it must be observed after the staging apply. A read-only overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "096aae7abfc96b72635c01ea8dcbf2c5898d18820b1d0b876e82863d154c84d7",
+      "accepted_sha256": "bdb818b523c20c95544c5f3b1d5d144fa7f5cd649e55cf2713f7f24454e4549e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql155-trigger-applied-manifest-2026-11-11.json"
+    }
+  }
+}

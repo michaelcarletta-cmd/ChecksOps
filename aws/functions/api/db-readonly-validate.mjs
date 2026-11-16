@@ -52,7 +52,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 190;
+export const EXPECTED_PUBLIC_TRIGGERS = 192;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
@@ -218,6 +218,18 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'claims',
     trigger: 'trg_aws_stamp_claim_org_id',
     functionName: 'aws_stamp_claim_org_id',
+  }),  // SQL 168 (168_mortgage_desk_same_agent_new_check.sql), applied to staging 2026-11-16 (run 43882991880, wave 60;
+  // production pending): a new check on a claim the Mortgage Desk already handles is routed to the same active agent,
+  // on a new loss draft and when a check is linked to a claim.
+  Object.freeze({
+    table: 'loss_draft_tracking',
+    trigger: 'aws_loss_draft_route_same_agent',
+    functionName: 'aws_mortgage_desk_route_same_agent_trigger',
+  }),
+  Object.freeze({
+    table: 'check_intake_items',
+    trigger: 'aws_check_claim_route_same_agent',
+    functionName: 'aws_mortgage_desk_route_same_agent_trigger',
   }),
 ]);
 

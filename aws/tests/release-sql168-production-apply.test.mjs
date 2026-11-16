@@ -10,7 +10,8 @@
  *     the same pre-state (run 43882991880) as its acceptance; it is in step with the staging pin, the one-shot, the bypass
  *     inventory and the test lists;
  *   - no predecessor; two new SECURITY DEFINER functions (EXECUTE for the owner only) and two new triggers, nothing
- *     replaced; no table, policy or table grant; no overlay plan entry; the runbook, one-shot doc and README name it;
+ *     replaced; no table, policy or table grant; the overlay plan holds only db-readonly-validate.mjs on it (the DB validator justifies its
+ *     two triggers, 2026-11-16), not yet recorded live in production; the runbook, one-shot doc and README name it;
  *   - the pending (pre-authorization) pin refuses before connecting; the committed pin allows only the manifest bound
  *     to its recorded pre-state; an approved, accepted copy evaluates for the manifest built from it,
  *     and refuses with execute false, another live hash, another staging reference or a wrong phrase; the CLI spends no
@@ -195,7 +196,7 @@ test('pin: the release pin shape, execute-authorized on the staging apply, in st
   }
 });
 
-test('order: no predecessor; two new SECURITY DEFINER functions with their ACL and two triggers, nothing replaced; no table, policy or table grant; no overlay plan entry; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; two new SECURITY DEFINER functions with their ACL and two triggers, nothing replaced; no table, policy or table grant; the overlay plan holds only the DB validator on it, pending in production; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
@@ -226,10 +227,18 @@ test('order: no predecessor; two new SECURITY DEFINER functions with their ACL a
     'No backfill', 'No API, Lambda or SPA change is part of this pin', releaseStateHash(KEY, {})]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // No API member waits on SQL 168: the API calls nothing new.
+  // The API calls nothing new. Only the DB validator waits on SQL 168 (2026-11-16, "fix the staging validator"): its
+  // bytes justify the two triggers by name (192), so its production REPLACE follows SQL 168's production record. SQL 168
+  // is not yet recorded live in production (no sql_prerequisites entry); in staging it is (staging-sql-live.json).
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.equal(plan.sql_prerequisites?.[SQL168_FILE], undefined);
-  assert.doesNotMatch(JSON.stringify(plan), /aws_mortgage_desk_route_same_agent|168_mortgage_desk_same_agent_new_check/);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL168_FILE), ['db-readonly-validate.mjs']);
+  assert.equal(readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL168_FILE].verified_live, true);
+  const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 192;/);
+  for (const [table, name] of TRIGGERS) {
+    assert.match(validator, new RegExp(`table: '${table.replace(/^public\./, '')}',\\n\\s+trigger: '${name}',\\n\\s+functionName: 'aws_mortgage_desk_route_same_agent_trigger'`));
+  }
   // The file: the prerequisite DO block, two functions, the REVOKEs from PUBLIC, the role REVOKE DO block, the two
   // triggers each dropped if present and created; no GRANT; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL168_FILE), 'utf8').replace(/--[^\n]*/g, '');
