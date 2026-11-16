@@ -112,6 +112,7 @@ on:
           - sql165-vendor-payee-lookup-and-payroll-vendor
           - sql166-mortgage-desk-set-monitoring
           - sql167-claim-ledger-relink-check
+          - sql168-mortgage-desk-same-agent-new-check
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -280,6 +281,7 @@ jobs:
           node --test aws/tests/release-sql165-executor.test.mjs
           node --test aws/tests/release-sql166-executor.test.mjs
           node --test aws/tests/release-sql167-executor.test.mjs
+          node --test aws/tests/release-sql168-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

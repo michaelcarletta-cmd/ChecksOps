@@ -186,7 +186,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-13
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql165-vendor-payee-lookup-and-payroll-vendor-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql165-production-apply"\]/);
-  assert.match(rows, /sql163, sql164, sql165, sql166, sql167\)/);
+  assert.match(rows, /sql163, sql164, sql165, sql166, sql167, sql168\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql165-executor.test.mjs', 'aws/tests/release-sql165-production-apply.test.mjs', 'aws/tests/sql165-vendor-payee-lookup-and-payroll-vendor-pg.test.mjs']) {
@@ -241,7 +241,7 @@ test('order: predecessor SQL 141 (read only); the lookup with its ACL, payroll_r
   assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 57\) and to production \(2026-11-13\); the production pin is retired/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql165` \|/);
-  assert.match(oneShot, /`sql163`, `sql164`, `sql165`, `sql166`, `sql167`\) \|/);
+  assert.match(oneShot, /`sql163`, `sql164`, `sql165`, `sql166`, `sql167`, `sql168`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql165-vendor-payee-lookup-and-payroll-vendor-production-apply\.mjs --inspect/);
 });
 

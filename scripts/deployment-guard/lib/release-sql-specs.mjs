@@ -10043,6 +10043,138 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.claim_settlements"
     ]
   },
+  // SQL 168 (owner 2026-11-16: "We need to make sure once a mortgage agent handles a check, if another check comes in
+  // they handle each one for that check file"; decisions: auto-assign, the same claim_id, in_progress or completed by a
+  // still-active agent, else nothing; copy the details): two new SECURITY DEFINER functions (plpgsql, VOLATILE,
+  // search_path public, pg_temp, row_security on) and two new triggers. public.aws_mortgage_desk_route_same_agent(uuid,
+  // text) inserts one request for a check that has a claim_id and a loss draft, is not deposited, voided or returned (SQL
+  // 167's rule) and has no requested, in-progress or completed request, when the same tenant's 1st-mortgagee request on
+  // another check of that claim is in progress (most recent first) or completed and its agent is active (SQL 158's rule),
+  // copying its details, then runs the agent's accept on it (in_progress, accepted_at now), posts one check_messages
+  // row on the check's thread from the agent (owner 2026-11-16: the tenant sees it; no email) and writes one
+  // mortgage_ops_request_audit row; public.aws_mortgage_desk_route_same_agent_trigger() runs it in a subtransaction for
+  // aws_loss_draft_route_same_agent (AFTER INSERT ON loss_draft_tracking) and aws_check_claim_route_same_agent (AFTER
+  // UPDATE ON check_intake_items WHEN claim_id is set or changed). EXECUTE for the owner only (PUBLIC, anon, authenticated,
+  // service_role and checksops revoked). definer_writes: the seven relations the file's sql168_definer_cannot_reach
+  // check names; altered_relations: the two tables the triggers are on. No predecessor; no table, column, policy or grant change.
+  sql168: {
+    "key": "sql168",
+    "label": "SQL 168",
+    "choice": "sql168-mortgage-desk-same-agent-new-check",
+    "production_pin_rel": "ops/deployment-guard/sql168-mortgage-desk-same-agent-new-check-production-apply.json",
+    "script": "sql168-mortgage-desk-same-agent-new-check-production-apply",
+    "prerequisites": [
+      "public.check_intake_items",
+      "public.loss_draft_tracking",
+      "public.mortgage_handling_requests",
+      "public.mortgage_ops_request_audit",
+      "public.mortgage_agent_accounts",
+      "public.check_messages",
+      "public.profiles",
+      "public.has_role(uuid, public.app_role)",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.check_stage",
+      "column public.check_intake_items.deposited_at",
+      "column public.loss_draft_tracking.check_intake_item_id",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.claim_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.accepted_at",
+      "column public.mortgage_handling_requests.completed_at",
+      "column public.mortgage_handling_requests.created_at",
+      "column public.mortgage_handling_requests.updated_at",
+      "column public.mortgage_handling_requests.endorsement_order",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.mortgage_handling_requests.mortgage_servicer",
+      "column public.mortgage_handling_requests.loan_number",
+      "column public.mortgage_handling_requests.policy_number",
+      "column public.mortgage_handling_requests.claim_number",
+      "column public.mortgage_handling_requests.insurance_company",
+      "column public.mortgage_handling_requests.loss_type",
+      "column public.mortgage_handling_requests.date_of_loss",
+      "column public.mortgage_handling_requests.homeowner_name",
+      "column public.mortgage_handling_requests.homeowner_email",
+      "column public.mortgage_handling_requests.homeowner_phone",
+      "column public.mortgage_handling_requests.property_address",
+      "column public.mortgage_handling_requests.homeowner_ssn_last_four",
+      "column public.mortgage_ops_request_audit.mortgage_request_id",
+      "column public.mortgage_ops_request_audit.actor_id",
+      "column public.mortgage_ops_request_audit.action",
+      "column public.mortgage_ops_request_audit.reason",
+      "column public.mortgage_ops_request_audit.from_status",
+      "column public.mortgage_ops_request_audit.to_status",
+      "column public.mortgage_ops_request_audit.payload",
+      "column public.mortgage_agent_accounts.application_user_id",
+      "column public.mortgage_agent_accounts.status",
+      "column public.check_messages.id",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at",
+      "column public.profiles.id",
+      "column public.profiles.full_name"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_route_same_agent(uuid, text)",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE",
+          "checksops EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_route_same_agent_trigger()",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE",
+          "checksops EXECUTE"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.loss_draft_tracking",
+        "name": "aws_loss_draft_route_same_agent",
+        "def": "CREATE TRIGGER aws_loss_draft_route_same_agent AFTER INSERT ON public.loss_draft_tracking FOR EACH ROW EXECUTE FUNCTION public.aws_mortgage_desk_route_same_agent_trigger()"
+      },
+      {
+        "table": "public.check_intake_items",
+        "name": "aws_check_claim_route_same_agent",
+        "def": "CREATE TRIGGER aws_check_claim_route_same_agent AFTER UPDATE ON public.check_intake_items FOR EACH ROW WHEN (((new.claim_id IS NOT NULL) AND (old.claim_id IS DISTINCT FROM new.claim_id))) EXECUTE FUNCTION public.aws_mortgage_desk_route_same_agent_trigger()"
+      }
+    ],
+    "definer_writes": [
+      "public.check_intake_items",
+      "public.loss_draft_tracking",
+      "public.mortgage_handling_requests",
+      "public.mortgage_ops_request_audit",
+      "public.mortgage_agent_accounts",
+      "public.check_messages",
+      "public.profiles"
+    ],
+    "altered_relations": [
+      "public.loss_draft_tracking",
+      "public.check_intake_items"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
