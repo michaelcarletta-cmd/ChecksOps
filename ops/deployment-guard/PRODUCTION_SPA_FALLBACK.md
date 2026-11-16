@@ -188,4 +188,22 @@ revert target is its own reviewed PR.
 
 - 2026-11-06, runs 42281266136 (inspect) and 42281453509 (publish): the marketing pass-through
   (`9ca318b0…`) went LIVE. Confirmed read-only on 2026-11-16 (GetFunction LIVE and DEVELOPMENT).
-- www redirect: not run yet. Expected first inspect after this change merges: `BASELINE`.
+- 2026-11-16, www redirect (#1938, merged as `496ee40f3`), under the owner's words "PUBLISH SPA
+  FALLBACK TO PRODUCTION":
+  - inspect run 43886112430 (main `496ee40f3`): `BASELINE`, problems and page problems none; LIVE and
+    DEVELOPMENT `9ca318b0…`; snapshot `8bfd10b42d5d222a0ecd28b68cb5c75338a542b94faa9b37a3045b166a9a4e87`;
+    distribution ETag `E2EUQ1WTGCTBG2`, function ETags LIVE `E1F83G8C2ARO7P`, DEVELOPMENT
+    `E3UN6WX5RRO2AG`; staging probe green;
+  - publish run 43886410155 (approved commit `496ee40f3`, expected snapshot `8bfd10b4…`, staging
+    acceptance the inspect run): the writer tested all 16 sample requests on DEVELOPMENT (every
+    `checksops.com` sample unchanged; `www` `/`, `/login`, `/c1/checks?tab=funds&probe`, `/pricing`,
+    `/assets/index-x.js` answered `301` to the same path and query on `https://checksops.com`;
+    `www` `/prep/health` passed through), then published `ff421c457d265495440259ab7630ffc297db286ea44d3f77e7ae98f1dbee27c1`;
+    after: `CURRENT`, snapshot `deb213a2fae706896af706914747eec953edd495c56c42c7fa3e5eef3de07f88`,
+    LIVE and DEVELOPMENT `ff421c45…`, LIVE function ETag `E1PA6795UKMFR9`, distribution config
+    unchanged (the writer's byte comparison), distribution ETag now `E3AEGXETSR30VB`;
+  - verify `VERIFIED`; public production check green on attempt 1: the marketing pages with their
+    own `og:title`, `/` and `/login` `index.html`, the entry bundle, `/prep/health` 200 `ok`;
+    `www` `/` and `/login` 301 to `https://checksops.com/…?probe=…`; `www` `/prep/health` 200 `ok`
+    (not redirected).
+  - Not verified: nobody has opened `www.checksops.com` in a browser since the publish.
