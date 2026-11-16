@@ -1,8 +1,8 @@
 {
   "id": "sql168-mortgage-desk-same-agent-new-check-production-apply",
   "migration": "sql168",
-  "authorization": "Owner approved 2026-11-16 (the owner's words of 2026-11-16: \"apply SQL 168 in staging\", \"merge #1936\", \"merge the SQL 168 staging pin PR\", \"run the SQL 168 production inspect\" and \"open the SQL 168 production pin PR\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 168 after the staging apply below (production a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33 -> 6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-16; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 168 production pin change on 2026-11-16 in the words \"apply SQL 168 in staging\", \"merge #1936\", \"merge the SQL 168 staging pin PR\", \"run the SQL 168 production inspect\", \"open the SQL 168 production pin PR\" and \"merge the SQL 168 production pin PR\" (on the staging apply run 43882991880; a364af9a -> 60326558, #1939, merged to main as bab01e726) and the one apply run recorded in applied (workstream prod-sql168-desk-same-agent-20261116) in the words \"apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT\", passed to it verbatim. That approval covered that one run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -61,5 +61,372 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43882991880",
     "basis": "Guarded staging SQL executor apply of sql168-mortgage-desk-same-agent-new-check, run 43882991880 (2026-11-16, main bc52a5889195d3412ec2f31e5e843fd54c9919fa, wave 60, staging pin PR #1937), under the owner's words \"apply SQL 168 in staging\", on the executor deployed by deploy run 43882354934 (CodeSha256 Ul6WPHdS... -> aU0HiKBL...; executor inspect run 43881814016), from the staging pre-state read by read-live run 43878936321 (a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33; main 5e2d6fe4e after executor inspect run 43871619672 and deploy run 43872142937, CodeSha256 0KNPXGrb... -> Ul6WPHdS...; an earlier read-live attempt, run 43878762111, was refused at input validation before it reached the database): receipt before a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33, after 6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166 == intended. Read-live run 43883462531 then reported already_applied true. The owner gave the run approval \"apply SQL 168 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-168-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql168-mortgage-desk-same-agent-new-check-pg.test.mjs and through the executor by aws/tests/release-sql168-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so staging accepted exactly the production transition. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-16",
+    "result": "applied",
+    "source_commit": "e81328645bbcc9755e5e9693e07a769b92349b9e",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-e81328645bbcc9755e5e9693e07a769b92349b9e.tar.gz",
+      "sha256": "15a529ae0b2c1997b9cf7483130f61d9a258ae156e037aa6df504e7f6394ef7d"
+    },
+    "source_staged_by": "sql53-temporary-transfer.yml run 43958936335 (staged main e81328645bbcc9755e5e9693e07a769b92349b9e; TARBALL_SHA256 15a529ae0b2c1997b9cf7483130f61d9a258ae156e037aa6df504e7f6394ef7d, checked by sha256sum -c on the runner before each command; SOURCE_COMMIT matched)",
+    "migration_source_sha256": "5d0d8e9de8df9b90089618d799cca835580c1aaf59f1140ee07ba5de1b577d15",
+    "migration_source_sha256_note": "The one-shot source step checked the pinned migration file in the tarball against source_sha256 (step source ok).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql168-desk-same-agent-20261116",
+    "one_use_id": "sql168-prod-c1d1978f-d118-4880-a015-e43aa0743d52",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql168; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "inspect_ssm_command_id": "22669a58-0fca-481e-9188-ee5bce9a81df",
+    "apply_ssm_command_id": "6781f116-8801-4164-a110-80ccbcb8f437",
+    "one_shot_run_id": "14532473-eb26-43de-b552-be5def063452",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql168_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. Recorded from the run's own output, which arrived whole through SSM: the one-shot's JSON output (25520 bytes as printed, sha256 aa91232b09b8787e979937c593fecdbd654dbd25952a3701db705019adc4f894 as computed on the runner) was read back in compact form (16938 bytes) and, re-serialized, reproduces exactly that size and sha256; the copy on the runner was removed afterwards. Pre-apply inspect: one-shot --phase inspect SSM 22669a58-0fca-481e-9188-ee5bce9a81df (Success, 2026-11-16T21:21:22.755Z to 2026-11-16T21:21:36.755Z, EXIT=0, run_id ae36f0ca-32f6-4660-93bf-a3283ae9a53e, steps pin, source, inspect and contracts ok, nothing written, output 5771 bytes, sha256 0417e17b49c7835605b06e49ac5e29df4dce3a3b1696bb6ccf13e5c7171d4b04, read back whole the same way) read live a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures []); the apply command (SSM 6781f116-8801-4164-a110-80ccbcb8f437, Success, 2026-11-16T21:21:49.773Z to 2026-11-16T21:22:02.773Z, EXIT=0) was sent only after that output showed this pre-state. Source staged by transfer run 43958936335 (main e81328645bbcc9755e5e9693e07a769b92349b9e; the tarball passed sha256sum -c on the runner before each command and SOURCE_COMMIT matched). The runner was started from stopped with no SSM command in progress (the three AWS-managed commands listed before SQL 169's apply had all ended Success). Root volume 39% used. A process check (pgrep) after the apply found no one-shot running, and the runner was stopped afterwards (end state stopped). Production acceptance: not yet reported by the owner when this was recorded.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e81328645bbcc9755e5e9693e07a769b92349b9e (production-sql-one-shot 14532473-eb26-43de-b552-be5def063452, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e81328645bbcc9755e5e9693e07a769b92349b9e (production-sql-one-shot 14532473-eb26-43de-b552-be5def063452, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e81328645bbcc9755e5e9693e07a769b92349b9e (production-sql-one-shot 14532473-eb26-43de-b552-be5def063452, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_route_same_agent(uuid, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_route_same_agent_trigger()",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "loss_draft_tracking aws_loss_draft_route_same_agent",
+            "state": "absent"
+          },
+          {
+            "name": "check_intake_items aws_check_claim_route_same_agent",
+            "state": "absent"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_route_same_agent(uuid, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_route_same_agent_trigger()",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "loss_draft_tracking",
+            "ok": true
+          },
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "mortgage_ops_request_audit",
+            "ok": true
+          },
+          {
+            "name": "mortgage_agent_accounts",
+            "ok": true
+          },
+          {
+            "name": "check_messages",
+            "ok": true
+          },
+          {
+            "name": "profiles",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "7c9931cbbcc377ef102cb4bd3176b987def57bc1d34f7cadca8f93694beb4335",
+    "receipt": {
+      "migration": "sql168",
+      "workstream": "prod-sql168-desk-same-agent-20261116",
+      "commit": "e81328645bbcc9755e5e9693e07a769b92349b9e",
+      "sql_file": "aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql",
+      "before_hash": "a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33",
+      "after_hash": "6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166",
+      "release_sql_inspect": {
+        "live_definition_sha256": "6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_route_same_agent(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_route_same_agent_trigger()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "loss_draft_tracking aws_loss_draft_route_same_agent",
+            "state": "intended"
+          },
+          {
+            "name": "check_intake_items aws_check_claim_route_same_agent",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_route_same_agent(uuid, text)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_route_same_agent_trigger()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "loss_draft_tracking",
+            "ok": true
+          },
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "mortgage_ops_request_audit",
+            "ok": true
+          },
+          {
+            "name": "mortgage_agent_accounts",
+            "ok": true
+          },
+          {
+            "name": "check_messages",
+            "ok": true
+          },
+          {
+            "name": "profiles",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "9cf20519e138238a38063ae5f8a170d8d0a2f0608e9bd9185753797c716d0ef6",
+      "unrelated_catalog_counts": {
+        "relations": 906,
+        "columns": 3586,
+        "constraints": 2279,
+        "policies": 481,
+        "functions": 1393,
+        "indexes": 665,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43882991880",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_route_same_agent(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_route_same_agent_trigger()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "loss_draft_tracking aws_loss_draft_route_same_agent",
+            "state": "intended"
+          },
+          {
+            "name": "check_intake_items aws_check_claim_route_same_agent",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_route_same_agent(uuid, text)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_route_same_agent_trigger()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "loss_draft_tracking",
+            "ok": true
+          },
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "mortgage_ops_request_audit",
+            "ok": true
+          },
+          {
+            "name": "mortgage_agent_accounts",
+            "ok": true
+          },
+          {
+            "name": "check_messages",
+            "ok": true
+          },
+          {
+            "name": "profiles",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-16 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql168-desk-same-agent-20261116, main e81328645 (tarball 15a529ae…, transfer run 43958936335, migration source 5d0d8e9d… == pin), owner-approved run (\"apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT\"), pre-apply --phase inspect SSM 22669a58-0fca-481e-9188-ee5bce9a81df (live a364af9a…, live_matches_expected true, precondition_failures []), apply SSM 6781f116-8801-4164-a110-80ccbcb8f437, run_id 14532473-eb26-43de-b552-be5def063452, one_use_id sql168-prod-c1d1978f-d118-4880-a015-e43aa0743d52: every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest 7c9931cb…; a364af9a… -> 60326558…, result applied, unrelated catalog 9cf20519…; post-apply inspect already_applied true, precondition_failures [], aws_mortgage_desk_route_same_agent(uuid, text) and aws_mortgage_desk_route_same_agent_trigger() intended, triggers loss_draft_tracking aws_loss_draft_route_same_agent and check_intake_items aws_check_claim_route_same_agent intended. The whole one-shot output arrived (25520 bytes, sha256 aa91232b…). The runner was stopped after a check that no one-shot process remained. Production acceptance was not yet reported by the owner when this was recorded. Production now has 192 public triggers (SQL 168's two), while the production /db-readonly-validate still expects 190: it reports unhealthy until the db-readonly-validate.mjs production REPLACE (096aae7a -> bdb818b5, planned by #1954, no longer held by SQL 168), which needs the owner's words \"DEPLOY db-readonly-validate.mjs TO PRODUCTION\". execute is false so the pin is no longer a standing authorization."
   }
 }

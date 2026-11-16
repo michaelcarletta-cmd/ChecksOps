@@ -214,6 +214,10 @@
       "verified_live": true,
       "evidence": "2026-11-14 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 83892c35-edaf-404f-b9cd-d14cecf50a55, run f2e0b482-129c-44fa-9597-b0cdc404d9b3, workstream prod-sql167-claim-ledger-relink-20261114, main d8da56bac, one_use_id sql167-prod-a0a99ec5-74aa-472f-ad05-d8922b4d240e): receipt before 45b7f3a9…, after 3aebf662… = the pin's intended, result applied; post-apply inspect already_applied true (ops/production-sql-167-apply.md, ops/deployment-guard/sql167-claim-ledger-relink-check-production-apply.json, record #1910). No predecessor."
     },
+    "aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql": {
+      "verified_live": true,
+      "evidence": "2026-11-16 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 6781f116-8801-4164-a110-80ccbcb8f437, run 14532473-eb26-43de-b552-be5def063452, workstream prod-sql168-desk-same-agent-20261116, main e81328645, one_use_id sql168-prod-c1d1978f-d118-4880-a015-e43aa0743d52): receipt before a364af9a\u2026, after 60326558\u2026 = the pin's intended, result applied; post-apply inspect already_applied true (ops/production-sql-168-apply.md, ops/deployment-guard/sql168-mortgage-desk-same-agent-new-check-production-apply.json). No predecessor."
+    },
     "aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql": {
       "verified_live": true,
       "evidence": "2026-11-16 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 9c92cb54-fc92-47b0-9fa1-cb7764b2f992, run d64ba504-e0e3-42ea-92d4-57ae4af26008, workstream prod-sql169-keep-charge-on-delete-20261116, main 6641007ab, one_use_id sql169-prod-91223610-db3b-4249-b7b3-59502f378d5d): receipt before f7530ea5\u2026, after 30fc8ed4\u2026 = the pin's intended, result applied; post-apply inspect already_applied true (ops/production-sql-169-apply.md, ops/deployment-guard/sql169-check-billing-events-keep-charge-on-check-delete-production-apply.json, record #1950). No predecessor."

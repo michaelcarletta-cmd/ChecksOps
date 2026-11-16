@@ -735,14 +735,15 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // production inspect" / "Yes" to "Shall I open the pin PR?", #1909: the read-only production inspect SSM 6b4e6de5 recorded as their
 // pre-states, the guarded staging apply runs 43627727453 and 43628481801 from the same pre-states) until their record-and-retire
 // change after their 2026-11-14 applies ("apply SQL 166 and SQL 167 in production").
-// SQL 168's pin is execute-authorized (owner-approved pin change of 2026-11-16, "run the SQL 168 production inspect" /
-// "open the SQL 168 production pin PR": the read-only production inspect SSM 64f2c1ff recorded as its pre-state, the guarded
-// staging apply run 43882991880 from the same pre-state) until its record-and-retire change.
+// SQL 168's pin was execute-authorized (owner-approved pin change of 2026-11-16, "run the SQL 168 production inspect" /
+// "open the SQL 168 production pin PR", #1939: the read-only production inspect SSM 64f2c1ff recorded as its pre-state, the guarded
+// staging apply run 43882991880 from the same pre-state) until its record-and-retire change after its 2026-11-16 apply
+// ("apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT").
 // SQL 169's pin was execute-authorized (owner-approved pin change of 2026-11-16, "run the SQL 169 production inspect" /
 // "open the SQL 169 production pin PR", #1949: the read-only production inspect SSM 29ddf3f2 recorded as its pre-state, the guarded
 // staging apply run 43923431127 from the same pre-state) until its record-and-retire change after its 2026-11-16 apply
 // ("apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED").
-const EXECUTE_AUTHORIZED = Object.freeze(['sql168']);
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -844,6 +845,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql166: Object.freeze({ ssm: 'a4f2aed0-51ce-4444-8387-1fff041fd4ef', run: 'cca3fb1a-8d24-45b5-838d-5ec0e2e73bfd', one_use_id: 'sql166-prod-9a437e99-306b-46b6-968e-2a0cb7cca1ec', workstream: 'prod-sql166-desk-set-monitoring-20261114', approval: 'apply SQL 166 and SQL 167 in production' }),
   // SQL 167's production apply of 2026-11-14 (main d8da56bac), on the owner's "apply SQL 166 and SQL 167 in production".
   sql167: Object.freeze({ ssm: '83892c35-edaf-404f-b9cd-d14cecf50a55', run: 'f2e0b482-129c-44fa-9597-b0cdc404d9b3', one_use_id: 'sql167-prod-a0a99ec5-74aa-472f-ad05-d8922b4d240e', workstream: 'prod-sql167-claim-ledger-relink-20261114', approval: 'apply SQL 166 and SQL 167 in production' }),
+  // SQL 168's production apply of 2026-11-16 (main e81328645), on the owner's "apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT".
+  sql168: Object.freeze({ ssm: '6781f116-8801-4164-a110-80ccbcb8f437', run: '14532473-eb26-43de-b552-be5def063452', one_use_id: 'sql168-prod-c1d1978f-d118-4880-a015-e43aa0743d52', workstream: 'prod-sql168-desk-same-agent-20261116', approval: 'apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT' }),
   // SQL 169's production apply of 2026-11-16 (main 6641007ab), on the owner's "apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED".
   sql169: Object.freeze({ ssm: '9c92cb54-fc92-47b0-9fa1-cb7764b2f992', run: 'd64ba504-e0e3-42ea-92d4-57ae4af26008', one_use_id: 'sql169-prod-91223610-db3b-4249-b7b3-59502f378d5d', workstream: 'prod-sql169-keep-charge-on-delete-20261116', approval: 'apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb), on the owner's "apply SQL 136 in production".

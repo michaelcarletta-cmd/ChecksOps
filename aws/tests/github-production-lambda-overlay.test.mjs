@@ -10141,7 +10141,7 @@ test('Delete Check keeps charges (2026-11-16, planning only): workflow.mjs REPLA
   );
 });
 
-test('DB validator SQL 168 triggers (2026-11-16): db-readonly-validate.mjs REPLACE from the SQL 155 applied bytes, planning only; held on SQL 168, live in staging, not yet recorded live in production', async () => {
+test('DB validator SQL 168 triggers (2026-11-16): db-readonly-validate.mjs REPLACE from the SQL 155 applied bytes, planning only; held on SQL 168 until its production record (2026-11-16, SSM 6781f116), now live in both', async () => {
   const MEMBER = 'db-readonly-validate.mjs';
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   const LIVE = VALIDATOR_SQL155_APPLIED;
@@ -10173,11 +10173,13 @@ test('DB validator SQL 168 triggers (2026-11-16): db-readonly-validate.mjs REPLA
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
   // The row as it stood before this plan (validatorSql168Pre): the SQL 155 applied bytes, held on SQL 154 (recorded live).
   assert.deepEqual(validatorSql168Pre(structuredClone(PLAN)).members[MEMBER], { operation: 'replace', accepted_sha256: LIVE, expected_live_sha256: LIVE, sql_before: SQL154_FILE, manifest: VALIDATOR_SQL155_APPLIED_REL });
-  // SQL 168 is live in staging (the staging overlay may run) and not yet recorded live in production.
+  // SQL 168 is live in staging (the staging overlay may run) and, since its production record-and-retire change (SSM 6781f116,
+  // 2026-11-16), recorded live in production too, so the validator is no longer held.
   const staging168 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/staging-sql-live.json'), 'utf8')).sql[SQL168_FILE];
   assert.equal(staging168.verified_live, true);
   assert.match(staging168.evidence, /run 43882991880/);
-  assert.equal(PLAN.sql_prerequisites[SQL168_FILE], undefined);
+  assert.equal(PLAN.sql_prerequisites[SQL168_FILE].verified_live, true);
+  assert.match(PLAN.sql_prerequisites[SQL168_FILE].evidence, /SSM 6781f116-8801-4164-a110-80ccbcb8f437/);
   // Inspect: READY on the SQL 155 applied bytes, ALREADY_ACCEPTED on main's, anything else a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) })).state, 'READY');
@@ -10186,17 +10188,17 @@ test('DB validator SQL 168 triggers (2026-11-16): db-readonly-validate.mjs REPLA
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  // The production apply is refused before any write until SQL 168's production record states it verified live.
-  const held = applyDeps(MEMBER, { plan: structuredClone(PLAN) });
+  // Without SQL 168's production record (replayed: the plan as it stood before it), the production apply is refused before any write.
+  const unrecorded = structuredClone(PLAN);
+  delete unrecorded.sql_prerequisites[SQL168_FILE];
+  const held = applyDeps(MEMBER, { plan: unrecorded });
   await assert.rejects(
     run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE }), held.deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED,
   );
   assert.equal(held.calls.receipt, undefined);
-  // With that record (replayed), the apply is ready.
-  const recorded = structuredClone(PLAN);
-  recorded.sql_prerequisites[SQL168_FILE] = { verified_live: true, evidence: 'replayed' };
-  const { deps, calls } = applyDeps(MEMBER, { plan: recorded });
+  // With that record (today's plan), the apply is ready.
+  const { deps, calls } = applyDeps(MEMBER, { plan: structuredClone(PLAN) });
   const result = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE }), deps);
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
