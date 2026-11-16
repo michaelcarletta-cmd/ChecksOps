@@ -129,7 +129,17 @@ const timelineAppliedBytes = (member) => {
   assert.equal(planned.live_sha256, WORKFLOW_TIMELINE_APPLIED);
   return WORKFLOW_TIMELINE_APPLIED;
 };
-const KEEP_CHARGES_ROW = () => ({ operation: 'replace', accepted_sha256: sha('aws/functions/api/workflow.mjs'), expected_live_sha256: WORKFLOW_TIMELINE_APPLIED, sql_before: SQL169_FILE, manifest: DELETE_KEEP_CHARGES_REL });
+// Applied 2026-11-16 (production run 43958640422, VERIFIED by re-inspect run 43958924860): the row expects main's bytes and
+// names the applied record, which chains to the planning manifest (it keeps the pre-apply state). keepChargesRecordPre
+// restates the plan as it stood before that apply (expected_live back to the planning live bytes, manifest back to the
+// planning manifest).
+const DELETE_KEEP_CHARGES_APPLIED_REL = 'aws/tests/fixtures/production-delete-check-keep-charges-api-applied-manifest-2026-11-16.json';
+const KEEP_CHARGES_ROW = () => ({ operation: 'replace', accepted_sha256: sha('aws/functions/api/workflow.mjs'), expected_live_sha256: sha('aws/functions/api/workflow.mjs'), sql_before: SQL169_FILE, manifest: DELETE_KEEP_CHARGES_APPLIED_REL });
+const KEEP_CHARGES_PLANNING_ROW = () => ({ operation: 'replace', accepted_sha256: sha('aws/functions/api/workflow.mjs'), expected_live_sha256: WORKFLOW_TIMELINE_APPLIED, sql_before: SQL169_FILE, manifest: DELETE_KEEP_CHARGES_REL });
+const keepChargesRecordPre = (plan) => {
+  plan.members['workflow.mjs'] = { ...plan.members['workflow.mjs'], expected_live_sha256: WORKFLOW_TIMELINE_APPLIED, manifest: DELETE_KEEP_CHARGES_REL };
+  return plan;
+};
 // Homeowner portal signing (2026-10-29): planned REPLACEs of homeowner-signing-integration.mjs, storage.mjs,
 // signature-submit.mjs and homeowner.mjs, each held on SQL 127 (applied in production 2026-10-29, #1412).
 const PORTAL_SIGNING_REL = 'aws/tests/fixtures/production-homeowner-portal-signing-manifest-2026-10-29.json';
@@ -3929,10 +3939,10 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   // workflow.mjs moved on to the cash-job check link (its own test below), whose REPLACE started from
   // these applied bytes and was applied 2026-10-28 (production run 40617806077): they are no longer live.
   // The plan row has since moved on again, to the homeowner timeline link (its own test below), now applied, and then to
-  // the Delete Check keep-charges REPLACE (planning only, its own test below).
+  // the Delete Check keep-charges REPLACE (its own test below), applied 2026-11-16 and recorded.
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, DELETE_KEEP_CHARGES_REL);
+  assert.equal(row.manifest, DELETE_KEEP_CHARGES_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json'), 'utf8')).members[MEMBER].live_sha256, LIVE);
   assert.notEqual(row.expected_live_sha256, LIVE);
   assert.notEqual(row.accepted_sha256, LIVE);
@@ -3971,7 +3981,7 @@ test('Cash jobs: workflow.mjs replaced the applied Delete Check bytes with the c
   // The row moved on to the homeowner timeline link, whose REPLACE started from these applied bytes
   // and was applied 2026-10-29 (production run 40938518776).
   const row = PLAN.members[MEMBER];
-  // Then on to the Delete Check keep-charges REPLACE (planning only), held on SQL 169, from those applied bytes.
+  // Then on to the Delete Check keep-charges REPLACE, held on SQL 169, from those applied bytes (applied 2026-11-16).
   assert.deepEqual(row, KEEP_CHARGES_ROW());
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, HOMEOWNER_TIMELINE_LINK_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
   // SQL 121 is applied in staging (run 40591140684) and recorded live in production from its applied pin
@@ -4970,9 +4980,10 @@ test('Homeowner timeline link: workflow.mjs REPLACE from the cash-jobs applied b
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, LIVE);
   // Applied 2026-10-29 (production run 40938518776): the row recorded the accepted bytes as live; it has since moved on to the
-  // Delete Check keep-charges REPLACE (planning only), which starts from those bytes.
+  // Delete Check keep-charges REPLACE, which started from those bytes (applied 2026-11-16; keepChargesRecordPre restates the
+  // plan as it stood before that apply).
   assert.deepEqual(PLAN.members[MEMBER], KEEP_CHARGES_ROW());
-  assert.equal(PLAN.members[MEMBER].expected_live_sha256, accepted);
+  assert.equal(keepChargesRecordPre(structuredClone(PLAN)).members[MEMBER].expected_live_sha256, accepted);
   assert.match(PLAN.notes, /Homeowner timeline link \(2026-10-29\)/);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4986,8 +4997,14 @@ test('Homeowner timeline link: workflow.mjs REPLACE from the cash-jobs applied b
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  // Its applied bytes are now the keep-charges REPLACE's starting point (READY); main's bytes would be ALREADY_ACCEPTED.
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'READY');
+  // Its applied bytes were the keep-charges REPLACE's starting point (READY on the plan before that apply,
+  // keepChargesRecordPre); since that apply (2026-11-16) they are a reconciliation stop and main's bytes ALREADY_ACCEPTED.
+  const keepPre = keepChargesRecordPre(structuredClone(PLAN));
+  assert.equal((await run(inspect, { root: ROOT, plan: keepPre, inspectLive: liveFor(MEMBER, { sha256: accepted, plan: keepPre }) })).state, 'READY');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
   await assert.rejects(
@@ -5046,9 +5063,12 @@ test('Homeowner timeline and endorsement email record: workflow.mjs then endorse
   for (const [member, previous] of Object.entries(planned)) {
     const accepted = timelineAppliedBytes(member);
     assert.deepEqual(record.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: previous });
-    assert.equal(PLAN.members[member].expected_live_sha256, accepted, member);
-    // workflow.mjs's row has since moved on to the keep-charges REPLACE (planning only), from these applied bytes.
-    assert.equal(PLAN.members[member].manifest, member === 'workflow.mjs' ? DELETE_KEEP_CHARGES_REL : TIMELINE_ENDORSEMENT_APPLIED_REL, member);
+    // workflow.mjs's row has since moved on to the keep-charges REPLACE from these applied bytes, applied 2026-11-16
+    // (keepChargesRecordPre restates the plan before that apply).
+    const before = keepChargesRecordPre(structuredClone(PLAN));
+    assert.equal(before.members[member].expected_live_sha256, accepted, member);
+    assert.equal(before.members[member].manifest, member === 'workflow.mjs' ? DELETE_KEEP_CHARGES_REL : TIMELINE_ENDORSEMENT_APPLIED_REL, member);
+    assert.equal(PLAN.members[member].manifest, member === 'workflow.mjs' ? DELETE_KEEP_CHARGES_APPLIED_REL : TIMELINE_ENDORSEMENT_APPLIED_REL, member);
     // The planning manifest keeps the pre-apply state.
     assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, previous), 'utf8')).members[member].accepted_sha256, accepted, member);
   }
@@ -10081,7 +10101,7 @@ test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withd
   assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('moov-wallet-withdraw'));
 });
 
-test('Delete Check keeps charges (2026-11-16, planning only): workflow.mjs REPLACEs the homeowner timeline applied bytes, held on SQL 169 (recorded live), importing money-write-flag.mjs', async () => {
+test('Delete Check keeps charges (2026-11-16): workflow.mjs REPLACEs the homeowner timeline applied bytes, held on SQL 169 (recorded live), importing money-write-flag.mjs; production run 43958640422 applied it', async () => {
   const MEMBER = 'workflow.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, DELETE_KEEP_CHARGES_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
@@ -10096,7 +10116,26 @@ test('Delete Check keeps charges (2026-11-16, planning only): workflow.mjs REPLA
   // It starts from the bytes the homeowner timeline record applied (still live: no rebuild section lists workflow.mjs).
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, TIMELINE_ENDORSEMENT_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, WORKFLOW_TIMELINE_APPLIED);
   assert.notEqual(accepted, WORKFLOW_TIMELINE_APPLIED);
+  // Applied 2026-11-16 on main e81328645 (owner "DEPLOY workflow.mjs TO PRODUCTION"): the applied record chains the member to
+  // the planning manifest; the row expects main's bytes and names it. keepChargesRecordPre restates the plan before the apply.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, DELETE_KEEP_CHARGES_APPLIED_REL), 'utf8'));
+  assert.equal(record.workstream_id, 'delete-check-keep-charges-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-16\)/);
+  assert.equal(record.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: DELETE_KEEP_CHARGES_REL } });
+  for (const runId of ['43943414468', '43957615067', '43957842556', '43958032690', '43958153894', '43958925142', '43958463313', '43958640422', '43958924860']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['e81328645bbcc9755e5e9693e07a769b92349b9e', '"DEPLOY workflow.mjs TO PRODUCTION"', 'efd1147c-3134-43c2-9e23-17fdc50a13d6',
+    'd39bc799-8d17-45fc-8cf8-4144b6cd8a24', 'KsKuydSyUOdyH2DUUF3T32mXO99XFk6HuIoeCJS6pWo=', 'VERIFIED', 'errors []', 'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${DELETE_KEEP_CHARGES_APPLIED_REL}. The row expects the applied bytes and names the delete check keep-charges applied record; its hold, SQL 169, is recorded live.`));
   assert.deepEqual(PLAN.members[MEMBER], KEEP_CHARGES_ROW());
+  const preApply = keepChargesRecordPre(structuredClone(PLAN));
+  assert.deepEqual(preApply.members[MEMBER], KEEP_CHARGES_PLANNING_ROW());
   assert.ok(PLAN.notes.includes('Delete Check keeps charges (2026-11-16'));
   // SQL 169 is recorded live in production (its applied pin, record #1950) and in staging (run 43923431127).
   const pre = PLAN.sql_prerequisites[SQL169_FILE];
@@ -10124,16 +10163,20 @@ test('Delete Check keeps charges (2026-11-16, planning only): workflow.mjs REPLA
   assert.ok(PLAN.do_not_overlay.includes('workflow-delete-check.mjs'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: WORKFLOW_TIMELINE_APPLIED }) });
+  // Inspect: before the apply READY on the homeowner timeline applied bytes (production inspect run 43958463313, replayed on
+  // the pre-apply plan); now ALREADY_ACCEPTED on main's, and the pre-apply bytes, or anything else, a reconciliation stop.
+  const ready = await run(inspect, { root: ROOT, plan: preApply, inspectLive: liveFor(MEMBER, { sha256: WORKFLOW_TIMELINE_APPLIED, plan: preApply }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'd'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
-  // The apply waits for SQL 169: with it recorded not live, the apply is refused.
-  const held = structuredClone(PLAN);
+  for (const other of [WORKFLOW_TIMELINE_APPLIED, 'd'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+    );
+  }
+  // The apply as it stood (the pre-apply plan) waited for SQL 169: with it recorded not live, the apply is refused.
+  const held = structuredClone(preApply);
   held.sql_prerequisites[SQL169_FILE] = { ...pre, verified_live: false, evidence: null };
   await assert.rejects(
     run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: WORKFLOW_TIMELINE_APPLIED }), applyDeps(MEMBER, { plan: held }).deps),
