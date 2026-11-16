@@ -1,0 +1,62 @@
+{
+  "id": "sql169-check-billing-events-keep-charge-on-check-delete-production-apply",
+  "migration": "sql169",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql",
+  "migration_id": "169_check_billing_events_keep_charge_on_check_delete",
+  "staging_pin_commit": "70af8044aa8c0d237335f3132d0a0ba6864965f7",
+  "source_sha256": "df8f8e35b5a7df1ae30f7330d9b0665cc08036ef92895a771ca7d03929a8970f",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969",
+  "authorization_phrase": "KEEP_CHARGES_WHEN_CHECK_IS_DELETED",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 169 replaces one foreign key and creates nothing (owner 2026-11-16, two checks could not be deleted, the API refusing \"This check cannot be deleted because it has dependent financial/provider records (check_billing_events)\"; asked what a delete of a check with a charge should do, the owner chose \"Delete, keep charge (Recommended)\"). check_billing_events_check_intake_item_id_fkey, FOREIGN KEY (check_intake_item_id) REFERENCES public.check_intake_items(id) ON DELETE CASCADE (the Supabase inline key, supabase/migrations/20260501204336), becomes the same key ON DELETE SET NULL under the same name, so deleting a check keeps its check_billing_events rows with check_intake_item_id NULL and every other column unchanged; the billing engine reads charges with LEFT JOIN check_intake_items, so an unlinked charge still counts. Accepted predecessor exactly the CASCADE key; the file refuses (55000) sql169_prerequisite_missing, sql169_column_not_nullable (the column NOT NULL: Supabase dropped it in 20260605163443) and sql169_unexpected_foreign_key (no key on check_intake_item_id, more than one, another name or another definition), and leaves an already SET NULL key as it is (sql169_foreign_key_already_current). No CHECK constraint requires the column; the unique indexes on it treat NULL as distinct or are partial on IS NOT NULL; SQL 154's starter-package trigger fires on UPDATE OF status only. The applying login must own check_billing_events (altered_relations_owned_by_login). No function, trigger, policy, grant, column or row changes. Expected pre-state in both environments: the CASCADE key, validated (release sql169 v1: f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40, releaseStateHash('sql169', that key)). The API keeps refusing such a delete until its own later change (a Lambda overlay of the delete-check code, after this pin is applied in production). No API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql169-check-billing-events-keep-charge-on-check-delete-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql169-check-billing-events-keep-charge-on-check-delete",
+    "one_shot_migration": "sql169",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-169-apply.md",
+    "tests": [
+      "aws/tests/release-sql169-executor.test.mjs",
+      "aws/tests/release-sql169-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql169-check-billing-events-keep-charge-on-check-delete-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 169: sql169-check-billing-events-keep-charge-on-check-delete-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql169-check-billing-events-keep-charge-on-check-delete); production-sql-one-shot.mjs --migration sql169. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the foreign key's definition and validation. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 169 yet. Expected: prerequisites_missing [], check_billing_events owned by checksops_admin, check_billing_events_check_intake_item_id_fkey present with ON DELETE CASCADE and validated, already_applied false. Expected release-engine fingerprint of that pre-state under sql169: f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (the key absent, another name or definition, the column NOT NULL), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969",
+    "note": "check_billing_events_check_intake_item_id_fkey on public.check_billing_events: FOREIGN KEY (check_intake_item_id) REFERENCES public.check_intake_items(id) ON DELETE SET NULL, validated. No other constraint, column, index, trigger, function, policy or grant change; no row written by the apply. The fingerprint is releaseIntendedHash('sql169', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 169 (choice sql169-check-billing-events-keep-charge-on-check-delete) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql169-check-billing-events-keep-charge-on-check-delete-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

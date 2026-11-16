@@ -186,7 +186,7 @@ test('pin: the release pin shape, execute-authorized on the staging apply, in st
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql168-mortgage-desk-same-agent-new-check-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql168-production-apply"\]/);
-  assert.match(rows, /sql165, sql166, sql167, sql168\)/);
+  assert.match(rows, /sql165, sql166, sql167, sql168, sql169\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql168-executor.test.mjs', 'aws/tests/release-sql168-production-apply.test.mjs', 'aws/tests/sql168-mortgage-desk-same-agent-new-check-pg.test.mjs']) {
@@ -252,7 +252,7 @@ test('order: no predecessor; two new SECURITY DEFINER functions with their ACL a
   assert.match(runbook, /\*\*Production inspect \(2026-11-16\)\.\*\* Read-only `--inspect` through SSM `64f2c1ff-e883-47b9-b50b-cf2a11b0a7f2`/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql168` \|/);
-  assert.match(oneShot, /`sql166`, `sql167`, `sql168`\) \|/);
+  assert.match(oneShot, /`sql166`, `sql167`, `sql168`, `sql169`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql168-mortgage-desk-same-agent-new-check-production-apply\.mjs --inspect/);
 });
 

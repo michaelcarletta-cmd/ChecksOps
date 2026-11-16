@@ -140,6 +140,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/166_mortgage_desk_set_monitoring.sql', 'sql/166_mortgage_desk_set_monitoring.sql'],
   ['aws/workflows/sql/167_claim_ledger_relink_check.sql', 'sql/167_claim_ledger_relink_check.sql'],
   ['aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql', 'sql/168_mortgage_desk_same_agent_new_check.sql'],
+  ['aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql', 'sql/169_check_billing_events_keep_charge_on_check_delete.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

@@ -3904,6 +3904,27 @@ export const AUTHORIZED_SQL168_MORTGAGE_DESK_SAME_AGENT_NEW_CHECK = Object.freez
   ]),
 });
 
+// Billing charge kept on check delete staging pin: SQL 169 (owner 2026-11-16, on deleting a check that has a ChecksOps
+// charge: "Delete, keep charge (Recommended)"). Replaces check_billing_events_check_intake_item_id_fkey (ON DELETE
+// CASCADE) with the same key ON DELETE SET NULL, so a deleted check's check_billing_events rows stay, unlinked. No
+// function; no predecessor (release-sql-specs.mjs). Pending until a reviewed pin change records a staging read-live;
+// staging wave 61 when approved (ops/production-sql-169-apply.md).
+export const AUTHORIZED_SQL169_CHECK_BILLING_EVENTS_KEEP_CHARGE_ON_CHECK_DELETE = Object.freeze({
+  key: 'sql169',
+  filename: 'aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql',
+  migration_id: '169_check_billing_events_keep_charge_on_check_delete',
+  // The commit that last authored the file bytes.
+  commit: '70af8044aa8c0d237335f3132d0a0ba6864965f7',
+  source_sha256: 'df8f8e35b5a7df1ae30f7330d9b0665cc08036ef92895a771ca7d03929a8970f',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql169', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969',
+  // The file creates, replaces and sets the ACL of no function.
+  function_identities: Object.freeze([]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3980,6 +4001,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql166: AUTHORIZED_SQL166_MORTGAGE_DESK_SET_MONITORING,
   sql167: AUTHORIZED_SQL167_CLAIM_LEDGER_RELINK_CHECK,
   sql168: AUTHORIZED_SQL168_MORTGAGE_DESK_SAME_AGENT_NEW_CHECK,
+  sql169: AUTHORIZED_SQL169_CHECK_BILLING_EVENTS_KEEP_CHARGE_ON_CHECK_DELETE,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3996,7 +4018,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168, sql169; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
