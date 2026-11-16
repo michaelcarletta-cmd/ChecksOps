@@ -19,7 +19,9 @@
 --
 -- Accepted predecessor: exactly one foreign key on public.check_billing_events (check_intake_item_id) and it is
 -- check_billing_events_check_intake_item_id_fkey, FOREIGN KEY (check_intake_item_id) REFERENCES
--- public.check_intake_items(id) ON DELETE CASCADE. Refuses (55000):
+-- public.check_intake_items(id) ON DELETE CASCADE (ON UPDATE NO ACTION, MATCH SIMPLE, not deferrable, validated), read
+-- from pg_constraint rather than from pg_get_constraintdef, whose rendering depends on the session's search_path.
+-- Refuses (55000):
 --   sql169_prerequisite_missing     the tables or columns are missing;
 --   sql169_column_not_nullable      check_billing_events.check_intake_item_id is NOT NULL (Supabase dropped NOT NULL in
 --                                   20260605163443; a database that still has it is not the one this file was written
@@ -51,9 +53,8 @@ DECLARE
   v_notnull boolean;
   v_fk_count integer;
   v_name text;
-  v_def text;
-  v_pred constant text := 'FOREIGN KEY (check_intake_item_id) REFERENCES public.check_intake_items(id) ON DELETE CASCADE';
-  v_next constant text := 'FOREIGN KEY (check_intake_item_id) REFERENCES public.check_intake_items(id) ON DELETE SET NULL';
+  v_fk record;
+  v_same_key boolean;
 BEGIN
   SELECT array_agg(name ORDER BY name) INTO v_missing
   FROM (
@@ -86,8 +87,10 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
 
-  SELECT count(*)::integer, min(c.conname), min(pg_catalog.pg_get_constraintdef(c.oid))
-    INTO v_fk_count, v_name, v_def
+  -- Read from the catalog, not from pg_get_constraintdef: its rendering of the referenced table depends on the
+  -- session's search_path.
+  SELECT count(*)::integer, min(c.conname)
+    INTO v_fk_count, v_name
   FROM pg_catalog.pg_constraint c
   WHERE c.conrelid = 'public.check_billing_events'::regclass
     AND c.contype = 'f'
@@ -101,13 +104,32 @@ BEGIN
       coalesce(v_name, '-') USING ERRCODE = '55000';
   END IF;
 
-  IF v_def = v_next THEN
+  SELECT c.confdeltype::text AS on_delete, c.confupdtype::text AS on_update, c.confmatchtype::text AS match_type,
+         c.condeferrable AS deferrable, c.convalidated AS validated, c.confdelsetcols AS set_cols,
+         c.confrelid = 'public.check_intake_items'::regclass AS references_checks,
+         c.confkey = ARRAY[(
+           SELECT a.attnum FROM pg_catalog.pg_attribute a
+           WHERE a.attrelid = 'public.check_intake_items'::regclass AND a.attname = 'id'
+         )]::smallint[] AS references_id
+    INTO v_fk
+  FROM pg_catalog.pg_constraint c
+  WHERE c.conrelid = 'public.check_billing_events'::regclass
+    AND c.conname = 'check_billing_events_check_intake_item_id_fkey';
+
+  -- Everything but the delete action must be the Supabase key's: REFERENCES public.check_intake_items(id), ON UPDATE NO
+  -- ACTION, MATCH SIMPLE, not deferrable, validated, no SET NULL column list.
+  v_same_key := v_fk.references_checks AND v_fk.references_id AND v_fk.on_update = 'a' AND v_fk.match_type = 's'
+    AND NOT v_fk.deferrable AND v_fk.validated AND v_fk.set_cols IS NULL;
+
+  IF v_same_key AND v_fk.on_delete = 'n' THEN
     RAISE NOTICE 'sql169_foreign_key_already_current';
     RETURN;
   END IF;
 
-  IF v_def IS DISTINCT FROM v_pred THEN
-    RAISE EXCEPTION 'sql169_unexpected_foreign_key: definition md5=%', md5(v_def) USING ERRCODE = '55000';
+  IF NOT v_same_key OR v_fk.on_delete IS DISTINCT FROM 'c' THEN
+    RAISE EXCEPTION 'sql169_unexpected_foreign_key: on_delete=% on_update=% match=% deferrable=% validated=% references_checks_id=%',
+      v_fk.on_delete, v_fk.on_update, v_fk.match_type, v_fk.deferrable, v_fk.validated,
+      (v_fk.references_checks AND v_fk.references_id) USING ERRCODE = '55000';
   END IF;
 
   ALTER TABLE public.check_billing_events DROP CONSTRAINT check_billing_events_check_intake_item_id_fkey;
