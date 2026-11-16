@@ -6,13 +6,10 @@ import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
 import { WhiteLabelCheckCenter } from "@/components/white-label/WhiteLabelCheckCenter";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Routes, Route, Navigate, useLocation, Link } from "react-router-dom";
 import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { isMasterMerchant } from "@/lib/masterMerchant";
-import { decideWorkspaceAccess, identityListsTenant } from "@/lib/workspaceAccess";
+import { useWorkspaceMembership } from "@/hooks/useWorkspaceMembership";
 import { loginPathWithNext, postLoginPath } from "@/lib/loginReturnPath";
 
 const Payments = lazy(() => import("@/pages/Payments"));
@@ -47,44 +44,9 @@ function CustomDomainRoutes() {
   const { user, loading: authLoading } = useAuth();
   const location = useLocation();
 
-  // Membership: the server's organization list from /identity/me first, then the tenant_users
-  // read. A failed read is not "no row" (workspaceAccess.ts). Same query key and shape as
-  // WhiteLabelApp.
-  const identityListsThisTenant = identityListsTenant(
-    user?.app_metadata?.tenant_memberships,
-    tenant?.id,
-    tenant?.slug,
-  );
-  const {
-    data: membershipRead,
-    isLoading: memberQueryLoading,
-    isFetching: memberFetching,
-    refetch: refetchMembership,
-  } = useQuery({
-    queryKey: ["tenant-membership", tenant?.id, user?.id],
-    queryFn: async () => {
-      if (!tenant?.id || !user?.id) return { row: false, failed: false };
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("id")
-        .eq("tenant_id", tenant.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      return { row: !!data, failed: !!error };
-    },
-    enabled: !!tenant?.id && !!user?.id,
-  });
-  const memberLoading = !identityListsThisTenant && memberQueryLoading;
-
-  // Master merchant can preview any tenant's Check Center
-  const workspaceAccess = decideWorkspaceAccess({
-    tenantId: tenant?.id,
-    tenantSlug: tenant?.slug,
-    identityTenants: user?.app_metadata?.tenant_memberships,
-    tenantUsersRow: !!membershipRead?.row,
-    tenantUsersError: !!membershipRead?.failed,
-    isMasterMerchant: isMasterMerchant(user?.email, user?.id),
-  });
+  // Membership: the server's organization list first, then the tenant_users read; a confirmed
+  // membership survives a failed refetch (useWorkspaceMembership, the same hook as WhiteLabelApp).
+  const { workspaceAccess, memberLoading, checking, retry, failureReason } = useWorkspaceMembership(tenant, user);
   const isMember = workspaceAccess === "member";
 
   if (loading || authLoading || (user && memberLoading)) {
@@ -127,10 +89,13 @@ function CustomDomainRoutes() {
         <div className="text-center space-y-3">
           <h1 className="text-xl font-semibold">We couldn't confirm your access to {tenant.name}.</h1>
           <p className="text-muted-foreground">
-            Check your connection and try again.
+            Check your connection and try again. Retry also refreshes your sign-in.
           </p>
-          <Button onClick={() => void refetchMembership()} disabled={memberFetching}>
-            {memberFetching ? "Checking…" : "Retry"}
+          {failureReason ? (
+            <p className="text-xs text-muted-foreground">Reason: {failureReason}</p>
+          ) : null}
+          <Button onClick={() => void retry()} disabled={checking}>
+            {checking ? "Checking…" : "Retry"}
           </Button>
         </div>
       </div>

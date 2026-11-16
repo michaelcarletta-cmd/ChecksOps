@@ -79,3 +79,51 @@ export function decideWorkspaceAccess(input: WorkspaceAccessInput): WorkspaceAcc
   if (input.tenantUsersError) return "unconfirmed";
   return "denied";
 }
+
+/** One tenant_users membership read, as the workspace screens keep it. */
+export type MembershipRead = {
+  row: boolean;
+  failed: boolean;
+  /** Short reason of a failed read (the API error code or message), shown on the retry screen. */
+  reason: string | null;
+};
+
+const errorReason = (error: unknown): string => {
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const code = text(record.code);
+    const message = text(record.message);
+    if (code && code !== "42501") return code.slice(0, 80);
+    if (message) return message.slice(0, 80);
+    if (code) return code;
+  }
+  return "membership_read_failed";
+};
+
+/**
+ * Owner, 2026-11-16: after a payment to Condition One went through, the page was replaced by
+ * "We couldn't confirm your access". A refetch of the membership read failed (after a send the
+ * app refreshes its data) and that one failure replaced a membership already confirmed in this
+ * session. A confirmed membership now stays confirmed through a failed refetch; only a read that
+ * succeeds can change it. The API and RLS still enforce membership on every request.
+ */
+export function nextMembershipRead(
+  previous: MembershipRead | null | undefined,
+  result: { found: boolean; error: unknown },
+): MembershipRead {
+  if (result.error) {
+    if (previous?.row) return { row: true, failed: false, reason: null };
+    return { row: false, failed: true, reason: errorReason(result.error) };
+  }
+  return { row: result.found, failed: false, reason: null };
+}
+
+/**
+ * A signed-in user restored from storage by a build older than the organization list
+ * (2026-11-16) has no app_metadata.tenant_memberships at all (not an empty list). Such a
+ * session is refreshed once so /identity/me supplies the list.
+ */
+export function identityTenantsMissing(appMetadata: unknown): boolean {
+  if (!appMetadata || typeof appMetadata !== "object") return true;
+  return !Array.isArray((appMetadata as Record<string, unknown>).tenant_memberships);
+}
