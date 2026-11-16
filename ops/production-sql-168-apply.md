@@ -87,7 +87,7 @@ billing, SQL 167's relink keep their bodies). Two public triggers are added: the
 expected trigger count follow after the apply, in their own change (as SQL 121). No API, Lambda or SPA change is part of
 this pin: the API calls nothing new.
 
-**Status:** applied in staging (wave 60, 2026-11-16, apply run 43882991880); staging acceptance: the staging apply under the owner's run approval ("apply SQL 168 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `64f2c1ff-e883-47b9-b50b-cf2a11b0a7f2`, 2026-11-16) by the owner-reviewed pin change; not applied in production.
+**Status:** applied in staging (wave 60, 2026-11-16, apply run 43882991880); staging acceptance: the staging apply under the owner's run approval ("apply SQL 168 in staging"; no separate acceptance statement); applied to production (2026-11-16); the production pin is retired (`execute: false`). Production `/db-readonly-validate` now counts 192 public triggers (SQL 168's two) while the production validator still expects 190, so it reports unhealthy until the `db-readonly-validate.mjs` production REPLACE (`096aae7a…` -> `bdb818b5…`, planned by #1954, no longer held by SQL 168), which needs the owner's words "DEPLOY db-readonly-validate.mjs TO PRODUCTION".
 
 **Staging read-live (2026-11-16).** Run 43878936321 (main `5e2d6fe4e`, after executor inspect run 43871619672 and executor deploy
 run 43872142937 (executor CodeSha256 `0KNPXGrb…` -> `Ul6WPHdS…`)), under the owner's words "apply SQL 168 in staging":
@@ -126,6 +126,28 @@ main and staged, under the owner's words for that run (phrase `ROUTE_NEW_CHECK_T
 `trg_auto_create_loss_draft` is live on production (the route also fires on `claim_id` updates), and whether the two "active
 agent" rules (SQL 158: no `mortgage_agent_accounts` row other than `active`; SQL 47/100: not `inactive`) agree on production's
 roster.
+
+**Production apply (2026-11-16).** After the pin change (#1939, merged to main as `bab01e726` on the owner's words "merge the SQL 168
+production pin PR"), transfer run 43958936335 (`sql53-temporary-transfer.yml`) staged main `e81328645` (tarball sha256
+`15a529ae0b2c1997b9cf7483130f61d9a258ae156e037aa6df504e7f6394ef7d`, checked by `sha256sum -c` on the runner; `SOURCE_COMMIT`
+matched). The runner was started from stopped with no SSM command in progress. Under the owner's words "apply SQL 168 in production
+ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT" (passed verbatim to this run), on `i-0c35557c4e5385406` (root volume 39% used): one-shot
+`--phase inspect` (SSM `22669a58-0fca-481e-9188-ee5bce9a81df`, Success, exit 0, steps pin, source, inspect and contracts ok, nothing
+written) read live `a364af9a…` (`live_matches_expected` true, `already_applied` false, `precondition_failures` `[]`); the apply command
+was sent only after that. Then `--phase apply` (SSM `6781f116-8801-4164-a110-80ccbcb8f437`, Success, exit 0, run
+`14532473-eb26-43de-b552-be5def063452`, workstream `prod-sql168-desk-same-agent-20261116`, one_use_id
+`sql168-prod-c1d1978f-d118-4880-a015-e43aa0743d52`): contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `7c9931cb…`; receipt
+`a364af9a…` → `6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166` (intended), result `applied`, unrelated catalog
+`9cf20519…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`, `aws_mortgage_desk_route_same_agent(uuid, text)`
+and `aws_mortgage_desk_route_same_agent_trigger()` `intended`, triggers `loss_draft_tracking aws_loss_draft_route_same_agent` and
+`check_intake_items aws_check_claim_route_same_agent` `intended`. The run's whole output arrived (25520 bytes, sha256
+`aa91232b09b8787e979937c593fecdbd654dbd25952a3701db705019adc4f894`; read back in compact form and re-serialized to that same size and
+sha256; the copy on the runner was removed afterwards). A process check after the apply found no one-shot running and the runner was
+stopped afterwards. Recorded in the pin's `applied` and `production_evidence`; `execute` is false again; the production overlay plan
+records SQL 168 live (`sql_prerequisites`), so `db-readonly-validate.mjs` is no longer held by it. Production acceptance had not been
+reported by the owner when this record was written; this record does not claim it. The production `/db-readonly-validate` now sees 192
+public triggers against the 190 its deployed validator expects, and reports unhealthy until the `db-readonly-validate.mjs` production
+REPLACE (owner's words "DEPLOY db-readonly-validate.mjs TO PRODUCTION"); that REPLACE is not part of this record.
 
 ## Fingerprint
 

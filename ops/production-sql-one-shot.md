@@ -151,11 +151,9 @@ An unexpected exception also ends in one failure summary:
    (`ok: true` plus a reference) and an authorization phrase. SQL 169's pin is `execute: false`
    again since its 2026-11-16 apply (owner statement "apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED"; see
    `ops/production-sql-169-apply.md`).
-   SQL 168's pin is `execute: true`
-   (owner-approved pin change of 2026-11-16: the read-only production inspect of 2026-11-16, SSM
-   `64f2c1ff-e883-47b9-b50b-cf2a11b0a7f2`, recorded as its pre-state, the same one staging had, on its
-   guarded staging apply run 43882991880; see `ops/production-sql-168-apply.md`) until its
-   record-and-retire change; the production apply still needs the owner's words for that run.
+   SQL 168's pin is `execute: false`
+   again since its 2026-11-16 apply (owner statement "apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT"; see
+   `ops/production-sql-168-apply.md`).
    SQL 166's pin is `execute: false`
    again since its 2026-11-14 apply (owner statement "apply SQL 166 and SQL 167 in production"; see
    `ops/production-sql-166-apply.md`).
