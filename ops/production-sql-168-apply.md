@@ -87,7 +87,7 @@ billing, SQL 167's relink keep their bodies). Two public triggers are added: the
 expected trigger count follow after the apply, in their own change (as SQL 121). No API, Lambda or SPA change is part of
 this pin: the API calls nothing new.
 
-**Status:** staging pin execute-authorized (wave 60); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 60, 2026-11-16, apply run 43882991880); staging acceptance: the staging apply under the owner's run approval ("apply SQL 168 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `64f2c1ff-e883-47b9-b50b-cf2a11b0a7f2`, 2026-11-16) by the owner-reviewed pin change; not applied in production.
 
 **Staging read-live (2026-11-16).** Run 43878936321 (main `5e2d6fe4e`, after executor inspect run 43871619672 and executor deploy
 run 43872142937 (executor CodeSha256 `0KNPXGrb…` -> `Ul6WPHdS…`)), under the owner's words "apply SQL 168 in staging":
@@ -96,6 +96,36 @@ run 43872142937 (executor CodeSha256 `0KNPXGrb…` -> `Ul6WPHdS…`)), under the
 (`expected_live_definition_sha256`, `execute: true`, wave 60). An earlier read-live attempt (run 43878762111) was refused at the
 workflow's input check (`approved_commit` missing) before reaching the database. The staging apply is a separate run after this
 pin is merged and the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-16).** The staging pin for SQL 168 (wave 60, PR #1937, owner's words
+"merge the SQL 168 staging pin PR") merged as `bc52a5889195d3412ec2f31e5e843fd54c9919fa`. Executor inspect run 43881814016 read `Ul6WPHdS…` (not current);
+deploy run 43882354934 updated the staging guarded SQL executor (CodeSha256 `Ul6WPHdS…` -> `aU0HiKBL…`). Apply run 43882991880
+(main `bc52a5889`) under the owner's words "apply SQL 168 in staging": `before_hash` `a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33`, `after_hash`
+`6032655886f96d76f95434ded6d947284eb0bf6e7cfa7aab11c4b21d1fd41166` (the intended hash), `result` applied. Read-live run 43883462531: `already_applied` true. The owner gave the run
+approval "apply SQL 168 in staging"; no separate staging acceptance statement was given. There is no separate staging record
+PR for SQL 168: these staging runs are recorded here and in the production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-16).** Read-only `--inspect` through SSM `64f2c1ff-e883-47b9-b50b-cf2a11b0a7f2` on
+`i-0c35557c4e5385406` (under the owner's words "run the SQL 168 production inspect"; runner started from stopped with no SSM
+command in progress, command 14:18:04Z to 14:18:13Z, AWS-RunShellScript, Success, runner stopped again afterwards, all by
+`user/claude-code`), main `bc52a5889` (tarball sha256 `96eb31fc6d7998854c58069d75e1422042f0ce14f4e66bf25e5f9c0dc2b459df`, checked by `sha256sum -c` on the
+runner, `SOURCE_COMMIT` matched, staged by `sql53-temporary-transfer.yml` run 43883906810; sha256 of the printed sql168 output,
+computed on the runner, `2ca492ab7ce4087eee57778173189956093d26bdd60c73605ff4bd176e93dc0d`, 2951 bytes), exit 0, `ok` true, `read_only` true, `current_user`
+`checksops_admin`, `missing_dependencies` `[]`: live `a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33` (the two functions and the two triggers
+absent: the derived pre-state, equal to staging's before its apply), no predecessor, `prerequisites_missing` `[]`,
+`successors_applied` `[]`, `definer_writes` ok on `check_intake_items`, `loss_draft_tracking`, `mortgage_handling_requests`,
+`mortgage_ops_request_audit`, `mortgage_agent_accounts`, `check_messages` and `profiles`, `already_applied` false,
+`precondition_failures` `[]`, `apply_preconditions_met` false (no pre-state recorded yet). Production's pre-state equals
+staging's (read-live run 43878936321 and the staging apply's `before_hash`), so the staging apply took the path production will.
+Recorded in the production pin with the staging apply (run 43882991880) as its staging acceptance and `execute: true` under the
+owner's words "open the SQL 168 production pin PR". The owner merges the pin change; the apply runs only after that merge is on
+main and staged, under the owner's words for that run (phrase `ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT`).
+
+**Not verified by the inspect** (it reads only SQL 168's own objects): the live-only billing trigger
+`tr_accrue_mortgage_ops_billing` (no CREATE in the repo; the routed accept fires it like any agent accept), whether
+`trg_auto_create_loss_draft` is live on production (the route also fires on `claim_id` updates), and whether the two "active
+agent" rules (SQL 158: no `mortgage_agent_accounts` row other than `active`; SQL 47/100: not `inactive`) agree on production's
+roster.
 
 ## Fingerprint
 
