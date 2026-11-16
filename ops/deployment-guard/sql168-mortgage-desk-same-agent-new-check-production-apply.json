@@ -1,0 +1,65 @@
+{
+  "id": "sql168-mortgage-desk-same-agent-new-check-production-apply",
+  "migration": "sql168",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/168_mortgage_desk_same_agent_new_check.sql",
+  "migration_id": "168_mortgage_desk_same_agent_new_check",
+  "staging_pin_commit": "2943f86f1ed9fccc70119670db67a6e15ddfa096",
+  "source_sha256": "3cd74219ec9a5c0a0901fd950ac8da395b18b540f72802f3e0e87949ab8970c6",
+  "function_identities": [
+    "public.aws_mortgage_desk_route_same_agent(uuid, text)",
+    "public.aws_mortgage_desk_route_same_agent_trigger()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "5536690fc45f29ebc1c481dcd54265543f7ddc0735277f2571fd7d63e87941ea",
+  "authorization_phrase": "ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 168 adds two SECURITY DEFINER functions and two triggers and replaces nothing (owner 2026-11-16: \"We need to make sure once a mortgage agent handles a check, if another check comes in they handle each one for that check file\"; decisions: auto-assign, the tenant does nothing; the same file is the same check_intake_items.claim_id; the agent of the claim's in_progress or completed request while still an active Mortgage Desk agent, else nothing and the tenant sends as today; the details copied, editable by the agent). aws_mortgage_desk_route_same_agent(uuid, text) acts only on a check with a claim_id and a loss_draft_tracking row, not deposited, voided or returned (SQL 167's rule), with no requested, in_progress or completed request; the source is the same tenant's 1st-mortgagee request on another check of that claim, in_progress (most recent accept) else completed (most recent completion), whose agent holds mortgage_agent and has no mortgage_agent_accounts row other than active (SQL 158's rule). It inserts one request (status requested, endorsement_order 1, claim_id, the details copied: mortgage company and servicer, loan number, policy and claim number, insurance company, loss type and date, homeowner name, email, phone, address and SSN last 4), then the agent's accept row change (in_progress, assigned_employee_id, accepted_at now()) and one mortgage_ops_request_audit row (action auto_route_same_agent). It never creates a 2nd-mortgagee request, changes an existing request, or acts for another tenant or an inactive agent. aws_mortgage_desk_route_same_agent_trigger() runs it in a subtransaction (an error rolls back only the routing, the tenant's write goes through) for aws_loss_draft_route_same_agent (AFTER INSERT ON loss_draft_tracking) and aws_check_claim_route_same_agent (AFTER UPDATE ON check_intake_items WHEN claim_id is set or changed: the auto-link, the Review save, SQL 167's relink). Both functions SET search_path = public, pg_temp and row_security = on (SQL 167 runs with row_security off), EXECUTE for the owner only (PUBLIC, anon, authenticated, service_role and checksops revoked). The accept fires the live accept triggers unchanged: under SQL 160 an additional check on a claim already charged records nothing; a claim with no Mortgage Ops charge yet is charged mortgage_ops_initial. The spec prerequisites are the file's own (55000 sql168_prerequisite_missing); the applying login must reach check_intake_items, loss_draft_tracking, mortgage_handling_requests, mortgage_ops_request_audit and mortgage_agent_accounts as the definer past RLS (definer_can_write_relations; the file refuses otherwise, sql168_definer_cannot_reach) and own loss_draft_tracking and check_intake_items (altered_relations_owned_by_login). No table, column, policy, table grant or row changes. It adds two public triggers, so the db-readonly-validate justified set and trigger count follow after the apply in their own change (as SQL 121). Expected pre-state in both environments: the two functions and the two triggers absent (release sql168 v1: a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33, releaseStateHash('sql168', {})). No backfill: existing checks are not routed. No API, Lambda or SPA change is part of this pin; the API calls nothing new.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql168-mortgage-desk-same-agent-new-check-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql168-mortgage-desk-same-agent-new-check",
+    "one_shot_migration": "sql168",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-168-apply.md",
+    "tests": [
+      "aws/tests/release-sql168-executor.test.mjs",
+      "aws/tests/release-sql168-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql168-mortgage-desk-same-agent-new-check-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 168: sql168-mortgage-desk-same-agent-new-check-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql168-mortgage-desk-same-agent-new-check); production-sql-one-shot.mjs --migration sql168. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two functions with their attributes, bodies, results and ACLs and the two triggers' definitions. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 168 yet. Expected: prerequisites_missing [], the two functions and the two triggers absent, definer_writes ok on check_intake_items, loss_draft_tracking, mortgage_handling_requests, mortgage_ops_request_audit and mortgage_agent_accounts, already_applied false. Expected release-engine fingerprint of that pre-state under sql168: a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33 (releaseStateHash('sql168', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "5536690fc45f29ebc1c481dcd54265543f7ddc0735277f2571fd7d63e87941ea",
+    "note": "public.aws_mortgage_desk_route_same_agent(uuid, text) (plpgsql, VOLATILE, RETURNS uuid) and public.aws_mortgage_desk_route_same_agent_trigger() (plpgsql, VOLATILE, RETURNS trigger), owned by checksops_admin, SECURITY DEFINER, SET search_path = public, pg_temp, SET row_security = on, EXECUTE for the owner only, nothing for PUBLIC, anon, authenticated, service_role or checksops; trigger aws_loss_draft_route_same_agent AFTER INSERT ON public.loss_draft_tracking and trigger aws_check_claim_route_same_agent AFTER UPDATE ON public.check_intake_items WHEN ((new.claim_id IS NOT NULL) AND (old.claim_id IS DISTINCT FROM new.claim_id)), both FOR EACH ROW running the trigger function, enabled. No other function, table, column, policy or grant change; no row written by the apply. The fingerprint is releaseIntendedHash('sql168', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 5536690fc45f29ebc1c481dcd54265543f7ddc0735277f2571fd7d63e87941ea."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 168 (choice sql168-mortgage-desk-same-agent-new-check) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql168-mortgage-desk-same-agent-new-check-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
