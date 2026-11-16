@@ -40,7 +40,7 @@ refusing the delete of a charged check until its own later step (a Lambda overla
 this pin is applied in production. No API, Lambda or SPA change is part of this pin. Deposits, CheckAlt deposits,
 disbursements, payments and payment directions keep blocking a delete.
 
-**Status:** staging pin execute-authorized (wave 61); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 61, 2026-11-16, apply run 43923431127); staging acceptance: the staging apply under the owner's run approval ("apply SQL 169 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `29ddf3f2-9ca8-467d-8877-a84e95294f14`, 2026-11-16) by the owner-reviewed pin change; not applied in production.
 
 **Staging read-live (2026-11-16).** Run 43919046029 (main `294055a93`, after executor inspect run 43917310640 and executor deploy
 run 43917926456 (executor CodeSha256 `aU0HiKBL…` -> `DA2QdHRx…`)), under the owner's words "apply SQL 169 in staging":
@@ -48,6 +48,33 @@ run 43917926456 (executor CodeSha256 `aU0HiKBL…` -> `DA2QdHRx…`)), under the
 `f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40`, equal to the derived pre-state; intended `30fc8ed4…`. Recorded in the staging pin
 (`expected_live_definition_sha256`, `execute: true`, wave 61). The staging apply is a separate run after this pin is merged
 and the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-16).** The staging pin for SQL 169 (wave 61, PR #1948, owner's words
+"merge the SQL 169 staging pin PR") merged as `96981921a14678e8c7dfe5ec56c29e09f8972e55`. Executor inspect run 43921911783 read `DA2QdHRx…` (not current);
+deploy run 43922432721 updated the staging guarded SQL executor (CodeSha256 `DA2QdHRx…` -> `8i2ZsahmH…`; inspect run 43922950607
+`EXECUTOR_CURRENT` true). Apply run 43923431127 (main `96981921a`) under the owner's words "apply SQL 169 in staging": `before_hash`
+`f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40`, `after_hash` `30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969` (the intended hash), `result` applied. Read-live run 43923909951:
+`already_applied` true, `precondition_failures` `[]`. The owner gave the run approval "apply SQL 169 in staging"; no separate staging
+acceptance statement was given. There is no separate staging record PR for SQL 169: these staging runs are recorded here and in the
+production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-16).** Read-only `--inspect` through SSM `29ddf3f2-9ca8-467d-8877-a84e95294f14` on
+`i-0c35557c4e5385406` (under the owner's words "run the SQL 169 production inspect"; runner started from stopped with no SSM
+command in progress, command 18:03:22Z to 18:03:29Z, AWS-RunShellScript, Success, runner stopped again afterwards, all by
+`user/claude-code`), main `96981921a` (tarball sha256 `d6a952e92abb572f1de5af8cb34926b0a282ade76d16b05e634e36e995340ac5`, checked by `sha256sum -c` on the
+runner, `SOURCE_COMMIT` matched, staged by `sql53-temporary-transfer.yml` run 43924507724; sha256 of the printed sql169 output,
+computed on the runner, `90d36f6e036643aeb2f71b1c2f39a7290ca94d8022f432dd35a998bef0368352`, 1814 bytes), exit 0, `ok` true, `read_only` true, `source_ok` true,
+`current_user` `checksops_admin`, `predecessors_applied` true: live `f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40` (the ON DELETE CASCADE key:
+the derived pre-state, equal to staging's before its apply), no predecessor, `prerequisites_missing` `[]`, `successors_applied` `[]`,
+`already_applied` false, `precondition_failures` `[]`, `apply_preconditions_met` false (no pre-state recorded yet). Production's
+pre-state equals staging's (read-live run 43919046029 and the staging apply's `before_hash`), so the staging apply took the path
+production will. Recorded in the production pin with the staging apply (run 43923431127) as its staging acceptance and
+`execute: true` under the owner's words "open the SQL 169 production pin PR". The owner merges the pin change; the apply runs only
+after that merge is on main and staged, under the owner's words for that run (phrase `KEEP_CHARGES_WHEN_CHECK_IS_DELETED`).
+
+**Not verified by the inspect** (it fingerprints only the foreign key): whether `public.check_billing_events.check_intake_item_id`
+is nullable on production (the file refuses with `sql169_column_not_nullable` at apply time if it is NOT NULL, applying nothing)
+and whether `checksops_admin` owns `check_billing_events` (the apply engine refuses if it does not).
 
 ## Fingerprint
 

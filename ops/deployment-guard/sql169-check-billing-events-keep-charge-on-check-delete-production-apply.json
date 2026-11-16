@@ -1,8 +1,8 @@
 {
   "id": "sql169-check-billing-events-keep-charge-on-check-delete-production-apply",
   "migration": "sql169",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-16 (the owner's words of 2026-11-16: \"build SQL 169\", \"merge the SQL 169 PR\", \"apply SQL 169 in staging\", \"merge the SQL 169 staging pin PR\", \"run the SQL 169 production inspect\" and \"open the SQL 169 production pin PR\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 169 after the staging apply below (production f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40 -> 30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "70af8044aa8c0d237335f3132d0a0ba6864965f7",
   "source_sha256": "df8f8e35b5a7df1ae30f7330d9b0665cc08036ef92895a771ca7d03929a8970f",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40",
   "intended_replacement_sha256": "30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969",
   "authorization_phrase": "KEEP_CHARGES_WHEN_CHECK_IS_DELETED",
   "predecessors": [],
@@ -39,24 +39,24 @@
     "note": "Guarded tooling for SQL 169: sql169-check-billing-events-keep-charge-on-check-delete-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql169-check-billing-events-keep-charge-on-check-delete); production-sql-one-shot.mjs --migration sql169. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the foreign key's definition and validation. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-16",
+    "ssm_command_id": "29ddf3f2-9ca8-467d-8877-a84e95294f14",
+    "source_commit": "96981921a14678e8c7dfe5ec56c29e09f8972e55",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 169 yet. Expected: prerequisites_missing [], check_billing_events owned by checksops_admin, check_billing_events_check_intake_item_id_fkey present with ON DELETE CASCADE and validated, already_applied false. Expected release-engine fingerprint of that pre-state under sql169: f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (the key absent, another name or definition, the column NOT NULL), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-16 (SSM command 29ddf3f2-9ca8-467d-8877-a84e95294f14, AWS-RunShellScript, status Success, 18:03:22Z to 18:03:29Z, node scripts/deployment-guard/sql169-check-billing-events-keep-charge-on-check-delete-production-apply.mjs --inspect (exit 0), under the owner's words \"run the SQL 169 production inspect\", on the SQL53 runner i-0c35557c4e5385406 (started from stopped with no SSM command in progress and stopped again afterwards, both by user/claude-code) from main 96981921a (tarball source-96981921a14678e8c7dfe5ec56c29e09f8972e55.tar.gz sha256 d6a952e92abb572f1de5af8cb34926b0a282ade76d16b05e634e36e995340ac5, checked by sha256sum -c on the runner, SOURCE_COMMIT matched, staged by the transfer workflow sql53-temporary-transfer.yml run 43924507724), sha256 of the tool's printed output as computed on the runner 90d36f6e036643aeb2f71b1c2f39a7290ca94d8022f432dd35a998bef0368352 (1814 bytes)): ok true, read_only true, source_ok true, current_user, session_user and admin_login checksops_admin, pin_execute false, predecessors_applied true, prerequisites_missing [], predecessors {} (none), successors_applied [], precondition_failures []; check_billing_events_check_intake_item_id_fkey state different (the ON DELETE CASCADE key, not yet SET NULL). live_definition_sha256 f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40 (not the intended 30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969: already_applied false), the derived CASCADE pre-state the earlier note below names, equal to staging's before its apply (read-live run 43919046029 and the staging apply's before_hash). live_matches_expected false and apply_preconditions_met false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, prerequisites_missing is not [] or precondition_failures is not [], stop: that needs its own reviewed change. Not verified by this inspect (it fingerprints only the foreign key): whether public.check_billing_events.check_intake_item_id is nullable on production (the file refuses with sql169_column_not_nullable at apply time if it is NOT NULL, applying nothing) and whether checksops_admin owns check_billing_events (the apply engine refuses if it does not). Earlier: Pending: no release-engine production inspect has been run for SQL 169 yet. Expected: prerequisites_missing [], check_billing_events owned by checksops_admin, check_billing_events_check_intake_item_id_fkey present with ON DELETE CASCADE and validated, already_applied false. Expected release-engine fingerprint of that pre-state under sql169: f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (the key absent, another name or definition, the column NOT NULL), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969",
     "note": "check_billing_events_check_intake_item_id_fkey on public.check_billing_events: FOREIGN KEY (check_intake_item_id) REFERENCES public.check_intake_items(id) ON DELETE SET NULL, validated. No other constraint, column, index, trigger, function, policy or grant change; no row written by the apply. The fingerprint is releaseIntendedHash('sql169', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 169 (choice sql169-check-billing-events-keep-charge-on-check-delete) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql169-check-billing-events-keep-charge-on-check-delete-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43923431127",
+    "basis": "Guarded staging SQL executor apply of sql169-check-billing-events-keep-charge-on-check-delete, run 43923431127 (2026-11-16, main 96981921a14678e8c7dfe5ec56c29e09f8972e55, wave 61, staging pin PR #1948), under the owner's words \"apply SQL 169 in staging\", on the executor deployed by deploy run 43922432721 (CodeSha256 DA2QdHRx... -> 8i2ZsahmH...; executor inspect runs 43921911783 and 43922950607, the latter EXECUTOR_CURRENT true), from the staging pre-state read by read-live run 43919046029 (f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40; main 294055a93 after executor inspect run 43917310640 and deploy run 43917926456, CodeSha256 aU0HiKBL... -> DA2QdHRx...): receipt before f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40, after 30fc8ed4927c599b9f320ec07a2e535eaa07f86b55b5180a937c1d405dc19969 == intended. Read-live run 43923909951 then reported already_applied true, precondition_failures []. The owner gave the run approval \"apply SQL 169 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-169-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql169-check-billing-events-keep-charge-on-check-delete-pg.test.mjs and through the executor by aws/tests/release-sql169-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so staging accepted exactly the production transition. The same file bytes (source_sha256) are pinned in both."
   }
 }

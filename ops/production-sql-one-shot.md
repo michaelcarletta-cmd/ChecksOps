@@ -148,7 +148,12 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 168's pin is `execute: true`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 169's pin is `execute: true`
+   (owner-approved pin change of 2026-11-16: the read-only production inspect of 2026-11-16, SSM
+   `29ddf3f2-9ca8-467d-8877-a84e95294f14`, recorded as its pre-state, the same one staging had, on its
+   guarded staging apply run 43923431127; see `ops/production-sql-169-apply.md`) until its
+   record-and-retire change; the production apply still needs the owner's words for that run.
+   SQL 168's pin is `execute: true`
    (owner-approved pin change of 2026-11-16: the read-only production inspect of 2026-11-16, SSM
    `64f2c1ff-e883-47b9-b50b-cf2a11b0a7f2`, recorded as its pre-state, the same one staging had, on its
    guarded staging apply run 43882991880; see `ops/production-sql-168-apply.md`) until its
