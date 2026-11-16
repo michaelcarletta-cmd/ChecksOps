@@ -10175,6 +10175,38 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_intake_items"
     ]
   },
+  // SQL 169 (owner 2026-11-16, on deleting a check that has a ChecksOps charge: "Delete, keep charge (Recommended)"):
+  // replaces check_billing_events_check_intake_item_id_fkey (FOREIGN KEY (check_intake_item_id) REFERENCES
+  // public.check_intake_items(id) ON DELETE CASCADE, the Supabase inline key) with the same key ON DELETE SET NULL under
+  // the same name, so deleting a check keeps its charges, unlinked. Accepted predecessor exactly the CASCADE key; the file
+  // refuses a NOT NULL column, a missing key, a second key or another definition, and leaves an already SET NULL key as
+  // it is. altered_relations: the table that holds the key. No function, trigger, policy, grant or column change; no
+  // predecessor.
+  sql169: {
+    "key": "sql169",
+    "label": "SQL 169",
+    "choice": "sql169-check-billing-events-keep-charge-on-check-delete",
+    "production_pin_rel": "ops/deployment-guard/sql169-check-billing-events-keep-charge-on-check-delete-production-apply.json",
+    "script": "sql169-check-billing-events-keep-charge-on-check-delete-production-apply",
+    "prerequisites": [
+      "public.check_billing_events",
+      "public.check_intake_items",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.check_intake_items.id"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "constraints": [
+      {
+        "table": "public.check_billing_events",
+        "name": "check_billing_events_check_intake_item_id_fkey",
+        "def": "FOREIGN KEY (check_intake_item_id) REFERENCES public.check_intake_items(id) ON DELETE SET NULL"
+      }
+    ],
+    "altered_relations": [
+      "public.check_billing_events"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
