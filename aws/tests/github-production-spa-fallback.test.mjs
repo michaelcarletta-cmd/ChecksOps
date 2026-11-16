@@ -778,6 +778,10 @@ test('the runbook records the phrases, the baseline hash, the runs and what was 
   assert.match(runbook, /ChecksOpsGitHubProductionCspHeaders/);
   // The first publish ran (2026-11-06); the www redirect is recorded with what was read before it.
   assert.match(runbook, /The first\npublish \(run 42281453509, 2026-11-06\)/);
-  assert.match(runbook, /www redirect: not run yet/);
+  // The www redirect publish is recorded with its runs and the snapshots before and after.
+  assert.match(runbook, /publish run 43886410155/);
+  assert.ok(runbook.includes('8bfd10b42d5d222a0ecd28b68cb5c75338a542b94faa9b37a3045b166a9a4e87'));
+  assert.ok(runbook.includes('deb213a2fae706896af706914747eec953edd495c56c42c7fa3e5eef3de07f88'));
+  assert.ok(runbook.includes(sha256(CURRENT)));
   assert.match(runbook, /"build the www redirect"/);
 });
