@@ -300,7 +300,7 @@ export function SendToMortgageDeskButton({
       {isCompleted && returnAlert?.actionRequired && (
         <Badge
           variant="outline"
-          className="h-7 gap-1 border-amber-400/40 text-amber-200 bg-amber-500/10"
+          className="h-7 gap-1 border-amber-400/40 text-amber-800 dark:text-amber-200 bg-amber-500/10"
         >
           Returned from Mortgage Desk · Action Required
         </Badge>

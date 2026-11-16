@@ -3933,7 +3933,7 @@ function CheckDetailPanel({
                   View Loss Draft
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-y-auto overscroll-contain md:overflow-hidden border-border bg-card">
+              <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-y-auto overscroll-contain border-border bg-card">
                 <div className="p-4 bg-muted/30 border-b flex items-center justify-between">
                   <DialogTitle className="text-lg flex items-center gap-2">
                     <Landmark className="h-5 w-5 text-amber-400" />

@@ -31,10 +31,10 @@ export function MortgageDeskReturnedBanner({
       <div className="flex items-start gap-2">
         <AlertTriangle className={`${compact ? "h-3.5 w-3.5" : "h-4 w-4"} text-amber-400 shrink-0 mt-0.5`} />
         <div className="min-w-0 space-y-1">
-          <p className={`${compact ? "text-xs" : "text-sm"} font-semibold text-amber-100`}>
+          <p className={`${compact ? "text-xs" : "text-sm"} font-semibold text-amber-800 dark:text-amber-100`}>
             Returned from Mortgage Desk · Action Required
           </p>
-          <p className="text-[11px] text-amber-100/80">{MORTGAGE_DESK_RETURN_MESSAGE}</p>
+          <p className="text-[11px] text-amber-800/90 dark:text-amber-100/80">{MORTGAGE_DESK_RETURN_MESSAGE}</p>
           {when && (
             <p className="text-[10px] text-muted-foreground">
               Returned {format(new Date(when), "MMM d, yyyy h:mm a")}
