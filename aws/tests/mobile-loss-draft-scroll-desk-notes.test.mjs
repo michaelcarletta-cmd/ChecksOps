@@ -4,6 +4,10 @@
  *     The loss draft panel had a fixed height with overflow-hidden at every width; on a phone its tall header
  *     (check, actions, Mortgage Desk cards) was clipped and the page could not scroll to it. Below md the panel now
  *     grows with its content; from md up it keeps the fixed height.
+ *     Owner 2026-11-16: "scrolling in loss draft needs to be fixed. When these notes and updates are completed, the
+ *     tenant needs to be able to see everything still." On desktop the same clipping happened once the Mortgage Desk
+ *     notes, documents and the returned box outgrew the fixed height; the panel now grows with its content at every
+ *     width and the page or the View Loss Draft dialog scrolls. The returned box's amber text is readable in light mode.
  *  2. "When mortgage desk adds a note the boxes/notifications show large. Let's make those notifications smaller but
  *     easily to notice from a tenant that there is an update." Desk notes and the shipping card are compact rows with
  *     an amber accent, the "Mortgage Desk" label, the time and a "New" marker from the existing check_message_reads.
@@ -34,20 +38,17 @@ const REQUEST_ID = '11111111-1111-4111-8111-111111111111';
 
 /* ------------------------------ 1. mobile scroll ------------------------------ */
 
-test('loss draft panel: fixed height and overflow-hidden only from md up, so a phone scrolls the page', () => {
+test('loss draft panel: no fixed height or clipping at any width; the page or dialog scrolls (owner 2026-11-15, 2026-11-16)', () => {
   const panel = read('src/components/loss-draft/LossDraftDetailPanel.tsx');
-  assert.match(
-    panel,
-    /<Card className="flex min-w-0 flex-col md:h-\[calc\(100vh-16rem\)\] md:min-h-\[22rem\] md:max-h-\[42rem\] md:overflow-hidden">/,
-  );
-  assert.doesNotMatch(panel, /<Card className="[^"]*(?<!md:)\bh-\[calc\(100vh-16rem\)\]/, 'no unprefixed fixed height');
-  assert.doesNotMatch(panel, /<Card className="[^"]*(?<!md:)\bmax-h-\[42rem\]/, 'no unprefixed max height');
-  assert.doesNotMatch(panel, /<Card className="[^"]*(?<![:-])\boverflow-hidden/, 'no unprefixed overflow-hidden on the card');
-  assert.match(panel, /<Tabs value=\{activeTab\} onValueChange=\{setActiveTab\} className="flex flex-col md:min-h-0 md:flex-1 md:overflow-hidden">/);
+  assert.match(panel, /<Card className="flex min-w-0 flex-col">/);
+  assert.doesNotMatch(panel, /<Card className="[^"]*h-\[calc\(100vh-16rem\)\]/, 'no fixed height');
+  assert.doesNotMatch(panel, /<Card className="[^"]*max-h-\[42rem\]/, 'no max height');
+  assert.doesNotMatch(panel, /<Card className="[^"]*overflow-hidden/, 'no overflow-hidden on the card');
+  assert.match(panel, /<Tabs value=\{activeTab\} onValueChange=\{setActiveTab\} className="flex flex-col">/);
   const contents = panel.match(/<TabsContent[\s\S]*?className="([^"]*)"/g) || [];
   assert.equal(contents.length >= 5, true, 'every tab body');
   for (const c of contents) {
-    assert.match(c, /className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-\[state=inactive\]:hidden"/, c);
+    assert.match(c, /className="mt-0 data-\[state=inactive\]:hidden"/, c);
   }
 });
 
@@ -148,12 +149,24 @@ test('loss draft panel uses the compact returned banner', () => {
   assert.match(panel, /<MortgageDeskReturnedBanner\s*\n\s*compact\s*\n/);
 });
 
-test('check file: the View Loss Draft dialog and the tab area scroll on phones; desktop keeps its fixed heights', () => {
+test('check file: the View Loss Draft dialog scrolls at every width; the tab area has its fixed height only from md up', () => {
   const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src/pages/CheckCommandCenter.tsx'), 'utf8');
-  // The dialog scrolls itself below md and clips (inner panel scrolls) from md up.
-  assert.match(src, /<DialogContent className="max-w-4xl max-h-\[85vh\] p-0 overflow-y-auto overscroll-contain md:overflow-hidden border-border bg-card">/);
+  // The dialog scrolls itself at every width (the panel inside grows with its content).
+  assert.match(src, /<DialogContent className="max-w-4xl max-h-\[85vh\] p-0 overflow-y-auto overscroll-contain border-border bg-card">/);
+  assert.doesNotMatch(src, /max-h-\[85vh\] p-0 overflow-y-auto overscroll-contain md:overflow-hidden/);
   assert.doesNotMatch(src, /max-h-\[85vh\] p-0 overflow-hidden/);
   // The check file's tab area has its fixed height only from md up; on a phone the page scrolls.
   assert.match(src, /<ScrollArea className="md:h-\[calc\(100vh-340px\)\] md:min-h-\[400px\]">/);
   assert.doesNotMatch(src, /<ScrollArea className="h-\[calc\(100vh-340px\)\] min-h-\[400px\]">/);
+});
+
+test('returned work and Mortgage Desk pills stay readable in light mode (dark text, light text only in dark mode)', () => {
+  const banner = read('src/components/loss-draft/MortgageDeskReturnedBanner.tsx');
+  assert.match(banner, /font-semibold text-amber-800 dark:text-amber-100/);
+  assert.match(banner, /text-\[11px\] text-amber-800\/90 dark:text-amber-100\/80/);
+  assert.doesNotMatch(banner, /(?<!dark:)text-amber-100/);
+  for (const rel of ['src/components/loss-draft/LossDraftDashboard.tsx', 'src/components/loss-draft/SendToMortgageDeskButton.tsx', 'src/components/loss-draft/LossDraftDetailPanel.tsx']) {
+    assert.doesNotMatch(read(rel), /(?<!dark:)text-amber-200/, rel);
+  }
+  assert.doesNotMatch(read('src/components/loss-draft/LossDraftDetailPanel.tsx'), /(?<!dark:)text-emerald-200/);
 });

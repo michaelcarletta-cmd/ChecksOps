@@ -127,11 +127,12 @@ export function LossDraftDetailPanel({
     `$${(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
   return (
-    // Phones (below md) let the card grow with its content so the page itself scrolls: a fixed
-    // height with overflow-hidden clipped the tall header (check, actions, Mortgage Desk cards)
-    // and left no room for the tabs (owner 2026-11-15). From md up the panel keeps its fixed
-    // height with the tab body scrolling inside.
-    <Card className="flex min-w-0 flex-col md:h-[calc(100vh-16rem)] md:min-h-[22rem] md:max-h-[42rem] md:overflow-hidden">
+    // The card grows with its content at every width and the page (or the dialog) scrolls. A fixed
+    // height with overflow-hidden clipped the header (check, actions, Mortgage Desk notes and
+    // documents, the returned box) once it outgrew the panel: on phones first (owner 2026-11-15),
+    // then on desktop as notes and updates were added (owner 2026-11-16: "When these notes and
+    // updates are completed, the tenant needs to be able to see everything still").
+    <Card className="flex min-w-0 flex-col">
       <CardHeader className="shrink-0 pb-2">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <CardTitle className="min-w-0 text-sm flex items-center gap-2 leading-snug">
@@ -204,7 +205,7 @@ export function LossDraftDetailPanel({
           if (order === 2 && predecessor) {
             const returned = !!predecessor.check_received_back_date;
             return (
-              <div className={`mt-2 rounded-md border p-2 text-xs ${returned ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200"}`}>
+              <div className={`mt-2 rounded-md border p-2 text-xs ${returned ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"}`}>
                 <div className="font-medium">
                   {returned ? "Ready to send" : "Waiting on 1st mortgagee"}
                 </div>
@@ -448,7 +449,7 @@ export function LossDraftDetailPanel({
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col md:min-h-0 md:flex-1 md:overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
         <TabsList className="w-full rounded-none shrink-0 overflow-hidden">
           <TabsTrigger value="actions" className="flex-1 text-xs">
             Actions
@@ -472,7 +473,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="actions"
-          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 data-[state=inactive]:hidden"
         >
           <LossDraftActionsTab
             lossDraftId={lossDraftId}
@@ -484,7 +485,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="docs"
-          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 data-[state=inactive]:hidden"
         >
           <LossDraftDocsTab
             lossDraftId={lossDraftId}
@@ -497,7 +498,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="releases"
-          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 data-[state=inactive]:hidden"
         >
           <LossDraftReleasesTab
             releases={releases}
@@ -509,7 +510,7 @@ export function LossDraftDetailPanel({
 
         <TabsContent
           value="partners"
-          className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
+          className="mt-0 data-[state=inactive]:hidden"
         >
           <div className="flex h-full flex-col p-4">
             <div className="flex items-center justify-between mb-2">
@@ -531,7 +532,7 @@ export function LossDraftDetailPanel({
         {showAuditTab && (
           <TabsContent
             value="audit"
-            className="mt-0 md:min-h-0 md:flex-1 md:overflow-hidden data-[state=inactive]:hidden"
+            className="mt-0 data-[state=inactive]:hidden"
           >
             <LossDraftAuditTab audit={audit} />
           </TabsContent>

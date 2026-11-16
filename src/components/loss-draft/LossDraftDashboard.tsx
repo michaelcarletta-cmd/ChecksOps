@@ -288,7 +288,7 @@ function LossDraftCompactRow({
         <>
           <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
           {returned && (
-            <Badge className="text-[10px] bg-amber-500/20 text-amber-200 border-amber-400/30">
+            <Badge className="text-[10px] bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-400/30">
               Returned from Mortgage Desk · Action Required
             </Badge>
           )}
