@@ -5,7 +5,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 169 included); this file covers what is new:
  *
  *   - the pin: staging-authorized (wave 61) from staging read-live run 43919046029 (applied in staging by run 43923431127), code-derived,
- *     selectable, packed, in step with the execute-authorized production pin (production's own pre-state); the pinned commit
+ *     selectable, packed, in step with the production pin (applied 2026-11-16 from production's own pre-state, retired); the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the spec's one constraints entry (SQL 169 creates or replaces no function): the fingerprint is
  *     check_billing_events_check_intake_item_id_fkey's definition and validated flag;
@@ -120,7 +120,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 169 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor', () => {
+test('pin: SQL 169 staging-authorized from its read-live, code-derived, selectable, packed, in step with the applied and retired production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -138,7 +138,7 @@ test('pin: SQL 169 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-16: staging apply (wave 61) from staging read-live run 43919046029');
   assert.equal(pin.expected_live_definition_sha256, CASCADE_PRE);
   assert.equal(pin.expected_live_definition_sha256, 'f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-169-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 61, 2026-11-16, apply run 43923431127\); staging acceptance: the staging apply under the owner's run approval \(\"apply SQL 169 in staging\"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `29ddf3f2-9ca8-467d-8877-a84e95294f14`, 2026-11-16\) by the owner-reviewed pin change; not applied in production\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-169-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 61, 2026-11-16, apply run 43923431127\); staging acceptance: the staging apply under the owner's run approval \(\"apply SQL 169 in staging\"; no separate acceptance statement\); applied to production \(2026-11-16\); the production pin is retired \(`execute: false`\)\./);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-169-apply.md'), 'utf8'), /read-live \(2026-11-16\)\.\*\* Run 43919046029/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(CASCADE_PRE, pin.intended_replacement_sha256);
@@ -177,8 +177,10 @@ test('pin: SQL 169 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(prod.predecessors, []);
   // Production pin execute-authorized (owner-approved pin change of 2026-11-16) on the staging apply from the same pre-state.
   // Its pre-state is production's own (read-only inspect SSM 29ddf3f2): the ON DELETE CASCADE key, equal to the staging pin's.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-16 /);
+  // Then applied 2026-11-16 ("apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED") and retired.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-16; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'KEEP_CHARGES_WHEN_CHECK_IS_DELETED');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, CASCADE_PRE);
