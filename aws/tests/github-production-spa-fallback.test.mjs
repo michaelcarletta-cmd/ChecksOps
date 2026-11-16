@@ -33,8 +33,10 @@ import {
   PAGE_CONTENT_TYPE,
   PRODUCTION_BUCKET,
   PRODUCTION_WEB_ACL_ID,
+  SAMPLE_REQUESTS,
   SAMPLE_URIS,
   STAGING_BUCKET,
+  WWW_SAMPLE_REQUESTS,
   STAGING_DISTRIBUTION_ID,
   TARGET_COMPONENT,
   TARGET_ENVIRONMENT,
@@ -46,6 +48,7 @@ import {
   assertSourceBehaves,
   awsClient,
   classify,
+  expectedOutcome,
   expectedUri,
   loadFunctionSources,
   main as writer,
@@ -54,7 +57,7 @@ import {
   testFunctionUri,
 } from '../../scripts/deployment-guard/production-spa-fallback.mjs';
 import { APPROVAL_PHRASES, run as preflight, validateChangeInputs, verifyState, workflowIdentity } from '../../scripts/deployment-guard/github-production-spa-fallback.mjs';
-import { checkPage, entryBundlePath, main as probeMain, ogTitleTag, pageExpectations, parseArgs, probeOnce } from '../../scripts/deployment-guard/spa-fallback-public-probe.mjs';
+import { checkPage, entryBundlePath, main as probeMain, ogTitleTag, pageExpectations, parseArgs, probeOnce, probeWww } from '../../scripts/deployment-guard/spa-fallback-public-probe.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { DEPLOYMENT_TYPES } from '../../scripts/deployment-guard/lib/identity.mjs';
 import { HOME_PAGE, MARKETING_PAGES, RETIRED_MARKETING_PATHS } from '../../src/pages/marketing/marketingPages.ts';
@@ -79,8 +82,10 @@ const PAGE_PATHS = MARKETING_PAGES.filter((page) => page.path !== '/').map((page
 const SERVED_PATHS = [...MARKETING_PATHS];
 const BUILD_PATHS = [...RETIRED_MARKETING_PATHS, ...PAGE_PATHS];
 const LIVE_COMMENT = 'SPA deep-link fallback for S3 default behavior only. Does not run on /prep.';
-// The code LIVE before this tool: aws/cloudfront/spa-fallback.js as Step 1 (commit 2ba5c6fc1) uploaded it.
-const BASELINE_SHA256 = '0cf839198b024b943b2834e6de414e2d0deea59d88c23373886561575f9269a1';
+// The code LIVE before the www redirect: the marketing pass-through the first publish (run
+// 42281453509) put LIVE. Read from production 2026-11-16 (GetFunction LIVE and DEVELOPMENT, both
+// these bytes). The pre-tool code (0cf83919…) stays in git history as the earlier revert target.
+const BASELINE_SHA256 = '9ca318b0e59f9b5a00f914cac0a4658c4e728e9ca9c09dd1be253397620c1d47';
 
 const association = () => ({ Quantity: 1, Items: [{ FunctionARN: FUNCTION_ARN, EventType: 'viewer-request' }] });
 const baseConfig = () => ({
@@ -135,9 +140,16 @@ function fakeAws({ live = BASELINE, development = null, config = baseConfig(), o
     testFunction: (name, etag, event) => {
       assertProductionFunction(name);
       if (state.stages.DEVELOPMENT.etag !== etag) throw new Error('PreconditionFailed');
-      state.writes.push({ op: 'testFunction', etag, uri: event.request.uri });
-      const uri = testOverride ? testOverride(event.request.uri) : runFunctionSource(state.stages.DEVELOPMENT.code, event.request.uri);
-      return { TestResult: { FunctionOutput: JSON.stringify({ request: { ...event.request, uri } }), FunctionErrorMessage: '' } };
+      const host = event.request.headers.host.value;
+      state.writes.push({ op: 'testFunction', etag, host, uri: event.request.uri });
+      if (testOverride && host === 'checksops.com') {
+        const uri = testOverride(event.request.uri);
+        return { TestResult: { FunctionOutput: JSON.stringify({ request: { ...event.request, uri } }), FunctionErrorMessage: '' } };
+      }
+      // What CloudFront's test-function returns: the request it passes on, or the response it answers.
+      const result = functionContext(state.stages.DEVELOPMENT.code).handler(structuredClone(event));
+      const output = result && result.statusCode !== undefined ? { response: result } : { request: result };
+      return { TestResult: { FunctionOutput: JSON.stringify(output), FunctionErrorMessage: '' } };
     },
     publishFunction: (name, etag) => {
       assertProductionFunction(name);
@@ -243,20 +255,54 @@ test('the repo function: marketing paths unchanged, everything else extensionles
   assert.equal(/\bimport\b|\brequire\(|\bexport\b/.test(CURRENT.toString('utf8')), false);
 });
 
-test('the baseline file is byte-for-byte the pre-tool function and still rewrites every extensionless path', () => {
+test('the baseline file is byte-for-byte the code LIVE before the www redirect: marketing pass-through, no redirect', () => {
   assert.equal(sha256(BASELINE), BASELINE_SHA256);
   assert.equal(SOURCES.baseline_sha256, BASELINE_SHA256);
   assert.equal(SOURCES.current_sha256, sha256(CURRENT));
   assert.notEqual(SOURCES.current_sha256, SOURCES.baseline_sha256);
-  for (const uri of [...SERVED_PATHS, '/', '/login', '/pricing/']) assert.equal(rewrite(BASELINE, uri), '/index.html', uri);
+  for (const uri of SERVED_PATHS) assert.equal(rewrite(BASELINE, uri), uri, uri);
+  for (const uri of ['/', '/login', '/pricing/']) assert.equal(rewrite(BASELINE, uri), '/index.html', uri);
   for (const uri of ['/assets/x.js', '/prep', '/prep/health']) assert.equal(rewrite(BASELINE, uri), uri, uri);
-  // The writer's oracle agrees with both files on every sample URI, and catches a wrong one.
+  // The current file differs from the baseline only by the www redirect: on checksops.com both agree.
+  for (const uri of SAMPLE_URIS) assert.equal(runFunctionSource(CURRENT, uri), runFunctionSource(BASELINE, uri), uri);
+  // The writer's oracle agrees with both files on every sample request, and catches a wrong one.
   assertSourceBehaves(CURRENT, 'current');
   assertSourceBehaves(BASELINE, 'baseline');
-  assert.throws(() => assertSourceBehaves(BASELINE, 'current'), /function_source_behavior:current:\/pricing/);
-  assert.throws(() => assertSourceBehaves(CURRENT, 'baseline'), /function_source_behavior:baseline/);
-  for (const uri of SAMPLE_URIS) assert.equal(expectedUri('current', uri), rewrite(CURRENT, uri), uri);
+  assert.throws(() => assertSourceBehaves(BASELINE, 'current'), /function_source_behavior:current:www\.checksops\.com\/:\/index\.html/);
+  assert.throws(() => assertSourceBehaves(CURRENT, 'baseline'), /function_source_behavior:baseline:www\.checksops\.com\//);
+  for (const request of SAMPLE_REQUESTS) assert.equal(expectedOutcome('current', request), runFunctionSource(CURRENT, request), `${request.host}${request.uri}`);
   assert.deepEqual([...SAMPLE_URIS], [...SERVED_PATHS, '/', '/login', '/pricing/', '/assets/index-x.js', '/prep/health']);
+  assert.deepEqual(SAMPLE_REQUESTS.map((r) => `${r.host}${r.uri}`), [
+    ...SAMPLE_URIS.map((uri) => `checksops.com${uri}`),
+    ...WWW_SAMPLE_REQUESTS.map((r) => `www.checksops.com${r.uri}`),
+  ]);
+});
+
+test('www.checksops.com: 301 to the same path and query on checksops.com, /prep never redirected', () => {
+  const at = (uri, querystring, host = 'www.checksops.com') => runFunctionSource(CURRENT, { host, uri, querystring });
+  assert.equal(at('/'), '301 https://checksops.com/');
+  assert.equal(at('/login'), '301 https://checksops.com/login');
+  assert.equal(at('/c1/checks', { tab: { value: 'funds' } }), '301 https://checksops.com/c1/checks?tab=funds');
+  assert.equal(at('/x', { a: { value: '1', multiValue: [{ value: '1' }, { value: '2' }] }, b: { value: '' } }), '301 https://checksops.com/x?a=1&a=2&b');
+  assert.equal(at('/pricing'), '301 https://checksops.com/pricing');
+  assert.equal(at('/assets/index-x.js'), '301 https://checksops.com/assets/index-x.js');
+  // /prep keeps working on www (a POST would lose its body on a redirect).
+  assert.equal(at('/prep'), '/prep');
+  assert.equal(at('/prep/auth/login'), '/prep/auth/login');
+  // Host match ignores case; checksops.com, staging and any other host are never redirected.
+  assert.equal(at('/login', {}, 'WWW.ChecksOps.com'), '301 https://checksops.com/login');
+  for (const host of ['checksops.com', 'staging.checksops.com', 'www.checksops.com.evil.example', 'xwww.checksops.com']) {
+    assert.equal(at('/login', {}, host), '/index.html', host);
+  }
+  // The response carries the location and a bounded browser cache, so a rollback is not stuck behind a cached 301.
+  const ctx = functionContext(CURRENT);
+  const response = ctx.handler({ request: { method: 'GET', uri: '/login', querystring: {}, headers: { host: { value: 'www.checksops.com' } }, cookies: {} } });
+  assert.equal(response.statusCode, 301);
+  assert.equal(response.headers.location.value, 'https://checksops.com/login');
+  assert.equal(response.headers['cache-control'].value, 'max-age=3600');
+  // CloudFront Functions: no imports, no require, no module syntax, no arrow functions or let/const.
+  assert.equal(/\bimport\b|\brequire\(|\bexport\b|=>|\blet\b|\bconst\b/.test(CURRENT.toString('utf8')), false);
+  assert.equal(testFunctionUri({ TestResult: { FunctionOutput: JSON.stringify({ response: response }) } }), '301 https://checksops.com/login');
 });
 
 test('the deployment type is registered, the scripts are in the bypass inventory, and the receipt is production/production-spa', () => {
@@ -399,11 +445,11 @@ test('publish: update DEVELOPMENT with If-Match and the repo bytes, test every s
   assert.equal(input.approval.phrase, 'PUBLISH SPA FALLBACK TO PRODUCTION');
   assert.equal(runWriter(result, aws, root), 0);
   const ops = aws.state.writes.map((w) => w.op);
-  assert.deepEqual(ops, ['updateFunction', ...SAMPLE_URIS.map(() => 'testFunction'), 'publishFunction']);
+  assert.deepEqual(ops, ['updateFunction', ...SAMPLE_REQUESTS.map(() => 'testFunction'), 'publishFunction']);
   assert.equal(aws.state.writes[0].etag, 'EDEV0');
   assert.equal(aws.state.writes[0].sha256, sha256(CURRENT));
   assert.deepEqual(aws.state.writes[0].config, { Comment: LIVE_COMMENT, Runtime: FUNCTION_RUNTIME });
-  assert.deepEqual(aws.state.writes.filter((w) => w.op === 'testFunction').map((w) => w.uri), [...SAMPLE_URIS]);
+  assert.deepEqual(aws.state.writes.filter((w) => w.op === 'testFunction').map((w) => `${w.host}${w.uri}`), SAMPLE_REQUESTS.map((r) => `${r.host}${r.uri}`));
   assert.ok(aws.state.writes.slice(1).every((w) => w.etag === 'EDEV1'));
   assert.equal(sha256(aws.state.stages.LIVE.code), sha256(CURRENT));
   assert.deepEqual(aws.state.dist, before);
@@ -566,7 +612,9 @@ test('the sources refuse identical, oversized, CRLF or misbehaving code', () => 
   put(`${CURRENT}${'/'.repeat(10240)}`, BASELINE);
   assert.throws(() => loadFunctionSources(root), /function_source_size:current/);
   put(CURRENT.toString('utf8').replace('"/claim-check-tracking": true', '"/claim-check-tracking": false'), BASELINE);
-  assert.throws(() => loadFunctionSources(root), /function_source_behavior:current:\/claim-check-tracking/);
+  assert.throws(() => loadFunctionSources(root), /function_source_behavior:current:checksops\.com\/claim-check-tracking/);
+  put(CURRENT.toString('utf8').replace('"www.checksops.com": true', '"www.checksops.com": false'), BASELINE);
+  assert.throws(() => loadFunctionSources(root), /function_source_behavior:current:www\.checksops\.com\//);
   put(CURRENT, BASELINE);
   assert.equal(loadFunctionSources(root).current_sha256, sha256(CURRENT));
 });
@@ -585,9 +633,9 @@ test('the workflow: main only, production environment, approved commit, exact ph
   assert.match(WORKFLOW, /test "\$PRODUCTION_SPA_FALLBACK_ROLE_ARN" = "arn:aws:iam::806168576068:role\/ChecksOpsGitHubProductionSpaFallback"/);
   assert.match(WORKFLOW, /arn:aws:sts::806168576068:assumed-role\/ChecksOpsGitHubProductionSpaFallback\/checksops-production-spa-fallback-\$GITHUB_RUN_ID/);
   assert.match(WORKFLOW, /inputs\.mode == 'publish' && 'current' \|\| 'baseline'/);
-  assert.match(WORKFLOW, /inputs\.mode == 'publish' && 'own' \|\| 'home'/);
+  assert.match(WORKFLOW, /PROBE_WWW: \$\{\{ inputs\.mode == 'publish' && 'redirect' \|\| 'serve' \}\}/);
   assert.match(WORKFLOW, /spa-fallback-public-probe\.mjs --origin https:\/\/staging\.checksops\.com --expect own/);
-  assert.match(WORKFLOW, /spa-fallback-public-probe\.mjs --origin https:\/\/checksops\.com --expect "\$PROBE_EXPECT" --attempts 20 --delay 30/);
+  assert.match(WORKFLOW, /spa-fallback-public-probe\.mjs --origin https:\/\/checksops\.com --expect own --www "\$PROBE_WWW" --attempts 20 --delay 30/);
   assert.match(WORKFLOW, /node --experimental-strip-types --test aws\/tests\/github-production-spa-fallback\.test\.mjs/);
   // Inputs reach shell only through env.
   const gate = WORKFLOW.split('- name: Refuse non-main or incomplete change')[1].split('- name:')[0];
@@ -688,6 +736,30 @@ test('the public probe: own og:title per marketing page, home og:title for / and
   assert.equal(await quietAsync(() => probeMain(['--origin', 'https://checksops.com', '--expect', 'own', '--attempts', '2', '--delay', '0'], { fetcher: site('baseline'), sleep: async () => {} })), 2);
   assert.throws(() => parseArgs(['--origin', 'https://example.com', '--expect', 'own']), /origin_invalid/);
   assert.throws(() => parseArgs(['--origin', 'https://checksops.com', '--expect', 'own', '--tag', 'a;b']), /tag_invalid/);
+  assert.throws(() => parseArgs(['--origin', 'https://checksops.com', '--expect', 'own', '--www', 'maybe']), /www_invalid/);
+  assert.throws(() => parseArgs(['--origin', 'https://staging.checksops.com', '--expect', 'own', '--www', 'redirect']), /www_invalid/);
+  assert.equal(parseArgs(['--origin', 'https://checksops.com', '--expect', 'own', '--www', 'redirect']).www, 'redirect');
+
+  // www: after publish a 301 to the same path and query on checksops.com; after revert index.html. /prep/health 200 both ways.
+  const wwwSite = (mode) => async (url) => {
+    const { pathname, search, hostname } = new URL(url);
+    if (hostname === 'www.checksops.com' && pathname !== '/prep/health' && mode === 'redirect') {
+      return { status: 301, contentType: null, location: `https://checksops.com${pathname}${search}`, body: '' };
+    }
+    return site('published')(url);
+  };
+  urls.length = 0;
+  const redirected = await probeOnce({ origin: 'https://checksops.com', expect: 'own', www: 'redirect', tag: 't', fetcher: recording(wwwSite('redirect')) });
+  assert.equal(redirected.ok, true, redirected.problems.join('; '));
+  assert.ok(fetched('https://www.checksops.com/login?probe=t'));
+  assert.ok(fetched('https://www.checksops.com/prep/health'));
+  assert.equal((await probeOnce({ origin: 'https://checksops.com', expect: 'own', www: 'serve', tag: 't', fetcher: wwwSite('serve') })).ok, true);
+  // A redirect where serving is expected, and serving where a redirect is expected, both fail.
+  assert.equal((await probeWww({ www: 'serve', tag: 't', fetcher: wwwSite('redirect') })).problems.length, 2);
+  assert.equal((await probeWww({ www: 'redirect', tag: 't', fetcher: wwwSite('serve') })).problems.length, 2);
+  // A redirect to the wrong place (here: the home page, query dropped) fails for both paths.
+  const wrong = async (url) => (new URL(url).pathname === '/prep/health' ? site('published')(url) : { status: 301, location: 'https://checksops.com/', body: '' });
+  assert.equal((await probeWww({ www: 'redirect', tag: 't', fetcher: wrong })).problems.length, 2);
 });
 
 async function quietAsync(fn) {
@@ -698,11 +770,14 @@ async function quietAsync(fn) {
   try { return await fn(); } finally { process.stdout.write = out; process.stderr.write = err; }
 }
 
-test('the runbook records the phrases, the baseline hash and what was not done', () => {
+test('the runbook records the phrases, the baseline hash, the runs and what was not done', () => {
   const runbook = read('ops/deployment-guard/PRODUCTION_SPA_FALLBACK.md');
   assert.match(runbook, /PUBLISH SPA FALLBACK TO PRODUCTION/);
   assert.match(runbook, /REVERT SPA FALLBACK ON PRODUCTION/);
   assert.ok(runbook.includes(BASELINE_SHA256));
   assert.match(runbook, /ChecksOpsGitHubProductionCspHeaders/);
-  assert.match(runbook, /Nothing has been run against production/);
+  // The first publish ran (2026-11-06); the www redirect is recorded with what was read before it.
+  assert.match(runbook, /The first\npublish \(run 42281453509, 2026-11-06\)/);
+  assert.match(runbook, /www redirect: not run yet/);
+  assert.match(runbook, /"build the www redirect"/);
 });

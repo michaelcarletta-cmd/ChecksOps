@@ -5,14 +5,16 @@
  * ops/deployment-guard/PRODUCTION_SPA_FALLBACK.md). The function rewrites extensionless URIs to
  * /index.html; the repo version (aws/cloudfront/spa-fallback.js) passes the public marketing
  * pages through unchanged, so CloudFront serves the extensionless S3 object of the same name that
- * the production SPA upload writes (src/pages/marketing/marketingStaticHead.ts staticPageKey).
+ * the production SPA upload writes (src/pages/marketing/marketingStaticHead.ts staticPageKey), and
+ * answers www.checksops.com with a 301 to the same path on checksops.com (never /prep).
  *
  * Exact permitted mutations, all on that one function, never the distribution:
  *   publish: BASELINE -> CURRENT. update-function (DEVELOPMENT stage, If-Match, the LIVE runtime and
  *            comment, code = aws/cloudfront/spa-fallback.js bytes), test-function on DEVELOPMENT for
  *            every sample URI, then publish-function (If-Match the new ETag).
  *   revert:  CURRENT -> BASELINE, the same three calls with aws/cloudfront/spa-fallback.baseline.js
- *            (byte-for-byte the code that was LIVE before this tool).
+ *            (byte-for-byte the code LIVE before the www redirect: the marketing pass-through that
+ *            the first publish, run 42281453509, put LIVE).
  * The caller never supplies code: it comes only from those two repository files.
  *
  * The function (both stages), the distribution and the marketing S3 objects are pinned through the
@@ -71,8 +73,26 @@ export const MARKETING_KEYS = Object.freeze(MARKETING_PATHS.map((p) => p.slice(1
 export const INDEX_KEY = 'index.html';
 export const OBJECT_KEYS = Object.freeze([...MARKETING_KEYS, INDEX_KEY]);
 export const PAGE_CONTENT_TYPE = 'text/html; charset=utf-8';
-// The URIs test-function runs on DEVELOPMENT before every publish.
+// The URIs test-function runs on DEVELOPMENT before every publish (host checksops.com).
 export const SAMPLE_URIS = Object.freeze([...MARKETING_PATHS, '/', '/login', '/pricing/', '/assets/index-x.js', '/prep/health']);
+// www.checksops.com: the current version sends it to the same path on checksops.com (one address,
+// so passkeys bound to checksops.com always work); /prep is never redirected (a POST would lose its
+// body). The baseline treats it like checksops.com.
+export const WWW_HOST = 'www.checksops.com';
+export const CANONICAL_ORIGIN = 'https://checksops.com';
+export const WWW_SAMPLE_REQUESTS = Object.freeze([
+  { host: WWW_HOST, uri: '/' },
+  { host: WWW_HOST, uri: '/login' },
+  { host: WWW_HOST, uri: '/c1/checks', querystring: { tab: { value: 'funds' }, probe: { value: '' } } },
+  { host: WWW_HOST, uri: '/pricing' },
+  { host: WWW_HOST, uri: '/assets/index-x.js' },
+  { host: WWW_HOST, uri: '/prep/health' },
+].map(Object.freeze));
+// Every request test-function runs on DEVELOPMENT, and the local source is checked against.
+export const SAMPLE_REQUESTS = Object.freeze([
+  ...SAMPLE_URIS.map((uri) => Object.freeze({ host: 'checksops.com', uri })),
+  ...WWW_SAMPLE_REQUESTS,
+]);
 
 export const DEPLOYMENT_TYPE = 'cloudfront-function';
 export const TARGET_ENVIRONMENT = 'production';
@@ -115,36 +135,68 @@ export function assertProductionObject(bucket, key) {
  * code: the local source and the DEVELOPMENT stage are both checked against it before a publish.
  */
 export function expectedUri(version, uri) {
+  return expectedOutcome(version, { host: PRODUCTION_ALIAS, uri });
+}
+
+const asRequest = (request) => (typeof request === 'string' ? { host: PRODUCTION_ALIAS, uri: request } : request);
+
+/** "?a=1&b" from a CloudFront querystring object, in key order; "" when there is none. */
+export function queryStringOf(querystring = {}) {
+  const parts = [];
+  for (const [key, entry] of Object.entries(querystring || {})) {
+    for (const item of entry?.multiValue || [entry]) {
+      const value = item?.value;
+      parts.push(value === undefined || value === '' ? key : `${key}=${value}`);
+    }
+  }
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
+/**
+ * What a version of the function must do to one request: the URI it passes on, or
+ * "301 <location>" for a redirect. Written from the rules, not from the code.
+ */
+export function expectedOutcome(version, request) {
   if (!['baseline', 'current'].includes(version)) throw new Error(`version_invalid:${version}`);
+  const { host, uri, querystring } = asRequest(request);
   if (uri === '/prep' || uri.startsWith('/prep/')) return uri;
-  if (version === 'current' && MARKETING_PATHS.includes(uri)) return uri;
+  if (version === 'current' && String(host).toLowerCase() === WWW_HOST) return `301 ${CANONICAL_ORIGIN}${uri}${queryStringOf(querystring)}`;
+  if (MARKETING_PATHS.includes(uri)) return uri;
   const last = uri.slice(uri.lastIndexOf('/') + 1);
   if (last.includes('.')) return uri;
   return '/index.html';
 }
 
-export function viewerRequestEvent(uri) {
+export function viewerRequestEvent(request) {
+  const { host, uri, querystring } = asRequest(request);
   return {
     version: '1.0',
     context: { eventType: FUNCTION_EVENT_TYPE },
     viewer: { ip: '198.51.100.10' },
-    request: { method: 'GET', uri, querystring: {}, headers: { host: { value: PRODUCTION_ALIAS } }, cookies: {} },
+    request: { method: 'GET', uri, querystring: querystring || {}, headers: { host: { value: host } }, cookies: {} },
   };
 }
 
-/** Runs CloudFront Function source locally (node:vm) on one viewer-request URI. */
-export function runFunctionSource(code, uri) {
-  const context = vm.createContext({});
-  vm.runInContext(String(code), context, { timeout: 1000 });
-  if (typeof context.handler !== 'function') throw new Error('function_source_has_no_handler');
-  const result = context.handler(structuredClone(viewerRequestEvent(uri)));
+/** The outcome of a viewer-request result: "301 <location>" for a response, else the request's URI. */
+export function outcomeOf(result) {
+  if (result && result.statusCode !== undefined) return `${result.statusCode} ${result.headers?.location?.value ?? ''}`;
   return result?.uri;
 }
 
+/** Runs CloudFront Function source locally (node:vm) on one viewer request (a URI means host checksops.com). */
+export function runFunctionSource(code, request) {
+  const context = vm.createContext({});
+  vm.runInContext(String(code), context, { timeout: 1000 });
+  if (typeof context.handler !== 'function') throw new Error('function_source_has_no_handler');
+  return outcomeOf(context.handler(structuredClone(viewerRequestEvent(request))));
+}
+
+const requestLabel = ({ host, uri, querystring }) => `${host}${uri}${queryStringOf(querystring)}`;
+
 export function assertSourceBehaves(code, version) {
-  for (const uri of SAMPLE_URIS) {
-    const got = runFunctionSource(code, uri);
-    if (got !== expectedUri(version, uri)) throw new Error(`function_source_behavior:${version}:${uri}:${got}`);
+  for (const request of SAMPLE_REQUESTS) {
+    const got = runFunctionSource(code, request);
+    if (got !== expectedOutcome(version, request)) throw new Error(`function_source_behavior:${version}:${requestLabel(request)}:${got}`);
   }
 }
 
@@ -299,12 +351,13 @@ export function assertDistributionUnchanged(before, after) {
   if (!eq(sortKeys(after), sortKeys(before))) throw new Error('post_write_distribution_drift');
 }
 
-/** The URI a test-function result rewrote the request to. */
+/** The outcome of a test-function result: the URI the request was rewritten to, or "301 <location>". */
 export function testFunctionUri(result) {
   const test = result?.TestResult || {};
   if (test.FunctionErrorMessage) throw new Error(`development_test_error:${test.FunctionErrorMessage}`);
   let output;
   try { output = JSON.parse(test.FunctionOutput || ''); } catch { throw new Error('development_test_output_unreadable'); }
+  if (output?.response) return outcomeOf(output.response);
   return output?.request?.uri;
 }
 
@@ -463,11 +516,11 @@ export function main(env = process.env, deps = {}) {
 
   // 2. test-function on DEVELOPMENT: every sample URI must be what this version must do. A failure
   //    stops here: LIVE is untouched and DEVELOPMENT holds a repository version.
-  const tested = SAMPLE_URIS.map((uri) => {
-    const got = testFunctionUri(client.testFunction(FUNCTION_NAME, developmentEtag, viewerRequestEvent(uri), env));
-    const want = expectedUri(version, uri);
-    if (got !== want) throw new Error(`development_test_failed:${uri}:${got}:${want}`);
-    return { uri, result: got };
+  const tested = SAMPLE_REQUESTS.map((request) => {
+    const got = testFunctionUri(client.testFunction(FUNCTION_NAME, developmentEtag, viewerRequestEvent(request), env));
+    const want = expectedOutcome(version, request);
+    if (got !== want) throw new Error(`development_test_failed:${requestLabel(request)}:${got}:${want}`);
+    return { host: request.host, uri: request.uri, result: got };
   });
 
   // 3. publish: DEVELOPMENT -> LIVE.

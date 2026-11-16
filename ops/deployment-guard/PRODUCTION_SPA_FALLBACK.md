@@ -13,14 +13,31 @@ Open Graph and Twitter preview, canonical, JSON-LD; `staticPageKey` in
 objects exist in `checksops-production-frontend-806168576068`, but the LIVE function rewrites every
 extensionless URI to `/index.html`, so a shared `/pricing` link still previews the home page.
 
-This file and the tool are source only. Nothing has been run against production.
+When this tool was written it was source only: nothing had been run against production. The first
+publish (run 42281453509, 2026-11-06) put the marketing pass-through LIVE.
+
+## www.checksops.com redirect (2026-11-16)
+
+Owner 2026-11-16, after a Condition One sign-in report: "build the www redirect". Passkeys are
+bound to `checksops.com` (the API refuses passkey sign-in from any other origin, and the page hides
+the passkey button there), so `www.checksops.com` showed only the emailed code. The current version
+answers `www.checksops.com` with a `301` to the same path and query on `https://checksops.com`
+(`cache-control: max-age=3600`, so a browser does not keep a stale redirect after a rollback). `/prep`
+and `/prep/*` on `www` are passed through unchanged: a redirected POST would lose its body, and an
+open tab on `www` keeps working. Every other host (`checksops.com`, anything else) is unchanged.
+
+Read-only before this change (2026-11-16, GetFunction): LIVE and DEVELOPMENT both run
+`9ca318b0e59f9b5a00f914cac0a4658c4e728e9ca9c09dd1be253397620c1d47` (ETags `E1F83G8C2ARO7P`,
+`E3UN6WX5RRO2AG`), byte-for-byte the `spa-fallback.js` on main before this change. That code becomes
+the baseline (the revert target); the pre-tool code `0cf839198b024b943b2834e6de414e2d0deea59d88c23373886561575f9269a1`
+stays in git history (commit 2ba5c6fc1) and is no longer a target of this tool.
 
 ## The two versions
 
 | file | what it does | SHA-256 |
 |---|---|---|
-| `aws/cloudfront/spa-fallback.baseline.js` | byte-for-byte the code LIVE before this tool (the `spa-fallback.js` of commit 2ba5c6fc1, Step 1): `/prep` and `/prep/*` unchanged, a last segment with a dot unchanged, everything else `/index.html` | `0cf839198b024b943b2834e6de414e2d0deea59d88c23373886561575f9269a1` |
-| `aws/cloudfront/spa-fallback.js` | the same, plus an exact-match allowlist of every `MARKETING_PAGES` path but `/` returned unchanged | `node scripts/deployment-guard/github-production-spa-fallback.mjs` prints it as `current_code_sha256`; derive it with `sha256sum aws/cloudfront/spa-fallback.js` on an LF checkout |
+| `aws/cloudfront/spa-fallback.baseline.js` | byte-for-byte the code LIVE before the www redirect: `/prep` and `/prep/*` unchanged, the marketing allowlist unchanged, a last segment with a dot unchanged, everything else `/index.html`; any host | `9ca318b0e59f9b5a00f914cac0a4658c4e728e9ca9c09dd1be253397620c1d47` |
+| `aws/cloudfront/spa-fallback.js` | the same, plus `www.checksops.com` (not `/prep`) answered with a 301 to the same path and query on `https://checksops.com` | `node scripts/deployment-guard/github-production-spa-fallback.mjs` prints it as `current_code_sha256`; derive it with `sha256sum aws/cloudfront/spa-fallback.js` on an LF checkout |
 
 The allowlist is `/pricing`, `/vs/checksops-vs-iink-payments`, `/vs/checksops-vs-snapsheet`,
 `/vs/checksops-vs-guidewire-claimcenter`, `/claim-check-tracking`. `/` still goes to `/index.html`
@@ -58,10 +75,12 @@ existing key such as `pricing` is already served as its own object there.
 - **publish** ("PUBLISH SPA FALLBACK TO PRODUCTION", from `BASELINE`):
   1. `update-function` on the DEVELOPMENT stage with the DEVELOPMENT ETag as If-Match, the LIVE
      runtime and comment, and the bytes of `aws/cloudfront/spa-fallback.js`;
-  2. `test-function` on DEVELOPMENT for every marketing path, `/`, `/login`, `/pricing/`,
-     `/assets/index-x.js` and `/prep/health`; each result must be the URI the rules give
-     (`expectedUri` in the writer, written from the rules, not from the code). A failure stops here
-     with LIVE unchanged;
+  2. `test-function` on DEVELOPMENT for every request in `SAMPLE_REQUESTS`: on `checksops.com`
+     every marketing path, `/`, `/login`, `/pricing/`, `/assets/index-x.js` and `/prep/health`; on
+     `www.checksops.com` `/`, `/login`, `/c1/checks?tab=funds&probe`, `/pricing`,
+     `/assets/index-x.js` and `/prep/health`. Each result must be the outcome the rules give (the URI
+     passed on, or `301 <location>`; `expectedOutcome` in the writer, written from the rules, not
+     from the code). A failure stops here with LIVE unchanged;
   3. `publish-function` with the new ETag as If-Match.
 - **revert** ("REVERT SPA FALLBACK ON PRODUCTION", from `CURRENT`, also when a page object went
   missing) does the same with the baseline file.
@@ -135,15 +154,18 @@ Tests: `aws/tests/github-production-spa-fallback.test.mjs` (run with
    - on `https://checksops.com` (up to 20 attempts, 30 s apart, for edge propagation): each
      marketing path is 200 `text/html` with its own `og:title`; `/` and `/login` still serve
      `index.html` (the home `og:title`); the entry bundle referenced by `/` loads;
-     `/prep/health` answers 200 `ok`.
+     `/prep/health` answers 200 `ok`;
+   - on `https://www.checksops.com`: after publish `/` and `/login` answer 301 to the same path and
+     query on `https://checksops.com`; after revert they serve `index.html`; `/prep/health` answers
+     200 `ok` both ways (never redirected).
 4. Open each marketing page and share-preview it (LinkedIn Post Inspector, Slack). Sign in and use
    a deep link (for example a check page) to confirm the SPA still routes.
 5. Record the run (run id, snapshot before and after, code SHA-256s) in this file with a record PR.
 
 **Revert.** Run inspect, then the same inputs with `mode: revert` and the phrase
 `REVERT SPA FALLBACK ON PRODUCTION`. `staging_acceptance_reference` is still required: cite the
-publish run being reverted. The public check then expects every marketing path to serve
-`index.html` (the home `og:title`).
+publish run being reverted. The public check then expects `www.checksops.com` to serve
+`index.html` again; the marketing pages keep their own objects (the baseline passes them through).
 
 **Adding a marketing page.** Add it to `MARKETING_PAGES`, to the allowlist in
 `aws/cloudfront/spa-fallback.js`, to `MARKETING_PATHS` in the writer, to the role's S3 keys and to
@@ -164,4 +186,6 @@ revert target is its own reviewed PR.
 
 ## Run log
 
-None yet.
+- 2026-11-06, runs 42281266136 (inspect) and 42281453509 (publish): the marketing pass-through
+  (`9ca318b0…`) went LIVE. Confirmed read-only on 2026-11-16 (GetFunction LIVE and DEVELOPMENT).
+- www redirect: not run yet. Expected first inspect after this change merges: `BASELINE`.
