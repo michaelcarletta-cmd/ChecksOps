@@ -209,7 +209,7 @@ test('order: no predecessor; two new SECURITY DEFINER functions with their ACL a
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, releaseStateHash(KEY, {}), 'ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 60\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql168` \|/);
   assert.match(oneShot, /`sql166`, `sql167`, `sql168`\) \|/);
