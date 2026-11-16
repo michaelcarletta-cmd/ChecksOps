@@ -220,7 +220,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-16
   }
 });
 
-test('order: no predecessor; one foreign key replaced, nothing else; no overlay plan entry yet; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; one foreign key replaced, nothing else; the overlay plan holds workflow.mjs on it, recorded live; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
@@ -242,10 +242,16 @@ test('order: no predecessor; one foreign key replaced, nothing else; no overlay 
     'No API, Lambda or SPA change is part of this pin', CASCADE_PRE]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // The API change that lets a charged check be deleted is a later step: nothing in the overlay plan waits on SQL 169 yet.
+  // The API change that lets a charged check be deleted (the Delete Check keep-charges plan, 2026-11-16) is the one member held
+  // on it; production records it verified live from this pin's applied record (#1950), staging from its apply run.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL169_FILE], undefined);
-  assert.doesNotMatch(JSON.stringify(plan), /169_check_billing_events_keep_charge_on_check_delete/);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL169_FILE), ['workflow.mjs']);
+  const pre = plan.sql_prerequisites[SQL169_FILE];
+  assert.equal(pre.verified_live, true);
+  assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
+  assert.ok(pre.evidence.includes('#1950'));
+  assert.equal(readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL169_FILE].verified_live, true);
   // The file: one DO block; no GRANT, REVOKE, function, trigger, table, policy, index or row change outside it.
   const text = fs.readFileSync(path.join(ROOT, SQL169_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');

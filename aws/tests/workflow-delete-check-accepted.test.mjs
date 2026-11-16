@@ -116,7 +116,6 @@ test('financial delete blockers include provider and disbursement tables', () =>
   assert.deepEqual(
     FINANCIAL_DELETE_BLOCKERS.map((row) => row.table).sort(),
     [
-      'check_billing_events',
       'check_payment_directions',
       'checkalt_deposits',
       'claim_check_payments',

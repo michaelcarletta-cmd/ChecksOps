@@ -160,6 +160,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Moov read no longer fails the whole sweep snapshot; the bank from the database still shows. A
   // rebuild-only change (see OVERLAY_PLAN_CHANGES), not a member of the current rebuild section.
   'providers/parity/sweep-read.mjs': 'changed',
+  // Delete Check keeps a deleted check's charges (2026-11-16, planning only): workflow-delete-check.mjs (do_not_overlay,
+  // not routed) follows the deployed delete's rule by importing workflow.mjs's helper. A rebuild-only change (see
+  // OVERLAY_PLAN_CHANGES), not a member of the current rebuild section; workflow.mjs itself is an overlay REPLACE row.
+  'workflow-delete-check.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -363,6 +367,9 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'providers/parity/sweep-read.mjs',
   // Transfer to bank to the settlement bank (2026-11-15, planning only): a REPLACE row of the production plan.
   'providers/production/moov-wallet-withdraw.mjs',
+  // Delete Check keeps charges (2026-11-16, planning only): workflow-delete-check.mjs is not an overlay member (do_not_overlay):
+  // it reaches a function only with a rebuild. workflow.mjs is a REPLACE row of the production plan.
+  'workflow-delete-check.mjs',
   'providers/production/checkalt-eligibility.mjs',
   'providers/production/checkalt-poll.mjs',
   'providers/production/checkalt-status-read.mjs',
