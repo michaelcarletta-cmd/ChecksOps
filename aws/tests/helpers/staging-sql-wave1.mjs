@@ -315,6 +315,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // deploy run 43872142937, CodeSha256 0KNPXGrb... -> Ul6WPHdS...): already_applied false, precondition_failures [],
   // prerequisites_missing [], the functions and triggers absent. Equal to the derived pre-state.
   sql168: Object.freeze({ wave: 60, approved: '2026-11-16', run: '43878936321', live: 'a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33' }),
+  // Wave 61 (owner approved 2026-11-16, "apply SQL 169 in staging"): SQL 169, deleting a check keeps its charges
+  // (check_billing_events_check_intake_item_id_fkey ON DELETE SET NULL). Read at main 294055a93 with the executor current
+  // (inspect run 43917310640, deploy run 43917926456, CodeSha256 aU0HiKBL... -> DA2QdHRx...): already_applied false,
+  // precondition_failures [], prerequisites_missing [], the ON DELETE CASCADE key. Equal to the derived pre-state.
+  sql169: Object.freeze({ wave: 61, approved: '2026-11-16', run: '43919046029', live: 'f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -326,7 +331,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-60 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-61 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */

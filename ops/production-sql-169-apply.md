@@ -40,8 +40,14 @@ refusing the delete of a charged check until its own later step (a Lambda overla
 this pin is applied in production. No API, Lambda or SPA change is part of this pin. Deposits, CheckAlt deposits,
 disbursements, payments and payment directions keep blocking a delete.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 61 when approved (wave 60 is SQL 168, the highest on main).
+**Status:** staging pin execute-authorized (wave 61); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-16).** Run 43919046029 (main `294055a93`, after executor inspect run 43917310640 and executor deploy
+run 43917926456 (executor CodeSha256 `aU0HiKBL…` -> `DA2QdHRx…`)), under the owner's words "apply SQL 169 in staging":
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; the ON DELETE CASCADE key. Live
+`f7530ea5e4b9ff3d8dc74911ffeadfe9b38dd6fd867ca3edacbc9ec65c8c4a40`, equal to the derived pre-state; intended `30fc8ed4…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 61). The staging apply is a separate run after this pin is merged
+and the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
 
 ## Fingerprint
 
