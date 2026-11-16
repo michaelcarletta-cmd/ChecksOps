@@ -12,8 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
-import { isMasterMerchant } from "@/lib/masterMerchant";
-import { decideWorkspaceAccess, identityListsTenant } from "@/lib/workspaceAccess";
+import { useWorkspaceMembership } from "@/hooks/useWorkspaceMembership";
 import { loginPathWithNext, postLoginPath } from "@/lib/loginReturnPath";
 
 const Payments = lazy(() => import("@/pages/Payments"));
@@ -63,34 +62,9 @@ function WhiteLabelRoutes() {
   const location = useLocation();
   const basePath = useTenantBasePath(tenant?.slug);
 
-  // Membership: the server's organization list from /identity/me first, then the tenant_users
-  // read. A failed read is not "no row" (workspaceAccess.ts).
-  const identityListsThisTenant = identityListsTenant(
-    user?.app_metadata?.tenant_memberships,
-    tenant?.id,
-    tenant?.slug,
-  );
-  const {
-    data: membershipRead,
-    isLoading: memberQueryLoading,
-    isFetching: memberFetching,
-    refetch: refetchMembership,
-  } = useQuery({
-    queryKey: ["tenant-membership", tenant?.id, user?.id],
-    queryFn: async () => {
-      if (!tenant?.id || !user?.id) return { row: false, failed: false };
-      const { data, error } = await supabase
-        .from("tenant_users")
-        .select("id")
-        .eq("tenant_id", tenant.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      return { row: !!data, failed: !!error };
-    },
-    enabled: !!tenant?.id && !!user?.id,
-  });
-  // The identity list already confirms membership: do not wait on the read.
-  const memberLoading = !identityListsThisTenant && memberQueryLoading;
+  // Membership: the server's organization list first, then the tenant_users read; a confirmed
+  // membership survives a failed refetch (useWorkspaceMembership, workspaceAccess.ts).
+  const { workspaceAccess, memberLoading, checking, retry, failureReason } = useWorkspaceMembership(tenant, user);
 
   // tenants_public lists active tenants only, so an inactive organization looks
   // "not found". For a signed-in member, read the base tenant row (membership-
@@ -111,15 +85,6 @@ function WhiteLabelRoutes() {
   const tenantInactive = (!tenant && !!hiddenTenantStatus && hiddenTenantStatus !== "active")
     || (!!tenant && tenant.subscription_status !== "active");
 
-  // Master merchant can preview any tenant's Check Center
-  const workspaceAccess = decideWorkspaceAccess({
-    tenantId: tenant?.id,
-    tenantSlug: tenant?.slug,
-    identityTenants: user?.app_metadata?.tenant_memberships,
-    tenantUsersRow: !!membershipRead?.row,
-    tenantUsersError: !!membershipRead?.failed,
-    isMasterMerchant: isMasterMerchant(user?.email, user?.id),
-  });
   const isMember = workspaceAccess === "member";
 
 
@@ -165,10 +130,13 @@ function WhiteLabelRoutes() {
         <div className="text-center space-y-3">
           <h1 className="text-xl font-semibold">We couldn't confirm your access to {tenant.name}.</h1>
           <p className="text-muted-foreground">
-            Check your connection and try again.
+            Check your connection and try again. Retry also refreshes your sign-in.
           </p>
-          <Button onClick={() => void refetchMembership()} disabled={memberFetching}>
-            {memberFetching ? "Checking…" : "Retry"}
+          {failureReason ? (
+            <p className="text-xs text-muted-foreground">Reason: {failureReason}</p>
+          ) : null}
+          <Button onClick={() => void retry()} disabled={checking}>
+            {checking ? "Checking…" : "Retry"}
           </Button>
         </div>
       </div>

@@ -7,6 +7,8 @@ import {
   decideWorkspaceAccess,
   identityListsTenant,
   identityTenantMemberships,
+  identityTenantsMissing,
+  nextMembershipRead,
 } from '../../src/lib/workspaceAccess.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -80,19 +82,19 @@ test('the AWS user carries the identity tenant list (tenant_id, tenant_slug, rol
 });
 
 for (const rel of ['src/pages/WhiteLabelApp.tsx', 'src/components/white-label/CustomDomainWhiteLabelApp.tsx']) {
-  test(`${rel} decides access with the helper and has the Retry screen`, () => {
+  test(`${rel} decides access with the shared hook and has the Retry screen`, () => {
     const src = read(rel);
-    assert.match(src, /import \{ decideWorkspaceAccess, identityListsTenant \} from "@\/lib\/workspaceAccess";/);
-    assert.match(src, /decideWorkspaceAccess\(\{/);
-    assert.match(src, /identityTenants: user\?\.app_metadata\?\.tenant_memberships/);
-    assert.match(src, /const \{ data, error \} = await supabase\s*\.from\("tenant_users"\)/);
-    assert.match(src, /return \{ row: !!data, failed: !!error \};/);
+    assert.match(src, /import \{ useWorkspaceMembership \} from "@\/hooks\/useWorkspaceMembership";/);
+    assert.match(src, /const \{ workspaceAccess, memberLoading, checking, retry, failureReason \} = useWorkspaceMembership\(tenant, user\);/);
+    // The membership read lives in the hook only, not in each shell.
+    assert.doesNotMatch(src, /from\("tenant_users"\)/);
     assert.match(src, /const isMember = workspaceAccess === "member";/);
     // Retry screen on a failed read; Access Denied only for "denied".
     assert.match(src, /workspaceAccess === "unconfirmed"/);
     assert.match(src, /We couldn't confirm your access to \{tenant\.name\}\./);
-    assert.match(src, /onClick=\{\(\) => void refetchMembership\(\)\}/);
-    assert.match(src, />\s*\{memberFetching \? "Checking…" : "Retry"\}/);
+    assert.match(src, /onClick=\{\(\) => void retry\(\)\} disabled=\{checking\}/);
+    assert.match(src, />\s*\{checking \? "Checking…" : "Retry"\}/);
+    assert.match(src, /Reason: \{failureReason\}/);
     const denied = src.indexOf('<h1 className="text-2xl font-bold">Access Denied</h1>');
     assert.ok(denied > 0);
     const guard = src.lastIndexOf('workspaceAccess === "denied"', denied);
@@ -103,3 +105,45 @@ for (const rel of ['src/pages/WhiteLabelApp.tsx', 'src/components/white-label/Cu
     assert.match(src, /Subscription Inactive/);
   });
 }
+
+test('useWorkspaceMembership: identity list first, keep-confirmed read, one stale-session refresh, Retry refreshes', () => {
+  const src = read('src/hooks/useWorkspaceMembership.ts');
+  assert.match(src, /queryKey = \["tenant-membership", tenant\?\.id, user\?\.id\]/);
+  assert.match(src, /const \{ data, error \} = await supabase\s*\.from\("tenant_users"\)/);
+  assert.match(src, /const previous = queryClient\.getQueryData<MembershipRead>\(queryKey\);\s*return nextMembershipRead\(previous, \{ found: !!data, error \}\);/);
+  assert.match(src, /identityTenants: user\?\.app_metadata\?\.tenant_memberships|identityTenants,/);
+  assert.match(src, /identityTenantsMissing\(user\.app_metadata\)/);
+  assert.match(src, /refreshedFor\.current === user\.id/);
+  assert.match(src, /await supabase\.auth\.refreshSession\(\);\s*await refetch\(\);/);
+  assert.match(src, /memberLoading: !identityListsThisTenant && memberQueryLoading/);
+  assert.match(src, /isMasterMerchant: isMasterMerchant\(user\?\.email, user\?\.id\)/);
+});
+
+test('nextMembershipRead: a confirmed membership survives a failed refetch (owner 2026-11-16)', () => {
+  const refused = { error: { code: 'login_mfa_required', message: 'Two-factor sign-in required' } };
+  // Confirmed earlier in the session, then a refetch fails: still a member.
+  assert.deepEqual(
+    nextMembershipRead({ row: true, failed: false, reason: null }, { found: false, ...refused }),
+    { row: true, failed: false, reason: null },
+  );
+  // Never confirmed and the read fails: unconfirmed, with the reason.
+  assert.deepEqual(nextMembershipRead(undefined, { found: false, ...refused }), { row: false, failed: true, reason: 'login_mfa_required' });
+  assert.deepEqual(
+    nextMembershipRead({ row: false, failed: true, reason: 'x' }, { found: false, error: { code: '42501', message: 'permission denied' } }),
+    { row: false, failed: true, reason: 'permission denied' },
+  );
+  assert.equal(nextMembershipRead(null, { found: false, error: {} }).reason, 'membership_read_failed');
+  // A read that succeeds decides: a row is a member, no row is not (membership removed).
+  assert.deepEqual(nextMembershipRead(null, { found: true, error: null }), { row: true, failed: false, reason: null });
+  assert.deepEqual(nextMembershipRead({ row: true, failed: false, reason: null }, { found: false, error: null }), { row: false, failed: false, reason: null });
+  // End to end with the decision: confirmed then failed refetch stays "member".
+  const kept = nextMembershipRead({ row: true, failed: false, reason: null }, { found: false, ...refused });
+  assert.equal(decideWorkspaceAccess({ tenantId: TENANT_ID, identityTenants: undefined, tenantUsersRow: kept.row, tenantUsersError: kept.failed, isMasterMerchant: false }), 'member');
+});
+
+test('identityTenantsMissing: only a user with no organization list at all is refreshed', () => {
+  assert.equal(identityTenantsMissing(undefined), true);
+  assert.equal(identityTenantsMissing({ provider: 'cognito', roles: [] }), true);
+  assert.equal(identityTenantsMissing({ tenant_memberships: [] }), false);
+  assert.equal(identityTenantsMissing({ tenant_memberships: [{ tenant_id: TENANT_ID }] }), false);
+});
