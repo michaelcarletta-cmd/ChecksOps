@@ -41,11 +41,17 @@
 --         (aws/functions/api/workflow-rpc.mjs executeAcceptMortgage) and SQL 158's assign: assigned_employee_id = the
 --         source's agent, status in_progress, accepted_at = COALESCE(accepted_at, now()), updated_at = now(), WHERE the
 --         request is still requested and unassigned;
---      h. one public.mortgage_ops_request_audit row, the Desk's request history (SQL 84; SQL 158 writes 'assign'):
+--      h. one public.check_messages row on the new check, so the tenant sees it on the check thread (owner 2026-11-16:
+--         a short automatic message; no email to the agent). The columns SQL 166's aws_mortgage_desk_set_monitoring and
+--         SQL 122's aws_mortgage_desk_post_message write: check_id, sender_id (the agent, as the Desk's own messages are
+--         sent by the agent), body, is_deleted false, created_at clock_timestamp(). Body: "ChecksOps Mortgage Desk added
+--         this check to <name>'s file automatically (same claim)." with <name> the agent's profiles.full_name (as SQL
+--         158 shows it), or "the agent already handling this claim" when the profile has no name;
+--      i. one public.mortgage_ops_request_audit row, the Desk's request history (SQL 84; SQL 158 writes 'assign'):
 --         action 'auto_route_same_agent', actor_id NULL (the system), from requested to in_progress, payload with the
---         agent, the source request and check, the claim and what fired it. No column is added.
+--         agent, the source request and check, the claim, the message and what fired it. No column is added.
 -- 2) public.aws_mortgage_desk_route_same_agent_trigger() RETURNS trigger: calls 1) for the check of the row, inside its
---    own subtransaction: any error rolls back only the routing (the request, the accept and the audit row) and is
+--    own subtransaction: any error rolls back only the routing (the request, the accept, the message and the audit row) and is
 --    reported as a WARNING carrying the SQLSTATE only, so the tenant's save always goes through and the tenant can send
 --    as today.
 -- 3) Two triggers that run 2):
@@ -63,7 +69,7 @@
 -- into these triggers and the triggers their writes fire (the reason SQL 99 does not set it). On restores the
 -- default for them; the owner of the tables (the applying login) is not subject to their RLS either way.
 --
--- Never: a 2nd-mortgagee request (endorsement_order 2); any change to an existing request; a deposited, voided or
+-- Never: an email (the database sends none; the API is not involved); a 2nd-mortgagee request (endorsement_order 2); any change to an existing request; a deposited, voided or
 -- returned check; a check with no claim or no loss draft file; another tenant's request or agent; an inactive agent.
 -- There is no per-tenant Mortgage Ops access flag in the schema to check: a tenant reaches this only through a request
 -- it sent itself on an earlier check of the same claim.
@@ -80,6 +86,8 @@
 -- (mortgage_handling_requests.claim_id); it pays the initial amount when the request has the mortgage_ops_initial event
 -- above, or when it completes before any other request on the claim is completed (the source still in progress). The
 -- API's own accrual (mortgage-ops-usage.mjs, after executeAcceptMortgage) does not run: the trigger is the durable path.
+--
+-- The message fires the live triggers on check_messages unchanged, as SQL 166's and SQL 122's Desk messages do.
 --
 -- Not changed: no table, column, policy, RLS setting, table grant or row; no other function or trigger (SQL 158's
 -- assign, SQL 160's billing, SQL 167's relink keep their bodies). Adds two public triggers: the DB validator's justified
@@ -107,6 +115,8 @@ BEGIN
       ('public.mortgage_handling_requests', pg_catalog.to_regclass('public.mortgage_handling_requests')::oid),
       ('public.mortgage_ops_request_audit', pg_catalog.to_regclass('public.mortgage_ops_request_audit')::oid),
       ('public.mortgage_agent_accounts', pg_catalog.to_regclass('public.mortgage_agent_accounts')::oid),
+      ('public.check_messages', pg_catalog.to_regclass('public.check_messages')::oid),
+      ('public.profiles', pg_catalog.to_regclass('public.profiles')::oid),
       ('public.has_role(uuid, public.app_role)', pg_catalog.to_regprocedure('public.has_role(uuid, public.app_role)')::oid)
   ) AS req(name, obj)
   WHERE obj IS NULL;
@@ -133,7 +143,10 @@ BEGIN
       ('mortgage_ops_request_audit', 'action'), ('mortgage_ops_request_audit', 'reason'),
       ('mortgage_ops_request_audit', 'from_status'), ('mortgage_ops_request_audit', 'to_status'),
       ('mortgage_ops_request_audit', 'payload'),
-      ('mortgage_agent_accounts', 'application_user_id'), ('mortgage_agent_accounts', 'status')) AS want(tbl, col)
+      ('mortgage_agent_accounts', 'application_user_id'), ('mortgage_agent_accounts', 'status'),
+      ('check_messages', 'id'), ('check_messages', 'check_id'), ('check_messages', 'sender_id'),
+      ('check_messages', 'body'), ('check_messages', 'is_deleted'), ('check_messages', 'created_at'),
+      ('profiles', 'id'), ('profiles', 'full_name')) AS want(tbl, col)
     -- pg_attribute, not information_schema.columns: the latter lists only the columns the applying login holds a
     -- privilege on.
     WHERE NOT EXISTS (
@@ -144,7 +157,7 @@ BEGIN
          AND NOT a.attisdropped);
   END IF;
   IF v_missing IS NOT NULL THEN
-    RAISE EXCEPTION 'sql168_prerequisite_missing: SQL 168 needs the Mortgage Desk request, audit and agent schema, the loss draft and check columns and has_role first; missing %',
+    RAISE EXCEPTION 'sql168_prerequisite_missing: SQL 168 needs the Mortgage Desk request, audit, agent and check message schema, the loss draft and check columns, profiles and has_role first; missing %',
       array_to_string(v_missing, ', ')
       USING ERRCODE = '55000';
   END IF;
@@ -154,7 +167,8 @@ BEGIN
   JOIN pg_catalog.pg_roles me ON me.rolname = current_user
   WHERE t.oid IN (pg_catalog.to_regclass('public.check_intake_items'), pg_catalog.to_regclass('public.loss_draft_tracking'),
                   pg_catalog.to_regclass('public.mortgage_handling_requests'), pg_catalog.to_regclass('public.mortgage_ops_request_audit'),
-                  pg_catalog.to_regclass('public.mortgage_agent_accounts'))
+                  pg_catalog.to_regclass('public.mortgage_agent_accounts'), pg_catalog.to_regclass('public.check_messages'),
+                  pg_catalog.to_regclass('public.profiles'))
     AND NOT (me.rolsuper OR me.rolbypassrls
              OR (pg_catalog.pg_has_role(current_user, t.relowner, 'USAGE') AND NOT t.relforcerowsecurity));
   IF v_unreachable IS NOT NULL THEN
@@ -182,6 +196,8 @@ DECLARE
   v_src public.mortgage_handling_requests%ROWTYPE;
   v_new uuid;
   v_after uuid;
+  v_agent_name text;
+  v_message_id uuid;
 BEGIN
   IF _check_id IS NULL THEN
     RETURN NULL;
@@ -265,6 +281,19 @@ BEGIN
     RAISE EXCEPTION 'sql168_route_not_accepted' USING ERRCODE = 'P0001';
   END IF;
 
+  -- The tenant sees it on the check thread (the columns SQL 166 writes; sent by the agent, as the Desk's messages are).
+  SELECT NULLIF(btrim(COALESCE(p.full_name, '')), '') INTO v_agent_name
+    FROM public.profiles p
+   WHERE p.id = v_src.assigned_employee_id;
+  INSERT INTO public.check_messages (check_id, sender_id, body, is_deleted, created_at)
+  VALUES (
+    _check_id, v_src.assigned_employee_id,
+    'ChecksOps Mortgage Desk added this check to '
+      || COALESCE(v_agent_name || '''s', 'the agent already handling this claim''s')
+      || ' file automatically (same claim).',
+    false, clock_timestamp())
+  RETURNING id INTO v_message_id;
+
   INSERT INTO public.mortgage_ops_request_audit (mortgage_request_id, actor_id, action, reason, from_status, to_status, payload)
   VALUES (
     v_new, NULL, 'auto_route_same_agent',
@@ -275,6 +304,7 @@ BEGIN
       'source_check_id', v_src.check_intake_item_id,
       'source_request_status', v_src.status,
       'claim_id', v_claim,
+      'message_id', v_message_id,
       'fired_by', _fired_by,
       'source', 'sql168'));
 
