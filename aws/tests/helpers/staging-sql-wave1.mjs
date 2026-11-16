@@ -310,6 +310,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // Applied in staging by run 43628481801 (receipt 45b7f3a9... -> 3aebf662... = intended; read-live 43628751159 already_applied
   // true; recorded as staging_acceptance in ops/deployment-guard/sql167-claim-ledger-relink-check-production-apply.json).
   sql167: Object.freeze({ wave: 59, approved: '2026-11-14', run: '43623494491', live: '45b7f3a90b7613a53af9e72b569d59f16cdb0de40119ecd6fbe6f2213ea19343', apply_run: '43628481801' }),
+  // Wave 60 (owner approved 2026-11-16, "apply SQL 168 in staging"): SQL 168, a new check on a claim the Mortgage Desk
+  // handles is routed to the same active agent. Read at main 5e2d6fe4e with the executor current (inspect run 43871619672,
+  // deploy run 43872142937, CodeSha256 0KNPXGrb... -> Ul6WPHdS...): already_applied false, precondition_failures [],
+  // prerequisites_missing [], the functions and triggers absent. Equal to the derived pre-state.
+  sql168: Object.freeze({ wave: 60, approved: '2026-11-16', run: '43878936321', live: 'a364af9a300c5e617db353e67e3f37a18691a27f10d9349d506471067a31ef33' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -321,7 +326,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-59 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-60 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */
