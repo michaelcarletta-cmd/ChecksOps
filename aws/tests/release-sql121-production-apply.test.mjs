@@ -238,7 +238,10 @@ test('order: no predecessor and no order; the cash-job tables, columns, function
   assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
   assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
   assert.equal(pre.pin, 'ops/deployment-guard/sql121-cash-jobs-grants-production-apply.json');
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL121_FILE), ['workflow.mjs']);
+  // Since the Delete Check keep-charges plan (2026-11-16) workflow.mjs waits for SQL 169 instead; nothing is held on SQL 121
+  // now, and its record stays (append-only, live in both environments).
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL121_FILE), []);
+  assert.equal(plan.members['workflow.mjs'].sql_before, 'aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql');
   // One public trigger more once applied: the DB validator followed the staging apply (run 40591140684),
   // as #1309 did for SQL 120, and justifies it by name (183; 184 since SQL 123's trigger followed; 185 since SQL 143's; 187 since SQL 152's; 189 since SQL 154's; 190 since SQL 155's).
   const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');

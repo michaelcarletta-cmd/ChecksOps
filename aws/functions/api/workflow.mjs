@@ -19,6 +19,7 @@ import {
   loadCheckPayees,
 } from './providers/production/checkalt-eligibility.mjs';
 import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -714,6 +715,70 @@ export const handleCheckTransition = async (event, deps = {}) => {
   }, deps);
 };
 
+// Owner 2026-11-16 ("Delete, keep charge (Recommended)"): a check with a ChecksOps charge can be deleted; the
+// charge stays. SQL 169 made check_billing_events.check_intake_item_id ON DELETE SET NULL, so every billing row
+// of a deleted check would now stay, unlinked. The rows that never blocked a delete before (and that the old
+// ON DELETE CASCADE removed with the check) are still removed with it: voided rows, and the provisional
+// mortgage_handling event written when a check enters Review while it is not invoiced. Every other row is a
+// real charge: it is kept (unlinked by the key) and listed in the check_deletion_log snapshot.
+export const CHECK_BILLING_EVENTS_FOR_DELETE_SQL = `SELECT e.id, e.event_type, e.status, e.unit_price_cents,
+       to_jsonb(e)->>'invoice_id' AS invoice_id, e.billed_at
+  FROM public.check_billing_events e
+ WHERE e.check_intake_item_id = $1::uuid
+ ORDER BY e.billed_at, e.id`;
+
+/** The billing rows the old ON DELETE CASCADE removed with the check (they never blocked a delete). */
+export const isProvisionalBillingEvent = (row) => row?.status === 'voided'
+  || (row?.event_type === 'mortgage_handling' && row?.status !== 'invoiced' && row?.invoice_id == null);
+
+/**
+ * Reads the check's billing rows, removes the provisional ones under the money-write flag (SQL 136) and
+ * returns the charges that stay. { error } when the rows cannot be read or the provisional ones cannot be
+ * removed: the delete is then refused, so no stray provisional charge outlives its check.
+ */
+export async function settleBillingEventsForCheckDelete(client, checkId) {
+  await client.query('SAVEPOINT delete_billing_events');
+  try {
+    const rows = (await client.query(CHECK_BILLING_EVENTS_FOR_DELETE_SQL, [checkId])).rows || [];
+    const provisional = rows.filter(isProvisionalBillingEvent).map((row) => String(row.id));
+    let removed = [];
+    if (provisional.length) {
+      await setMoneyWriteFlag(client);
+      removed = ((await client.query(`DELETE FROM public.check_billing_events e
+         WHERE e.check_intake_item_id = $1::uuid
+           AND e.id = ANY($2::uuid[])
+           AND (e.status = 'voided'
+                OR (e.event_type = 'mortgage_handling'
+                    AND e.status IS DISTINCT FROM 'invoiced'
+                    AND to_jsonb(e)->>'invoice_id' IS NULL))
+         RETURNING e.id`, [checkId, provisional])).rows || []).map((row) => String(row.id));
+      if (removed.length !== provisional.length) {
+        await client.query('ROLLBACK TO SAVEPOINT delete_billing_events');
+        await client.query('RELEASE SAVEPOINT delete_billing_events');
+        return { error: 'billing_cleanup_incomplete' };
+      }
+    }
+    await client.query('RELEASE SAVEPOINT delete_billing_events');
+    const gone = new Set(removed);
+    const kept = rows.filter((row) => !gone.has(String(row.id))).map((row) => ({
+      id: row.id,
+      event_type: row.event_type ?? null,
+      status: row.status ?? null,
+      unit_price_cents: row.unit_price_cents ?? null,
+      invoice_id: row.invoice_id ?? null,
+      billed_at: row.billed_at ?? null,
+    }));
+    return { kept, removed };
+  } catch (error) {
+    try { await client.query('ROLLBACK TO SAVEPOINT delete_billing_events'); } catch { /* ignore */ }
+    try { await client.query('RELEASE SAVEPOINT delete_billing_events'); } catch { /* ignore */ }
+    // No billing table on this schema snapshot: nothing to keep or remove.
+    if (error?.code === '42P01') return { kept: [], removed: [] };
+    if (error?.code === '42501') return { error: 'billing_cleanup_denied' };
+    throw error;
+  }
+}
+
 export const handleDeleteCheck = async (event, deps = {}) => {
   const gate = requireWorkflowEnabled(event, deps);
   if (gate.blocked) {
@@ -762,17 +827,9 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       // claim_payments is not a blocker: its check link is ON DELETE SET NULL, so the claim keeps the
       // payment and only loses the link (claim linkage is not a blocker).
-      // Billing events block only once billed: invoiced, or a charge for work done (check processing,
-      // Mortgage Ops). The mortgage_handling event written when a check enters Review is removed with
-      // the check (ON DELETE CASCADE) while it is not invoiced.
-      { table: 'check_billing_events', sql: `SELECT 1
-          FROM public.check_billing_events e
-         WHERE e.check_intake_item_id = $1::uuid
-           AND e.status IS DISTINCT FROM 'voided'
-           AND (e.status = 'invoiced'
-                OR to_jsonb(e)->>'invoice_id' IS NOT NULL
-                OR e.event_type IS DISTINCT FROM 'mortgage_handling')
-         LIMIT 1` },
+      // Billing events do not block (owner 2026-11-16, "Delete, keep charge"): SQL 169 made their check
+      // link ON DELETE SET NULL, so a charge stays in billing history, unlinked; see
+      // settleBillingEventsForCheckDelete below.
       // Financial tables keyed by claim_checks.id. Join via claim_checks.check_intake_item_id.
       { table: 'check_payment_directions', sql: `SELECT 1
           FROM public.check_payment_directions d
@@ -891,6 +948,15 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       plannedStorageKeySample = plannedStorageKeys.slice(0, 50);
     }
 
+    // Charges stay (unlinked by SQL 169's key); provisional billing rows go, as the old cascade did.
+    const billing = await settleBillingEventsForCheckDelete(client, looked.check.id);
+    if (billing.error) {
+      return denied(spoof, {
+        error: billing.error,
+        message: 'This check cannot be deleted because its billing records could not be settled. Nothing was deleted.',
+      });
+    }
+
     // Preserve an audit snapshot before deleting the check + check_audit_log rows.
     let auditSavepointHeld = false;
     await client.query('SAVEPOINT delete_audit_snapshot');
@@ -912,7 +978,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
               row.status ?? null,
               String(reason),
               mapping.application_user_id,
-              JSON.stringify(row),
+              JSON.stringify({ ...row, billing_events_kept: billing.kept }),
             ],
           );
         }

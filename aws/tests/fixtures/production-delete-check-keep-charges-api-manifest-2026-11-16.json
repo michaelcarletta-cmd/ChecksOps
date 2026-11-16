@@ -1,0 +1,15 @@
+{
+  "workstream_id": "delete-check-keep-charges-api",
+  "authorization": "Pending owner review (2026-11-16). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Delete Check keeps a deleted check's charges (owner 2026-11-16, on deleting a check that has a ChecksOps charge: \"Delete, keep charge (Recommended)\"; \"build the delete-check change\"). workflow.mjs handleDeleteCheck no longer refuses a check because of check_billing_events: SQL 169 (applied in staging, run 43923431127, and in production, SSM 9c92cb54-fc92-47b0-9fa1-cb7764b2f992; record #1950) made check_billing_events.check_intake_item_id ON DELETE SET NULL, so a real charge stays in billing history, unlinked, and is listed in the check_deletion_log snapshot (billing_events_kept). The rows the old ON DELETE CASCADE removed with the check and that never blocked a delete (voided rows, and the uninvoiced mortgage_handling event written when a check enters Review) are removed explicitly under the money-write flag (settleBillingEventsForCheckDelete; SQL 136's restrictive gate), so no provisional $10 row outlives its check; if they cannot be removed the delete is refused. Every other blocker is unchanged (deposit_items, checkalt_deposits, disbursement_batches, claim_check_payments, check_payment_directions, claim_disbursements, claim_checks_terminal, terminal financial state). New local import money-write-flag.mjs: an overlay member live in production since the 2026-10-31 money-write flag change, ahead of workflow.mjs in plan order; it is not changed. One REPLACE from the bytes production runs (no rebuild section lists workflow.mjs; counted as same): workflow.mjs be56953f -> 7ebd5c45. sql_before moves from SQL 121 to SQL 169: these bytes rely on SET NULL (under CASCADE a delete would erase the charges they keep). workflow-delete-check.mjs (do_not_overlay, not deployed) follows the same rule by importing the helper. No member is added; order unchanged; index.mjs is untouched. Planning only.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "be56953fb4db1d89a7738beb0710fd801b8e056c0d95caba3a4a02cea5707bb8",
+      "accepted_sha256": "7ebd5c45eb6675db091e6231dd4e4107a8ffcac0b520be1bc35f6472884afcd2",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-timeline-endorsement-applied-manifest-2026-10-29.json"
+    }
+  }
+}

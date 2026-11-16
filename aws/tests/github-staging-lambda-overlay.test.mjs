@@ -508,9 +508,10 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // Desk shared-check library plan, 2026-11-11, moved mortgage-desk-esign.mjs on to SQL 156; SQL 158 since the desk check and
   // homeowner link plan, 2026-11-13, moved mortgage-desk-esign.mjs on to SQL 163; SQL 148 since the vendor payments API
   // plan, 2026-11-13, moved workflow-rpc.mjs on to SQL 165; SQL 122 since the desk set monitoring plan, 2026-11-14, moved
-  // mortgage-desk-return.mjs on to SQL 166).
+  // mortgage-desk-return.mjs on to SQL 166; SQL 121 since the Delete Check keep-charges plan, 2026-11-16, moved workflow.mjs on to
+  // SQL 169).
   const released = Object.keys(STAGING_SQL.sql).filter((file) => !required.includes(file)).sort();
-  assert.deepEqual(released, ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql', 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql', 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql', 'aws/workflows/sql/148_second_mortgagee_link.sql', 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql']);
+  assert.deepEqual(released, ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'aws/workflows/sql/121_cash_jobs_production_grants.sql', 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql', 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql', 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql', 'aws/workflows/sql/148_second_mortgagee_link.sql', 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql']);
   for (const file of released) {
     assert.equal(STAGING_SQL.sql[file].verified_live, true, file);
     assert.equal(PLAN.sql_prerequisites[file]?.verified_live, true, file);

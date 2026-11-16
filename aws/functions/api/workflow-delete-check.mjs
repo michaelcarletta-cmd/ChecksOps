@@ -11,7 +11,8 @@
  * - reason min 3 trimmed characters
  * - claim linkage alone does not block
  * - partner/shared and terminal financial states block
- * - deposit/provider/disbursement rows block
+ * - deposit/provider/disbursement rows block; billing charges do not (SQL 169 keeps them, unlinked;
+ *   the provisional rows go, as in workflow.mjs settleBillingEventsForCheckDelete)
  * - non-financial dependents are cleaned
  * - check_deletion_log audit
  * - check-scoped S3 cleanup after successful DB delete (skipped when storage writes are off)
@@ -22,6 +23,7 @@ import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
 import { isPartnerLinked, isTerminalFinancial, TENANT_MEMBER_SQL } from './workflow-transitions.mjs';
 import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
+import { settleBillingEventsForCheckDelete } from './workflow.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_CHECK_DELETE_KEYS = 2000;
@@ -103,7 +105,6 @@ export const FINANCIAL_DELETE_BLOCKERS = Object.freeze([
   { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
-  { table: 'check_billing_events', sql: 'SELECT 1 FROM public.check_billing_events WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'check_payment_directions', sql: 'SELECT 1 FROM public.check_payment_directions WHERE check_id = $1::uuid LIMIT 1' },
 ]);
 
@@ -378,6 +379,16 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     }
     plannedStorageKeys = planned.keys || [];
 
+    // Same rule as the deployed delete (workflow.mjs): charges stay, provisional billing rows go.
+    const billing = await settleBillingEventsForCheckDelete(client, looked.check.id);
+    if (billing.error) {
+      return denied(spoof, {
+        error: 'cleanup_denied',
+        message: `Refusing to delete: the check's billing records could not be settled (${billing.error})`,
+        blocker: 'check_billing_events',
+      });
+    }
+
     const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
     if (exists) {
       const row = (await client.query(
@@ -397,7 +408,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
             row.status ?? null,
             String(reason),
             mapping.application_user_id,
-            JSON.stringify(row),
+            JSON.stringify({ ...row, billing_events_kept: billing.kept }),
           ],
         );
       }

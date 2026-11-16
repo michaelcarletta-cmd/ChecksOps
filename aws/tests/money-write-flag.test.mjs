@@ -51,6 +51,9 @@ const FLAG_BEFORE_WRITE = new Set([
   'tenant-collection-v2.mjs',
   'tenant-settings-handlers.mjs',
   'wallet-withdraw-limits.mjs',
+  // Delete Check (owner 2026-11-16, "Delete, keep charge"): removes the provisional billing rows SQL 169 would
+  // otherwise keep, under the flag (settleBillingEventsForCheckDelete).
+  'workflow.mjs',
 ]);
 const FLAG_AT_ACTION_ENTRY = new Set(['invoice-provider.mjs']);
 // Run only inside MOOV_PARITY_HANDLERS (moov-functions.mjs wrap sets the flag) or, for the two
