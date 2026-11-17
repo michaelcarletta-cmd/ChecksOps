@@ -11,6 +11,7 @@ import { FileText, Link2, CheckCircle2, AlertCircle, Pencil, DollarSign } from "
 import { ClaimSettlementEditor } from "./ClaimSettlementEditor";
 import { getDepositLabel } from "@/lib/depositLabel";
 import { fundsReceivedFromScopedIntakeRows } from "@/lib/claimLedgerSync";
+import { claimLedgerExpected, claimLedgerRemaining } from "@/lib/claimLedgerTotals";
 import {
   CLAIM_LEDGER_LINK_RPC,
   CLAIM_LEDGER_NOT_LINKED,
@@ -658,30 +659,16 @@ export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumbe
     Number(s.ale_rcv || 0)
     - Number(s.ale_recoverable_depreciation || 0)
     - Number(s.ale_non_recoverable_depreciation || 0));
-  const totalRecDep =
-    Number(s.recoverable_depreciation || 0)
-    + Number(s.other_structures_recoverable_depreciation || 0)
-    + Number(s.pwi_recoverable_depreciation || 0)
-    + Number(s.personal_property_recoverable_depreciation || 0)
-    + Number(s.ale_recoverable_depreciation || 0);
-  const totalRcv =
-    Number(s.replacement_cost_value || 0)
-    + Number(s.other_structures_rcv || 0)
-    + Number(s.pwi_rcv || 0)
-    + Number(s.personal_property_rcv || 0)
-    + Number(s.ale_rcv || 0);
-  const totalDeductible =
-    Number(s.deductible || 0)
-    + Number(s.other_structures_deductible || 0);
   // Expected funds = full RCV across every category (+ any known supplement).
   // Deductible and non-recoverable/withheld amounts (e.g. Ordinance & Law paid
   // when incurred) are shown in the breakdown but must NOT reduce the target —
   // otherwise a claim can look "fully funded" while money is still outstanding.
-  const totalExpected = totalRcv + Number(s.supplement_expected || 0);
+  // The Checks "Outstanding" tab lists the same figures (claimLedgerTotals.ts).
+  const { totalRecDep, totalRcv, totalDeductible, totalExpected } = claimLedgerExpected(s);
 
 
   const totalReceived = fundsReceivedFromScopedIntakeRows(siblingChecks);
-  const remaining = Math.max(0, totalExpected - totalReceived);
+  const remaining = claimLedgerRemaining(totalExpected, totalReceived);
   const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
 
   type CatRow = {
