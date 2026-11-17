@@ -15,6 +15,7 @@ import { OUTSTANDING_CLAIMS_QUERY_KEY, loadOutstandingClaims } from "@/lib/outst
 import {
   OUTSTANDING_PARTNER_ALL,
   OUTSTANDING_PARTNER_NONE,
+  applyDeductibleChoice,
   filterOutstandingByPartner,
   filterOutstandingClaimRows,
   outstandingPartnerOptions,
@@ -53,8 +54,9 @@ export default function OutstandingClaimsPanel({
     queryFn: () => loadOutstandingClaims(supabase, tenantId!, { insuredNameFromPayeeLine: extractInsuredName }),
   });
 
-  // Deductibles can be hidden (owner 2026-11-17: public adjusters and attorneys do not collect deductibles, only
-  // contractors do). The choice is this user's, remembered in this browser; the outstanding amount is unchanged.
+  // Deductibles can be left out (owner 2026-11-17: public adjusters and attorneys do not collect deductibles, only
+  // contractors do). The choice is this user's, remembered in this browser. Off also takes each claim's deductible
+  // out of its expected and outstanding amounts ("it should also adjust the outstanding amount").
   const { user } = useAuth();
   const deductibleKey = `checksops.outstanding.showDeductible.${user?.id ?? "anonymous"}`;
   const [showDeductible, setShowDeductible] = useState(true);
@@ -76,8 +78,9 @@ export default function OutstandingClaimsPanel({
 
   // Partner filter (owner 2026-11-17): every claim, claims with no partner, or one partner's claims.
   const [partnerFilter, setPartnerFilter] = useState<string>(OUTSTANDING_PARTNER_ALL);
-  const partnerOptions = useMemo(() => outstandingPartnerOptions(data?.rows ?? []), [data]);
-  const withoutPartnerCount = useMemo(() => (data?.rows ?? []).filter((row) => row.partners.length === 0).length, [data]);
+  const baseRows = useMemo(() => applyDeductibleChoice(data?.rows ?? [], showDeductible), [data, showDeductible]);
+  const partnerOptions = useMemo(() => outstandingPartnerOptions(baseRows), [baseRows]);
+  const withoutPartnerCount = useMemo(() => baseRows.filter((row) => row.partners.length === 0).length, [baseRows]);
   // A partner that is no longer on any outstanding claim (after a refresh) falls back to every claim.
   const activePartnerFilter = partnerFilter === OUTSTANDING_PARTNER_ALL || partnerFilter === OUTSTANDING_PARTNER_NONE
     || partnerOptions.some((p) => p.id === partnerFilter) ? partnerFilter : OUTSTANDING_PARTNER_ALL;
@@ -85,8 +88,8 @@ export default function OutstandingClaimsPanel({
     : activePartnerFilter === OUTSTANDING_PARTNER_NONE ? "No partner"
       : `Partner: ${partnerOptions.find((p) => p.id === activePartnerFilter)?.name ?? "Partner"}`;
   const rows = useMemo(
-    () => filterOutstandingClaimRows(filterOutstandingByPartner(data?.rows ?? [], activePartnerFilter), searchQuery),
-    [data, activePartnerFilter, searchQuery],
+    () => filterOutstandingClaimRows(filterOutstandingByPartner(baseRows, activePartnerFilter), searchQuery),
+    [baseRows, activePartnerFilter, searchQuery],
   );
   const totals = useMemo(() => outstandingTotals(rows), [rows]);
   const search = searchQuery.trim();
@@ -147,13 +150,14 @@ export default function OutstandingClaimsPanel({
             </Select>
             <div className="flex items-center gap-2">
               <Switch id="outstanding-show-deductible" checked={showDeductible} onCheckedChange={changeShowDeductible} />
-              <Label htmlFor="outstanding-show-deductible" className="text-xs font-normal cursor-pointer">Show deductible</Label>
+              <Label htmlFor="outstanding-show-deductible" className="text-xs font-normal cursor-pointer">Include deductible</Label>
             </div>
             <ReportExportMenu onExport={exportShown} busy={exporting} disabled={isLoading || !!error || rows.length === 0} label="Export Outstanding claims" />
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Claims with a balance above $0: expected (full RCV plus any expected supplement) minus the checks received.
+          Claims with a balance above $0: expected (full RCV plus any expected supplement
+          {showDeductible ? "" : ", less the deductible"}) minus the checks received.
           A claim stays here until its balance is $0, even after its check is disbursed.
         </p>
       </CardHeader>
