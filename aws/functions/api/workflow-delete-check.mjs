@@ -26,6 +26,7 @@ import { storageWritesEnabled } from './write-allowlist.mjs';
 import { isPartnerLinked, isTerminalFinancial, TENANT_MEMBER_SQL } from './workflow-transitions.mjs';
 import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
 import {
+  describeDepositQueueProgress,
   planDepositQueueForCheckDelete,
   removeDepositQueueForCheckDelete,
   settleBillingEventsForCheckDelete,
@@ -360,7 +361,8 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         error: 'cleanup_denied',
         message: depositQueue.error === 'blocker_verification_denied'
           ? `Refusing to delete: unable to verify financial/provider blockers (${depositQueue.blocker})`
-          : `Refusing to delete a check with dependent financial/provider records (${depositQueue.blocker})`,
+          : `Refusing to delete a check with dependent financial/provider records (${depositQueue.blocker})${
+            depositQueue.reached ? `: its deposit record went beyond the deposit queue (${describeDepositQueueProgress(depositQueue.reached)})` : ''}`,
         blocker: depositQueue.blocker,
         ...(depositQueue.reached ? { reached: depositQueue.reached } : {}),
       });

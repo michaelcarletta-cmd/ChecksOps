@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CHECK_BILLING_EVENTS_FOR_DELETE_SQL, DEPOSIT_ITEMS_FOR_DELETE_SQL, DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL,
-  DEPOSIT_QUEUE_PROGRESS_FIELDS, DEPOSIT_QUEUE_RELATED_BLOCKERS, depositQueueProgress, handleDeleteCheck,
+  DEPOSIT_QUEUE_PROGRESS_FIELDS, DEPOSIT_QUEUE_RELATED_BLOCKERS, depositQueueProgress, describeDepositQueueProgress, handleDeleteCheck,
   isProvisionalBillingEvent,
 } from '../functions/api/workflow.mjs';
 import { SET_MONEY_WRITE_SQL } from '../functions/api/money-write-flag.mjs';
@@ -337,8 +337,37 @@ test('a deposit record that left the queue still blocks and the refusal names wh
   assert.equal(result.error, 'check_has_financial_activity');
   assert.equal(result.blocker, 'deposit_items');
   assert.deepEqual(result.reached, ['status:provider_assigned', 'batch_id', 'provider']);
+  // The website shows only the message (src/integrations/aws/client.ts admin_delete_check), so the message says it.
+  assert.equal(result.message, 'This check cannot be deleted because it has dependent financial/provider records (deposit_items). '
+    + 'Its deposit record went beyond the deposit queue (status provider_assigned; set: batch_id, provider).');
   assert.equal(deleted(client), false);
   assert.deepEqual(depositDeletes(client), []);
+});
+
+// Owner 2026-11-17: the delete of a check was still refused with "(deposit_items)" and nothing on the website said what
+// its deposit record had reached. The refusal message now says it, with field names and the status only.
+test('the refusal message says what the deposit record reached, without any stored value', async () => {
+  assert.equal(describeDepositQueueProgress(['status:provider_assigned', 'batch_id', 'provider']), 'status provider_assigned; set: batch_id, provider');
+  assert.equal(describeDepositQueueProgress(['status:succeeded', 'provider', 'deposit_slip_number', 'cleared_at']), 'status succeeded; set: provider, deposit_slip_number, cleared_at');
+  // Still pending_assignment, but a field beyond the queue is set.
+  assert.equal(describeDepositQueueProgress(['nsf_flag']), 'set: nsf_flag');
+  assert.equal(describeDepositQueueProgress(['status:exception']), 'status exception');
+  assert.equal(describeDepositQueueProgress(['unreadable']), 'the deposit record could not be read');
+  assert.equal(describeDepositQueueProgress([]), '');
+  assert.equal(describeDepositQueueProgress(undefined), '');
+  const submitted = { ...QUEUE_ITEM, status: 'submitted', provider: 'checkalt', batch_id: 'b1000000-0000-4000-8000-000000000001',
+    submitted_at: '2026-11-10T00:00:00Z', provider_reference: 'REF-SECRET-123', deposit_slip_number: 'SLIP-9', bank_reference: 'BANK-7' };
+  const result = await remove(mockClient({ deposit: { items: [submitted], audit: [QUEUE_AUDIT] } }));
+  assert.equal(result.ok, false);
+  assert.equal(result.blocker, 'deposit_items');
+  assert.match(result.message, /\(deposit_items\)\. Its deposit record went beyond the deposit queue \(status submitted; set: batch_id, provider, provider_reference, submitted_at, bank_reference, deposit_slip_number\)\.$/);
+  // Names only: no reference, slip number, batch id or date leaks into the message.
+  for (const value of ['REF-SECRET-123', 'SLIP-9', 'BANK-7', 'b1000000', '2026-11-10', 'checkalt']) assert.ok(!result.message.includes(value), value);
+  // A related-record refusal has nothing to add, and neither does an unverifiable one.
+  const related = await remove(mockClient({ deposit: { items: [QUEUE_ITEM], audit: [QUEUE_AUDIT], related: 'deposit_exceptions' } }));
+  assert.equal(related.message, 'This check cannot be deleted because it has dependent financial/provider records (deposit_exceptions).');
+  const unverified = await remove(mockClient({ deposit: { readError: '42501' } }));
+  assert.equal(unverified.message, 'This check cannot be deleted because the service cannot verify financial/provider blockers (deposit_items).');
 });
 
 for (const table of DEPOSIT_QUEUE_RELATED_BLOCKERS.map((row) => row.table)) {

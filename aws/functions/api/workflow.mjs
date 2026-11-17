@@ -818,6 +818,20 @@ export const depositQueueProgress = (row) => {
   return reached;
 };
 
+/**
+ * What a refused deposit record reached, in words, for the refusal message (the website shows only the message):
+ * "status provider_assigned; set: batch_id, provider". Field names and the status only, never a stored value.
+ */
+export const describeDepositQueueProgress = (reached) => {
+  const list = Array.isArray(reached) ? reached.map((entry) => String(entry)) : [];
+  if (!list.length) return '';
+  if (list.includes('unreadable')) return 'the deposit record could not be read';
+  const status = list.find((entry) => entry.startsWith('status:'));
+  const fields = list.filter((entry) => !entry.startsWith('status:'));
+  return [status ? `status ${status.slice('status:'.length)}` : null, fields.length ? `set: ${fields.join(', ')}` : null]
+    .filter(Boolean).join('; ');
+};
+
 /** Related deposit records: any row for the check's deposit record blocks the delete. */
 export const DEPOSIT_QUEUE_RELATED_BLOCKERS = Object.freeze([
   ...['deposit_provider_attempts', 'deposit_exceptions', 'deposit_webhook_events', 'deposit_escalation_events', 'deposit_attachments']
@@ -972,7 +986,8 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         error: depositQueue.error,
         message: unverified
           ? `This check cannot be deleted because the service cannot verify financial/provider blockers (${depositQueue.blocker}).`
-          : `This check cannot be deleted because it has dependent financial/provider records (${depositQueue.blocker}).`,
+          : `This check cannot be deleted because it has dependent financial/provider records (${depositQueue.blocker}).${
+            depositQueue.reached ? ` Its deposit record went beyond the deposit queue (${describeDepositQueueProgress(depositQueue.reached)}).` : ''}`,
         blocker: depositQueue.blocker,
         ...(depositQueue.reached ? { reached: depositQueue.reached } : {}),
       });
