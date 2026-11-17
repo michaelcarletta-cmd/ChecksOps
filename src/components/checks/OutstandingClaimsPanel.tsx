@@ -1,14 +1,26 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { AlertTriangle, Loader2, Scale } from "lucide-react";
+import { AlertTriangle, Loader2, Scale, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { extractInsuredName } from "@/features/check-command/status";
 import { displayCase } from "@/lib/displayCase";
 import { OUTSTANDING_CLAIMS_QUERY_KEY, loadOutstandingClaims } from "@/lib/outstandingClaimsLoad";
-import { filterOutstandingClaimRows, outstandingTotals } from "@/lib/outstandingClaims";
+import {
+  OUTSTANDING_PARTNER_ALL,
+  OUTSTANDING_PARTNER_NONE,
+  filterOutstandingByPartner,
+  filterOutstandingClaimRows,
+  outstandingPartnerOptions,
+  outstandingTotals,
+} from "@/lib/outstandingClaims";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ReportExportMenu, type ReportExportKind } from "@/components/ledger/ReportExportMenu";
 
 const money = (n: number) => `$${Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -38,10 +50,44 @@ export default function OutstandingClaimsPanel({
   const { data, isLoading, error } = useQuery({
     queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY, tenantId],
     enabled: !!tenantId,
-    queryFn: () => loadOutstandingClaims(supabase, tenantId!),
+    queryFn: () => loadOutstandingClaims(supabase, tenantId!, { insuredNameFromPayeeLine: extractInsuredName }),
   });
 
-  const rows = useMemo(() => filterOutstandingClaimRows(data?.rows ?? [], searchQuery), [data, searchQuery]);
+  // Deductibles can be hidden (owner 2026-11-17: public adjusters and attorneys do not collect deductibles, only
+  // contractors do). The choice is this user's, remembered in this browser; the outstanding amount is unchanged.
+  const { user } = useAuth();
+  const deductibleKey = `checksops.outstanding.showDeductible.${user?.id ?? "anonymous"}`;
+  const [showDeductible, setShowDeductible] = useState(true);
+  useEffect(() => {
+    try {
+      setShowDeductible(window.localStorage.getItem(deductibleKey) !== "0");
+    } catch {
+      setShowDeductible(true);
+    }
+  }, [deductibleKey]);
+  const changeShowDeductible = useCallback((next: boolean) => {
+    setShowDeductible(next);
+    try {
+      window.localStorage.setItem(deductibleKey, next ? "1" : "0");
+    } catch {
+      // Storage unavailable (private mode): the choice lasts for this visit only.
+    }
+  }, [deductibleKey]);
+
+  // Partner filter (owner 2026-11-17): every claim, claims with no partner, or one partner's claims.
+  const [partnerFilter, setPartnerFilter] = useState<string>(OUTSTANDING_PARTNER_ALL);
+  const partnerOptions = useMemo(() => outstandingPartnerOptions(data?.rows ?? []), [data]);
+  const withoutPartnerCount = useMemo(() => (data?.rows ?? []).filter((row) => row.partners.length === 0).length, [data]);
+  // A partner that is no longer on any outstanding claim (after a refresh) falls back to every claim.
+  const activePartnerFilter = partnerFilter === OUTSTANDING_PARTNER_ALL || partnerFilter === OUTSTANDING_PARTNER_NONE
+    || partnerOptions.some((p) => p.id === partnerFilter) ? partnerFilter : OUTSTANDING_PARTNER_ALL;
+  const partnerFilterLabel = activePartnerFilter === OUTSTANDING_PARTNER_ALL ? null
+    : activePartnerFilter === OUTSTANDING_PARTNER_NONE ? "No partner"
+      : `Partner: ${partnerOptions.find((p) => p.id === activePartnerFilter)?.name ?? "Partner"}`;
+  const rows = useMemo(
+    () => filterOutstandingClaimRows(filterOutstandingByPartner(data?.rows ?? [], activePartnerFilter), searchQuery),
+    [data, activePartnerFilter, searchQuery],
+  );
   const totals = useMemo(() => outstandingTotals(rows), [rows]);
   const search = searchQuery.trim();
 
@@ -60,6 +106,8 @@ export default function OutstandingClaimsPanel({
         companyName: companyName ?? "",
         asOfLabel: `As of ${format(now, "MM/dd/yyyy")}`,
         displayName: displayCase,
+        showDeductible,
+        partnerFilterLabel,
       });
       const name = reportFileName(["outstanding-claims", format(now, "yyyy-MM-dd")], kind);
       if (kind === "pdf") downloadReportFile(reportTablePdf(table), name, PDF_MIME);
@@ -84,7 +132,25 @@ export default function OutstandingClaimsPanel({
               </span>
             )}
           </CardTitle>
-          <ReportExportMenu onExport={exportShown} busy={exporting} disabled={isLoading || !!error || rows.length === 0} label="Export Outstanding claims" />
+          <div className="flex flex-wrap items-center gap-3">
+            <Select value={activePartnerFilter} onValueChange={setPartnerFilter} disabled={isLoading || !!error}>
+              <SelectTrigger className="h-8 w-[13rem] text-xs" aria-label="Filter outstanding claims by partner">
+                <SelectValue placeholder="All partners" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={OUTSTANDING_PARTNER_ALL} className="text-xs">All claims</SelectItem>
+                <SelectItem value={OUTSTANDING_PARTNER_NONE} className="text-xs">No partner ({withoutPartnerCount})</SelectItem>
+                {partnerOptions.map((partner) => (
+                  <SelectItem key={partner.id} value={partner.id} className="text-xs">{partner.name} ({partner.count})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2">
+              <Switch id="outstanding-show-deductible" checked={showDeductible} onCheckedChange={changeShowDeductible} />
+              <Label htmlFor="outstanding-show-deductible" className="text-xs font-normal cursor-pointer">Show deductible</Label>
+            </div>
+            <ReportExportMenu onExport={exportShown} busy={exporting} disabled={isLoading || !!error || rows.length === 0} label="Export Outstanding claims" />
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Claims with a balance above $0: expected (full RCV plus any expected supplement) minus the checks received.
@@ -98,6 +164,12 @@ export default function OutstandingClaimsPanel({
             <span>Not every check could be loaded, so some balances may be higher than the ledger shows. Open the claim to see its ledger.</span>
           </div>
         )}
+        {data && !data.partnersLoaded && (
+          <div className="mx-4 mb-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs" role="status">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden="true" />
+            <span>Partner sharing could not be fully loaded, so some claims may not show their partners.</span>
+          </div>
+        )}
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading outstanding claims…
@@ -108,7 +180,9 @@ export default function OutstandingClaimsPanel({
           </div>
         ) : rows.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            {search ? `No outstanding claims match "${search}".` : "No claims have an outstanding balance."}
+            {search ? `No outstanding claims match "${search}".`
+              : partnerFilterLabel ? `No outstanding claims for this filter (${partnerFilterLabel}).`
+                : "No claims have an outstanding balance."}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -119,7 +193,7 @@ export default function OutstandingClaimsPanel({
                   {!compact && <TableHead className="text-xs text-right">Expected</TableHead>}
                   {!compact && <TableHead className="text-xs text-right">Received</TableHead>}
                   {!compact && <TableHead className="text-xs text-right whitespace-nowrap">Recoverable Dep.</TableHead>}
-                  {!compact && <TableHead className="text-xs text-right">Deductible</TableHead>}
+                  {!compact && showDeductible && <TableHead className="text-xs text-right">Deductible</TableHead>}
                   <TableHead className="text-xs text-right">Outstanding</TableHead>
                 </TableRow>
               </TableHeader>
@@ -146,19 +220,27 @@ export default function OutstandingClaimsPanel({
                       <TableCell className="py-2">
                         <div className="text-sm font-medium">{row.claimNumber ? `#${row.claimNumber}` : "No claim number"}</div>
                         <div className="text-xs text-muted-foreground">
-                          {row.policyholderName ? displayCase(row.policyholderName) : "No policyholder"}
+                          {row.policyholderName ? displayCase(row.policyholderName) : "Unknown insured"}
                           {" · "}{row.checkCount} check{row.checkCount === 1 ? "" : "s"}
                         </div>
+                        {row.partners.length > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            <Users className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
+                            <span className="sr-only">Partners: </span>
+                            {row.partners.map((p) => p.name).join(", ")}
+                          </div>
+                        )}
                         {compact && (
                           <div className="text-xs text-muted-foreground tabular-nums">
-                            {money(row.received)} of {money(row.expected)} · Dep. {money(row.recoverableDepreciation)} · Ded. {money(row.deductible)}
+                            {money(row.received)} of {money(row.expected)} · Dep. {money(row.recoverableDepreciation)}
+                            {showDeductible ? ` · Ded. ${money(row.deductible)}` : ""}
                           </div>
                         )}
                       </TableCell>
                       {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.expected)}</TableCell>}
                       {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.received)}</TableCell>}
                       {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.recoverableDepreciation)}</TableCell>}
-                      {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.deductible)}</TableCell>}
+                      {!compact && showDeductible && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.deductible)}</TableCell>}
                       <TableCell className="py-2 text-right text-sm font-semibold tabular-nums text-amber-600">{money(row.outstanding)}</TableCell>
                     </TableRow>
                   );
@@ -170,7 +252,7 @@ export default function OutstandingClaimsPanel({
                   {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.expected)}</TableCell>}
                   {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.received)}</TableCell>}
                   {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.recoverableDepreciation)}</TableCell>}
-                  {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.deductible)}</TableCell>}
+                  {!compact && showDeductible && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.deductible)}</TableCell>}
                   <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.outstanding)}</TableCell>
                 </TableRow>
               </TableFooter>

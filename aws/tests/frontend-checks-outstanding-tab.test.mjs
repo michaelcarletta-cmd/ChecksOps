@@ -17,6 +17,7 @@ import {
   OUTSTANDING_CLAIMS_COLUMNS,
   buildOutstandingClaimRows,
   filterOutstandingClaimRows,
+  insuredNameForClaim,
   outstandingClaimsTable,
   outstandingTotals,
 } from '../../src/lib/outstandingClaims.ts';
@@ -92,6 +93,7 @@ test('every claim with a balance above $0 is listed, largest first, whatever its
     claimId: 'claim-a', claimNumber: 'CLM-100', policyholderName: 'THERESA JOHNSON', policyholderAddress: '12 Oak St',
     expected: 74000.5, received: 42000.25, outstanding: 32000.25, recoverableDepreciation: 10000, deductible: 2750,
     checkCount: 2,
+    partners: [],
     // A row opens the claim's most recent check.
     openCheckId: 'chk-a2', openCheckNumber: '1002', carrierName: 'Acme Mutual',
   });
@@ -137,11 +139,11 @@ test('Excel and PDF: the list as shown with a grand total, through the recipient
   assert.equal(table.sheetName, 'Outstanding');
   assert.equal(table.title, 'Freedom Adjusting – Outstanding Claims');
   assert.equal(table.subtitle, 'Claims with a balance above $0 – matching "theresa" – As of 11/17/2026');
-  assert.deepEqual(table.columns.map((c) => c.label), ['Claim #', 'Policyholder', 'Checks', 'Expected', 'Received', 'Recoverable Dep.', 'Deductible', 'Outstanding']);
+  assert.deepEqual(table.columns.map((c) => c.label), ['Claim #', 'Policyholder', 'Partner(s)', 'Checks', 'Expected', 'Received', 'Recoverable Dep.', 'Deductible', 'Outstanding']);
   assert.equal(table.columns, OUTSTANDING_CLAIMS_COLUMNS);
   assert.deepEqual(table.columns.filter((c) => c.money).map((c) => c.label), ['Expected', 'Received', 'Recoverable Dep.', 'Deductible', 'Outstanding']);
-  assert.deepEqual(table.rows[0], ['CLM-100', 'theresa johnson', 2, 74000.5, 42000.25, 10000, 2750, 32000.25]);
-  assert.deepEqual(table.totals, [['Total (2 claims)', '', '', 94000.5, 62000.24, 13000, 3750, 32000.26]]);
+  assert.deepEqual(table.rows[0], ['CLM-100', 'theresa johnson', '', 2, 74000.5, 42000.25, 10000, 2750, 32000.25]);
+  assert.deepEqual(table.totals, [['Total (2 claims)', '', '', '', 94000.5, 62000.24, 13000, 3750, 32000.26]]);
   assert.match(table.note, /expected \(full RCV across all categories plus any expected supplement\) minus the checks received/);
   for (const row of [...table.rows, ...table.totals]) assert.equal(row.length, table.columns.length);
   assert.equal(outstandingClaimsTable({ rows: rows.slice(0, 1), asOfLabel: 'As of today' }).totals[0][0], 'Total (1 claim)');
@@ -153,11 +155,11 @@ test('Excel and PDF: the list as shown with a grand total, through the recipient
   const sheet = book.getWorksheet('Outstanding');
   const first = sheet.getRow(REPORT_FIRST_ROW);
   assert.equal(first.getCell(1).value, 'CLM-100');
-  assert.equal(first.getCell(8).value, 32000.25);
-  assert.equal(first.getCell(8).numFmt, RECIPIENT_REPORT_CURRENCY_FORMAT);
+  assert.equal(first.getCell(9).value, 32000.25);
+  assert.equal(first.getCell(9).numFmt, RECIPIENT_REPORT_CURRENCY_FORMAT);
   const total = sheet.getRow(REPORT_FIRST_ROW + table.rows.length);
   assert.equal(total.getCell(1).value, 'Total (2 claims)');
-  assert.equal(total.getCell(8).value, 32000.26);
+  assert.equal(total.getCell(9).value, 32000.26);
   // PDF: a real PDF file.
   const pdf = reportTablePdf(table);
   assert.equal(Buffer.from(pdf.slice(0, 5)).toString('latin1'), '%PDF-');
@@ -175,6 +177,7 @@ const fakeClient = (tables, { pageCap = 500, failOn = null } = {}) => {
         select(columns, opts) { q.columns = columns; q.opts = opts ?? null; return api; },
         eq(col, val) { q.filters.push(['eq', col, val]); return api; },
         not(col, op, val) { q.filters.push(['not', col, op, val]); return api; },
+        is(col, val) { q.filters.push(['is', col, val]); return api; },
         in(col, vals) { q.filters.push(['in', col, vals]); return api; },
         order(col, o) { q.orders.push([col, o?.ascending ?? true]); return api; },
         range(from, to) { q.range = [from, to]; return api; },
@@ -185,6 +188,7 @@ const fakeClient = (tables, { pageCap = 500, failOn = null } = {}) => {
           for (const f of q.filters) {
             if (f[0] === 'eq') rows = rows.filter((r) => r[f[1]] === f[2]);
             if (f[0] === 'not') rows = rows.filter((r) => r[f[1]] !== null && r[f[1]] !== undefined);
+            if (f[0] === 'is') rows = rows.filter((r) => (r[f[1]] ?? null) === f[2]);
             if (f[0] === 'in') rows = rows.filter((r) => f[2].includes(r[f[1]]));
           }
           const count = rows.length;
@@ -221,7 +225,9 @@ test('the loader reads only this company\'s claim-linked checks, then those clai
   assert.deepEqual(checksRead.filters, [['eq', 'tenant_id', TENANT], ['not', 'claim_id', 'is', null]]);
   assert.deepEqual(checksRead.orders, [['created_at', false], ['id', true]]);
   assert.deepEqual(checksRead.range, [0, 499]);
-  assert.deepEqual(rest.map((r) => r.table).sort(), ['claim_settlements', 'claims']);
+  // Then the claims, their settlements, and this company's active partner shares (no partner here: no names read).
+  assert.deepEqual(rest.map((r) => r.table).sort(), ['claim_settlements', 'claims', 'shared_checks']);
+  assert.equal(out.partnersLoaded, true);
   const claimsRead = rest.find((r) => r.table === 'claims');
   assert.equal(claimsRead.columns, OUTSTANDING_CLAIM_COLUMNS);
   assert.deepEqual(claimsRead.filters, [['in', 'id', ['claim-a', 'claim-b', 'claim-c', 'claim-d']]]);
@@ -284,11 +290,204 @@ test('Checks page: an Outstanding tile, its own panel beside the check file open
   assert.match(panel, /import \{ ReportExportMenu, type ReportExportKind \} from "@\/components\/ledger\/ReportExportMenu";/);
   assert.match(panel, /<ReportExportMenu onExport=\{exportShown\}/);
   assert.match(panel, /await import\("@\/lib\/payments\/recipientReportExport"\)/);
-  assert.match(panel, /queryFn: \(\) => loadOutstandingClaims\(supabase, tenantId!\)/);
+  assert.match(panel, /queryFn: \(\) => loadOutstandingClaims\(supabase, tenantId!, \{ insuredNameFromPayeeLine: extractInsuredName \}\)/);
   for (const heading of ['Expected', 'Received', 'Recoverable Dep.', 'Deductible', 'Outstanding']) assert.ok(panel.includes(`>${heading}</TableHead>`), heading);
   // Rows are keyboard reachable.
   assert.match(panel, /role="button"\s+tabIndex=\{0\}/);
   assert.match(panel, /e\.key === "Enter" \|\| e\.key === " "/);
   // Website only: the panel writes nothing.
   assert.doesNotMatch(panel, /\.(insert|update|delete|upsert|rpc)\(/);
+});
+
+// Owner 2026-11-17, after the first production use: "It says no policy holder in outstanding tab. It should say at least
+// one insured name. Also, public adjusters or attorneys will not be collecting deductibles only contractors. Add a button
+// to toggle off deductibles or a way to waive deductibles being visible for certain users".
+const fromPayeeLine = (line) => {
+  const m = /^PAY TO THE ORDER OF (.+?)(?: AND | & |$)/i.exec(String(line ?? ''));
+  return m ? m[1] : null;
+};
+
+test('a row names at least one insured: the claim\'s policyholder, else an insured payee of a check, else the payee line', () => {
+  const claim = { id: 'c1', claim_number: 'N-1', policyholder_name: '  ' };
+  const older = { id: 'k1', claim_id: 'c1', amount: 1, created_at: '2026-01-01T00:00:00Z', payee_line: 'PAY TO THE ORDER OF OLD NAME AND ACME BANK',
+    check_payees: [{ payee_name: 'Acme Bank', payee_type: 'mortgage_company' }, { payee_name: 'Theresa Johnson', payee_type: 'insured' }] };
+  const newer = { id: 'k2', claim_id: 'c1', amount: 1, created_at: '2026-02-01T00:00:00Z', payee_line: 'PAY TO THE ORDER OF PAT SMITH & ACME BANK', check_payees: [] };
+  // The claim's own name wins.
+  assert.equal(insuredNameForClaim({ ...claim, policyholder_name: 'Maria Garcia' }, [newer, older], fromPayeeLine), 'Maria Garcia');
+  // No name on the claim: an insured payee of any of its checks, before any payee line.
+  assert.equal(insuredNameForClaim(claim, [newer, older], fromPayeeLine), 'Theresa Johnson');
+  // No insured payee: the newest check's payee line.
+  assert.equal(insuredNameForClaim(claim, [newer, { ...older, check_payees: null }], fromPayeeLine), 'PAT SMITH');
+  // A mortgage company payee is never used as the insured.
+  assert.equal(insuredNameForClaim(claim, [{ ...older, check_payees: [{ payee_name: 'Acme Bank', payee_type: 'mortgage_company' }], payee_line: null }], fromPayeeLine), null);
+  // Without a payee-line reader, or with nothing to read, there is no name.
+  assert.equal(insuredNameForClaim(claim, [newer], undefined), null);
+  assert.equal(insuredNameForClaim(null, [], fromPayeeLine), null);
+
+  const rows = buildOutstandingClaimRows({
+    claims: [claim],
+    settlements: [{ claim_id: 'c1', replacement_cost_value: 1000, deductible: 250 }],
+    checks: [older, newer],
+    insuredNameFromPayeeLine: fromPayeeLine,
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].policyholderName, 'Theresa Johnson');
+  // The name is searchable like a policyholder name.
+  assert.deepEqual(filterOutstandingClaimRows(rows, 'theresa').map((r) => r.claimId), ['c1']);
+  // The loader passes the reader through and asks for the payee line and payees.
+  for (const column of ['payee_line', 'check_payees(payee_name, payee_type)']) assert.ok(OUTSTANDING_CHECK_COLUMNS.includes(column), column);
+});
+
+test('the loader uses the insured-name reader it is given', async () => {
+  const client = fakeClient({
+    check_intake_items: [{ id: 'k1', tenant_id: 't', claim_id: 'c1', amount: 10, created_at: '2026-02-01T00:00:00Z', payee_line: 'PAY TO THE ORDER OF PAT SMITH & ACME BANK' }],
+    claims: [{ id: 'c1', claim_number: 'N-1', policyholder_name: null }],
+    claim_settlements: [{ claim_id: 'c1', replacement_cost_value: 100 }],
+  });
+  assert.equal((await loadOutstandingClaims(client, 't', { insuredNameFromPayeeLine: fromPayeeLine })).rows[0].policyholderName, 'PAT SMITH');
+  assert.equal((await loadOutstandingClaims(client, 't')).rows[0].policyholderName, null);
+});
+
+test('deductibles can be hidden: the export drops the column; the outstanding amount and the other columns do not change', () => {
+  const rows = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS });
+  const shown = outstandingClaimsTable({ rows, asOfLabel: 'As of today' });
+  const hidden = outstandingClaimsTable({ rows, asOfLabel: 'As of today', showDeductible: false });
+  assert.deepEqual(hidden.columns.map((c) => c.label), ['Claim #', 'Policyholder', 'Partner(s)', 'Checks', 'Expected', 'Received', 'Recoverable Dep.', 'Outstanding']);
+  assert.deepEqual(hidden.rows[0], ['CLM-100', 'THERESA JOHNSON', '', 2, 74000.5, 42000.25, 10000, 32000.25]);
+  assert.deepEqual(hidden.totals, [['Total (2 claims)', '', '', '', 94000.5, 62000.24, 13000, 32000.26]]);
+  for (const row of [...hidden.rows, ...hidden.totals]) assert.equal(row.length, hidden.columns.length);
+  // Same figures as with the column shown, minus that one cell.
+  assert.deepEqual(shown.rows[0].filter((_c, i) => i !== 7), hidden.rows[0]);
+  assert.equal(shown.columns.length, 9);
+  assert.equal(outstandingClaimsTable({ rows, asOfLabel: 'x', showDeductible: true }).columns.length, 9);
+  // A claim with no insured name anywhere exports as "Unknown insured", never blank.
+  const bare = buildOutstandingClaimRows({ claims: [], settlements: SETTLEMENTS, checks: CHECKS });
+  assert.equal(outstandingClaimsTable({ rows: bare, asOfLabel: 'x' }).rows[0][1], 'Unknown insured');
+});
+
+test('panel: a per-user "Show deductible" switch, remembered in the browser, and "Unknown insured" instead of "No policyholder"', () => {
+  const panel = read('src/components/checks/OutstandingClaimsPanel.tsx');
+  assert.match(panel, /import \{ extractInsuredName \} from "@\/features\/check-command\/status";/);
+  assert.match(panel, /const deductibleKey = `checksops\.outstanding\.showDeductible\.\$\{user\?\.id \?\? "anonymous"\}`;/);
+  assert.match(panel, /window\.localStorage\.getItem\(deductibleKey\) !== "0"/);
+  assert.match(panel, /window\.localStorage\.setItem\(deductibleKey, next \? "1" : "0"\)/);
+  assert.match(panel, /<Switch id="outstanding-show-deductible" checked=\{showDeductible\} onCheckedChange=\{changeShowDeductible\} \/>/);
+  assert.match(panel, /<Label htmlFor="outstanding-show-deductible"[^>]*>Show deductible<\/Label>/);
+  // Header, row cell and total all follow the switch; so does the export.
+  assert.equal((panel.match(/\{!compact && showDeductible && </g) || []).length, 3);
+  assert.match(panel, /showDeductible \? ` · Ded\. \$\{money\(row\.deductible\)\}` : ""/);
+  assert.match(panel, /displayName: displayCase,\s+showDeductible,/);
+  assert.ok(panel.includes('"Unknown insured"'));
+  assert.ok(!panel.includes('No policyholder'));
+  // The Checks lanes read the insured name the same way (policyholder, insured payee, payee line).
+  const page = read('src/pages/CheckCommandCenter.tsx');
+  assert.match(page, /linked\?\.policyholder_name \|\| insuredPayee \|\| parsedInsured \|\| "Unknown insured"/);
+});
+
+// Owner 2026-11-17: "I also want to be able to filter outstanding by partners to show which partners, if any, are involved
+// with the outstanding claim check files".
+const PARTNER_C1 = 'aaaaaaaa-0000-4000-8000-000000000001';
+const PARTNER_ROOF = 'aaaaaaaa-0000-4000-8000-000000000002';
+const PARTNER_NAMES = [{ id: PARTNER_C1, name: 'Condition One' }, { id: PARTNER_ROOF, name: 'Apex Roofing' }];
+const SHARES = [
+  // claim-a: both of its checks are shared with Condition One, one of them also with Apex Roofing.
+  { id: 's1', check_id: 'chk-a1', target_tenant_id: PARTNER_C1 },
+  { id: 's2', check_id: 'chk-a2', target_tenant_id: PARTNER_C1 },
+  { id: 's3', check_id: 'chk-a2', target_tenant_id: PARTNER_ROOF },
+  // A share of a paid-in-full claim's check and of a check with no claim never shows.
+  { id: 's4', check_id: 'chk-c1', target_tenant_id: PARTNER_ROOF },
+  { id: 's5', check_id: 'chk-x', target_tenant_id: PARTNER_ROOF },
+];
+const { filterOutstandingByPartner, outstandingPartnerOptions, OUTSTANDING_PARTNER_ALL, OUTSTANDING_PARTNER_NONE } = await import('../../src/lib/outstandingClaims.ts');
+
+test('a row lists the partners its claim\'s checks are shared with, once each, by name', () => {
+  const rows = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS, shares: SHARES, partnerNames: PARTNER_NAMES });
+  assert.deepEqual(rows.map((r) => [r.claimId, r.partners]), [
+    ['claim-a', [{ id: PARTNER_ROOF, name: 'Apex Roofing' }, { id: PARTNER_C1, name: 'Condition One' }]],
+    ['claim-b', []],
+  ]);
+  // The amounts do not depend on sharing.
+  const plain = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS });
+  assert.deepEqual(rows.map((r) => ({ ...r, partners: [] })), plain);
+  // A partner whose name could not be read still shows, as "Partner".
+  const unnamed = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS, shares: SHARES, partnerNames: [] });
+  assert.deepEqual(unnamed[0].partners.map((p) => p.name), ['Partner', 'Partner']);
+  // Malformed shares are ignored.
+  const odd = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS, shares: [{ check_id: 'chk-b1' }, { target_tenant_id: PARTNER_C1 }, null], partnerNames: PARTNER_NAMES });
+  assert.deepEqual(odd.map((r) => r.partners.length), [0, 0]);
+});
+
+test('the list filters by partner: all claims, claims with no partner, or one partner\'s claims; search matches a partner name', () => {
+  const rows = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS, shares: SHARES, partnerNames: PARTNER_NAMES });
+  assert.deepEqual(outstandingPartnerOptions(rows), [{ id: PARTNER_ROOF, name: 'Apex Roofing', count: 1 }, { id: PARTNER_C1, name: 'Condition One', count: 1 }]);
+  assert.deepEqual(outstandingPartnerOptions([]), []);
+  const ids = (value) => filterOutstandingByPartner(rows, value).map((r) => r.claimId);
+  assert.equal(OUTSTANDING_PARTNER_ALL, 'all');
+  assert.equal(OUTSTANDING_PARTNER_NONE, 'none');
+  assert.deepEqual(ids('all'), ['claim-a', 'claim-b']);
+  assert.deepEqual(ids(null), ['claim-a', 'claim-b']);
+  assert.deepEqual(ids(''), ['claim-a', 'claim-b']);
+  assert.deepEqual(ids('none'), ['claim-b']);
+  assert.deepEqual(ids(PARTNER_C1), ['claim-a']);
+  assert.deepEqual(ids(PARTNER_ROOF), ['claim-a']);
+  assert.deepEqual(ids('aaaaaaaa-0000-4000-8000-00000000ffff'), []);
+  assert.deepEqual(filterOutstandingClaimRows(rows, 'condition one').map((r) => r.claimId), ['claim-a']);
+  assert.deepEqual(filterOutstandingClaimRows(rows, 'apex').map((r) => r.claimId), ['claim-a']);
+  // Totals follow the filtered rows.
+  assert.equal(outstandingTotals(filterOutstandingByPartner(rows, 'none')).count, 1);
+  // The export names the partners and the filter.
+  const table = outstandingClaimsTable({ rows: filterOutstandingByPartner(rows, PARTNER_C1), asOfLabel: 'As of today', partnerFilterLabel: 'Partner: Condition One' });
+  assert.equal(table.subtitle, 'Claims with a balance above $0 – Partner: Condition One – As of today');
+  assert.equal(table.rows.length, 1);
+  assert.equal(table.rows[0][2], 'Apex Roofing, Condition One');
+  assert.equal(table.columns[2].label, 'Partner(s)');
+});
+
+test('the loader reads this company\'s active partner shares and the partner names; a failed read leaves the list without partners', async () => {
+  const TENANT = 'tenant-1';
+  const tables = {
+    check_intake_items: CHECKS.map((c) => ({ ...c, tenant_id: TENANT })),
+    claims: CLAIMS,
+    claim_settlements: SETTLEMENTS,
+    shared_checks: [
+      ...SHARES.map((share) => ({ ...share, source_tenant_id: TENANT, revoked_at: null })),
+      // A revoked share and another company's share are not read.
+      { id: 's6', check_id: 'chk-b1', target_tenant_id: PARTNER_ROOF, source_tenant_id: TENANT, revoked_at: '2026-11-01T00:00:00Z' },
+      { id: 's7', check_id: 'chk-b1', target_tenant_id: PARTNER_C1, source_tenant_id: 'tenant-2', revoked_at: null },
+    ],
+    tenants_public: [...PARTNER_NAMES, { id: 'someone-else', name: 'Unrelated Co' }],
+  };
+  const client = fakeClient(tables);
+  const out = await loadOutstandingClaims(client, TENANT);
+  assert.equal(out.partnersLoaded, true);
+  assert.deepEqual(out.rows.map((r) => [r.claimId, r.partners.map((p) => p.name)]), [['claim-a', ['Apex Roofing', 'Condition One']], ['claim-b', []]]);
+  const sharesRead = client.reads.find((r) => r.table === 'shared_checks');
+  assert.equal(sharesRead.columns, 'id, check_id, target_tenant_id');
+  assert.deepEqual(sharesRead.filters, [['eq', 'source_tenant_id', TENANT], ['is', 'revoked_at', null]]);
+  assert.deepEqual(sharesRead.range, [0, 499]);
+  const namesRead = client.reads.find((r) => r.table === 'tenants_public');
+  assert.equal(namesRead.columns, 'id, name');
+  assert.deepEqual([...namesRead.filters[0][2]].sort(), [PARTNER_C1, PARTNER_ROOF].sort());
+
+  // Partner sharing that cannot be read does not break the list: same rows and amounts, no partners, and it says so.
+  for (const failOn of ['shared_checks', 'tenants_public']) {
+    const failed = await loadOutstandingClaims(fakeClient(tables, { failOn }), TENANT);
+    assert.equal(failed.partnersLoaded, false, failOn);
+    assert.deepEqual(failed.rows.map((r) => [r.claimId, r.outstanding, r.partners]), out.rows.map((r) => [r.claimId, r.outstanding, []]), failOn);
+  }
+  assert.doesNotMatch(read('src/lib/outstandingClaimsLoad.ts'), /\.(insert|update|delete|upsert|rpc)\(/);
+});
+
+test('panel: a partner filter beside the deductible switch, partners on each row, and the filter named in the export', () => {
+  const panel = read('src/components/checks/OutstandingClaimsPanel.tsx');
+  assert.match(panel, /<Select value=\{activePartnerFilter\} onValueChange=\{setPartnerFilter\}/);
+  assert.match(panel, /aria-label="Filter outstanding claims by partner"/);
+  assert.match(panel, /<SelectItem value=\{OUTSTANDING_PARTNER_ALL\}[^>]*>All claims<\/SelectItem>/);
+  assert.match(panel, /<SelectItem value=\{OUTSTANDING_PARTNER_NONE\}[^>]*>No partner \(\{withoutPartnerCount\}\)<\/SelectItem>/);
+  assert.match(panel, /\{partner\.name\} \(\{partner\.count\}\)/);
+  assert.match(panel, /filterOutstandingClaimRows\(filterOutstandingByPartner\(data\?\.rows \?\? \[\], activePartnerFilter\), searchQuery\)/);
+  assert.match(panel, /row\.partners\.length > 0 && \(/);
+  assert.match(panel, /row\.partners\.map\(\(p\) => p\.name\)\.join\(", "\)/);
+  assert.match(panel, /showDeductible,\s+partnerFilterLabel,/);
+  assert.match(panel, /data && !data\.partnersLoaded && \(/);
 });
