@@ -996,6 +996,67 @@ export async function removeDepositQueueForCheckDelete(client, checkId, plan) {
   }
 }
 
+// Owner 2026-11-17 ("We tried to deposit but the image wasn't accepted"): a Check Alt deposit record does not block
+// Delete Check when Check Alt never took the deposit, that is:
+//   - queued / pending and never sent (no send attempt, no Check Alt reference, nothing submitted), or
+//   - rejected (Check Alt, or an operator through Check Alt, refused it), or
+//   - error with no Check Alt reference (Check Alt answered with an error and gave nothing to track),
+// and in every case nothing cleared, returned or approved, and the status is not marked unresolved.
+// It still blocks when Check Alt took it or may have: submitting (a send whose outcome is unknown), submitted,
+// pending_approval, cleared, returned, duplicate, any other status, or a wallet funding entry made from it.
+// The rows go with the check through their ON DELETE CASCADE key and are listed in the check_deletion_log snapshot
+// (checkalt_deposits_removed).
+export const CHECKALT_DEPOSITS_FOR_DELETE_SQL = `SELECT to_jsonb(d) AS deposit
+  FROM public.checkalt_deposits d
+ WHERE d.check_intake_item_id = $1::uuid
+ ORDER BY d.created_at, d.id`;
+
+export const CHECKALT_WALLET_FUNDING_FOR_DELETE_SQL = `SELECT 1 FROM public.wallet_funding_queue
+ WHERE checkalt_deposit_id = ANY($1::uuid[]) LIMIT 1`;
+
+/** Why a Check Alt deposit record blocks the delete ([] when Check Alt never took the deposit). */
+export const checkAltDepositProgress = (row) => {
+  if (!row || typeof row !== 'object' || !row.id) return ['unreadable'];
+  const status = String(row.status ?? 'unknown');
+  const has = (field) => row[field] !== undefined && row[field] !== null;
+  const taken = ['cleared_at', 'returned_at', 'approved_at'].filter(has);
+  if (row.status_unresolved === true) taken.push('status_unresolved');
+  const neverSent = (status === 'queued' || status === 'pending')
+    && !has('provider_http_attempted_at') && !has('checkalt_reference') && !has('submitted_at');
+  const refused = status === 'rejected' || (status === 'error' && !has('checkalt_reference') && !has('submitted_at'));
+  if ((neverSent || refused) && !taken.length) return [];
+  return [`status:${status}`, ...['provider_http_attempted_at', 'checkalt_reference', 'submitted_at'].filter(has), ...taken];
+};
+
+/**
+ * Reads the check's Check Alt deposit records (read-only). { deposits } lists the records Check Alt never took
+ * ([] when there is none): they go with the check. { error, blocker, reached? } when Check Alt took one or may
+ * have, a wallet funding entry was made from one, or the records cannot be read: the delete is then refused.
+ */
+export async function planCheckAltDepositsForCheckDelete(client, checkId) {
+  const read = async (name, table, sql, params) => {
+    try {
+      return { rows: await inDeleteSavepoint(client, name, async () => (await client.query(sql, params)).rows || []) };
+    } catch (error) {
+      if (error?.code === '42P01') return { rows: [] };
+      if (error?.code === '42501') return { error: 'blocker_verification_denied', blocker: table };
+      throw error;
+    }
+  };
+  const found = await read('delete_checkalt_read', 'checkalt_deposits', CHECKALT_DEPOSITS_FOR_DELETE_SQL, [checkId]);
+  if (found.error) return found;
+  if (!found.rows.length) return { deposits: [] };
+  const deposits = found.rows.map((row) => row?.deposit);
+  for (const deposit of deposits) {
+    const reached = checkAltDepositProgress(deposit);
+    if (reached.length) return { error: 'check_has_financial_activity', blocker: 'checkalt_deposits', reached };
+  }
+  const funding = await read('delete_checkalt_funding', 'wallet_funding_queue', CHECKALT_WALLET_FUNDING_FOR_DELETE_SQL, [deposits.map((d) => String(d.id))]);
+  if (funding.error) return funding;
+  if (funding.rows.length) return { error: 'check_has_financial_activity', blocker: 'wallet_funding_queue' };
+  return { deposits };
+}
+
 export const handleDeleteCheck = async (event, deps = {}) => {
   const gate = requireWorkflowEnabled(event, deps);
   if (gate.blocked) {
@@ -1054,10 +1115,25 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       });
     }
 
+    // A Check Alt deposit record that Check Alt never took (never sent, rejected, or an error with no reference)
+    // goes with the check; one it took, or may have, still blocks.
+    const checkAlt = await planCheckAltDepositsForCheckDelete(client, looked.check.id);
+    if (checkAlt.error) {
+      return denied(spoof, {
+        error: checkAlt.error,
+        message: checkAlt.error === 'blocker_verification_denied'
+          ? `This check cannot be deleted because the service cannot verify financial/provider blockers (${checkAlt.blocker}).`
+          : `This check cannot be deleted because it has dependent financial/provider records (${checkAlt.blocker}).${
+            !checkAlt.reached ? ''
+              : ` Check Alt took this deposit or may have (${describeDepositQueueProgress(checkAlt.reached).replace('the deposit record', 'the Check Alt deposit record')}).`}`,
+        blocker: checkAlt.blocker,
+        ...(checkAlt.reached ? { reached: checkAlt.reached } : {}),
+      });
+    }
+
     // Refuse delete once a check has entered any financial/provider pipeline tables.
     // Deleting those records is intentionally out of scope for the AWS workflow write tranche.
     const blockers = [
-      { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       // claim_payments is not a blocker: its check link is ON DELETE SET NULL, so the claim keeps the
@@ -1224,7 +1300,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
               row.status ?? null,
               String(reason),
               mapping.application_user_id,
-              JSON.stringify({ ...row, billing_events_kept: billing.kept, deposit_queue_removed: depositQueueRemoved }),
+              JSON.stringify({ ...row, billing_events_kept: billing.kept, deposit_queue_removed: depositQueueRemoved, checkalt_deposits_removed: checkAlt.deposits }),
             ],
           );
         }

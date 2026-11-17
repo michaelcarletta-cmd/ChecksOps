@@ -24,6 +24,7 @@ import { test } from 'node:test';
 
 import {
   DEPOSIT_QUEUE_RELATED_BLOCKERS,
+  planCheckAltDepositsForCheckDelete,
   planDepositQueueForCheckDelete,
   removeDepositQueueForCheckDelete,
 } from '../functions/api/workflow.mjs';
@@ -93,6 +94,22 @@ INSERT INTO public.deposit_audit_log (id, deposit_item_id, action, actor_id, amo
 ${DEPOSIT_TABLES.map((table) => `ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;
 CREATE POLICY delcheck_test_member_all ON public.${table} FOR ALL TO checksops USING (true) WITH CHECK (true);
 GRANT SELECT, DELETE ON public.${table} TO checksops;`).join('\n')}
+-- Check Alt deposit records, keyed to the check with ON DELETE CASCADE as in the Supabase table; the API login may only read them.
+CREATE TABLE public.checkalt_deposits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  check_intake_item_id uuid REFERENCES public.check_intake_items(id) ON DELETE CASCADE,
+  tenant_id uuid, checkalt_reference text UNIQUE, status text NOT NULL DEFAULT 'pending', amount numeric,
+  provider_http_attempted_at timestamptz, submitted_at timestamptz, cleared_at timestamptz, returned_at timestamptz,
+  approved_at timestamptz, status_unresolved boolean NOT NULL DEFAULT false, failure_class text, last_error text,
+  created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.wallet_funding_queue (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  checkalt_deposit_id uuid REFERENCES public.checkalt_deposits(id) ON DELETE CASCADE);
+ALTER TABLE public.checkalt_deposits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wallet_funding_queue ENABLE ROW LEVEL SECURITY;
+CREATE POLICY delcheck_test_ca_select ON public.checkalt_deposits FOR SELECT TO checksops USING (true);
+CREATE POLICY delcheck_test_wfq_select ON public.wallet_funding_queue FOR SELECT TO checksops USING (true);
+GRANT SELECT ON public.checkalt_deposits, public.wallet_funding_queue TO checksops;
 ALTER TABLE public.check_intake_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY delcheck_test_api_delete ON public.check_intake_items FOR DELETE TO checksops USING (true);
 CREATE POLICY delcheck_test_api_select ON public.check_intake_items FOR SELECT TO checksops USING (true);
@@ -325,4 +342,67 @@ test('PostgreSQL 16: when the API login may not delete deposit records the delet
   await admin.query('REVOKE SELECT ON public.deposit_items FROM checksops, authenticated');
   assert.deepEqual(await deleteAsApi(connectAs, CHECK_A), { error: 'blocker_verification_denied', blocker: 'deposit_items' });
   assert.deepEqual(await state(admin), before);
+}));
+
+test('PostgreSQL 16: a Check Alt deposit record that Check Alt never took goes with the check through its cascading key; one it took still refuses', { timeout: 600000 }, async (t) => withPg(t, 'pg-delcheck-queue-ca-', 60971, async ({ admin, connectAs }) => {
+  const CA_A = 'ca000000-0000-4000-8000-00000000000a';
+  const CA_B = 'ca000000-0000-4000-8000-00000000000b';
+  // CHECK_C: the queue record only. CHECK_A: a refused image (error, no reference). CHECK_B: accepted by Check Alt.
+  await admin.query(`INSERT INTO public.checkalt_deposits (id, check_intake_item_id, tenant_id, status, amount, provider_http_attempted_at, checkalt_reference, submitted_at, failure_class, last_error) VALUES
+    ('${CA_A}', '${CHECK_A}', '${TENANT_A}', 'error', 1250.00, now(), NULL, NULL, 'provider_error', 'image not accepted'),
+    ('${CA_B}', '${CHECK_B}', '${TENANT_A}', 'submitted', 900.00, now(), 'REF-B', now(), NULL, NULL)`);
+  const caIds = async () => ids(admin, 'checkalt_deposits');
+  const run = async (checkId) => {
+    const api = await connectAs('checksops');
+    try {
+      await api.query('BEGIN');
+      const checkAlt = await planCheckAltDepositsForCheckDelete(api, checkId);
+      if (checkAlt.error) { await api.query('ROLLBACK'); return checkAlt; }
+      const plan = await planDepositQueueForCheckDelete(api, checkId);
+      const removed = await removeDepositQueueForCheckDelete(api, checkId, plan);
+      const deletedRows = (await api.query('DELETE FROM public.check_intake_items WHERE id = $1::uuid RETURNING id', [checkId])).rows.length;
+      await api.query('COMMIT');
+      return { checkAlt, removed, deleted: deletedRows };
+    } catch (error) {
+      await api.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      await api.end();
+    }
+  };
+
+  // Accepted by Check Alt: refused, and the plan names what it reached; nothing changes.
+  const before = await state(admin);
+  assert.deepEqual(await run(CHECK_B), { error: 'check_has_financial_activity', blocker: 'checkalt_deposits',
+    reached: ['status:submitted', 'provider_http_attempted_at', 'checkalt_reference', 'submitted_at'] });
+  assert.deepEqual(await state(admin), before);
+  assert.deepEqual(await caIds(), [CA_A, CA_B]);
+
+  // A wallet funding entry made from the refused record: refused by that table.
+  await admin.query(`INSERT INTO public.wallet_funding_queue (checkalt_deposit_id) VALUES ('${CA_A}')`);
+  assert.deepEqual(await run(CHECK_A), { error: 'check_has_financial_activity', blocker: 'wallet_funding_queue' });
+  assert.deepEqual(await caIds(), [CA_A, CA_B]);
+  await admin.query('DELETE FROM public.wallet_funding_queue');
+
+  // The API login cannot read the records: unverifiable, refused.
+  await admin.query('REVOKE SELECT ON public.checkalt_deposits FROM checksops');
+  assert.deepEqual(await run(CHECK_A), { error: 'blocker_verification_denied', blocker: 'checkalt_deposits' });
+  await admin.query('GRANT SELECT ON public.checkalt_deposits TO checksops');
+
+  // The refused image: the record is planned (full row, for the deletion log) and leaves with the check by cascade,
+  // although the API login has no DELETE on the table.
+  const a = await run(CHECK_A);
+  assert.equal(a.deleted, 1, JSON.stringify(a));
+  assert.equal(a.checkAlt.deposits.length, 1);
+  assert.equal(a.checkAlt.deposits[0].id, CA_A);
+  assert.equal(a.checkAlt.deposits[0].status, 'error');
+  assert.equal(a.checkAlt.deposits[0].last_error, 'image not accepted');
+  assert.deepEqual(await caIds(), [CA_B]);
+
+  // A check with no Check Alt record: nothing planned.
+  const c = await run(CHECK_C);
+  assert.equal(c.deleted, 1, JSON.stringify(c));
+  assert.deepEqual(c.checkAlt, { deposits: [] });
+  assert.deepEqual(await caIds(), [CA_B]);
+  assert.deepEqual(await ids(admin, 'check_intake_items'), [CHECK_B]);
 }));

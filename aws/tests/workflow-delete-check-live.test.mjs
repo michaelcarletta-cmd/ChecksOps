@@ -21,6 +21,7 @@ import { test } from 'node:test';
 import {
   CHECK_BILLING_EVENTS_FOR_DELETE_SQL, DEPOSIT_ITEMS_FOR_DELETE_SQL, DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL,
   DEPOSIT_ASSIGNED_ONLY_PROGRESS, DEPOSIT_BATCHES_FOR_DELETE_SQL, DEPOSIT_QUEUE_PROGRESS_FIELDS, DEPOSIT_QUEUE_RELATED_BLOCKERS,
+  CHECKALT_DEPOSITS_FOR_DELETE_SQL, CHECKALT_WALLET_FUNDING_FOR_DELETE_SQL, checkAltDepositProgress,
   depositBatchProgress, depositBlockingProgress, depositQueueProgress, describeDepositQueueProgress, handleDeleteCheck,
   isProvisionalBillingEvent,
 } from '../functions/api/workflow.mjs';
@@ -74,7 +75,7 @@ const ingestedCheck = {
 
 const ANY_ROW = [{ '?column?': 1 }];
 
-const mockClient = ({ check = baseCheck, blockers = {}, billing = [], billingError = null, removeOnly = null, deposit = null } = {}) => {
+const mockClient = ({ check = baseCheck, blockers = {}, billing = [], billingError = null, removeOnly = null, deposit = null, checkAlt = null } = {}) => {
   const queries = [];
   return {
     queries,
@@ -98,6 +99,17 @@ const mockClient = ({ check = baseCheck, blockers = {}, billing = [], billingErr
       if (/DELETE FROM public\.check_billing_events/.test(sql)) {
         const ids = removeOnly ?? params[1];
         return { rows: ids.map((id) => ({ id })) };
+      }
+      if (checkAlt) {
+        const failCa = (code) => { throw Object.assign(new Error('check alt query failed'), { code }); };
+        if (sql === CHECKALT_DEPOSITS_FOR_DELETE_SQL) {
+          if (checkAlt.readError) failCa(checkAlt.readError);
+          return { rows: (checkAlt.deposits || []).map((row) => ({ deposit: row })) };
+        }
+        if (sql === CHECKALT_WALLET_FUNDING_FOR_DELETE_SQL) {
+          if (checkAlt.fundingError) failCa(checkAlt.fundingError);
+          return { rows: checkAlt.funding ? ANY_ROW : [] };
+        }
       }
       if (deposit) {
         const fail = (code) => { throw Object.assign(new Error('deposit query failed'), { code }); };
@@ -440,6 +452,96 @@ test('a deposit record that went beyond assignment still blocks and the refusal 
 
 // Owner 2026-11-17: the delete of a check was still refused with "(deposit_items)" and nothing on the website said what
 // its deposit record had reached. The refusal message now says it, with field names and the status only.
+// Owner 2026-11-17: after the deposit record stopped blocking, the delete answered "(checkalt_deposits)"; the owner:
+// "We tried to deposit but the image wasn't accepted". A Check Alt record that Check Alt never took goes with the check.
+const CA_REJECTED = {
+  id: 'ca000000-0000-4000-8000-00000000000a', check_intake_item_id: CHECK_ID, status: 'rejected', amount: 1250, amount_cents: 125000,
+  checkalt_reference: 'CA-REF-SECRET-9', provider_http_attempted_at: '2026-11-12T00:00:00Z', submitted_at: '2026-11-12T00:00:01Z',
+  cleared_at: null, returned_at: null, approved_at: null, status_unresolved: false, failure_class: null, last_error: null,
+};
+const CA_ERROR = { ...CA_REJECTED, status: 'error', checkalt_reference: null, submitted_at: null, failure_class: 'provider_error', last_error: 'image not accepted' };
+const CA_QUEUED = { ...CA_REJECTED, status: 'queued', checkalt_reference: null, provider_http_attempted_at: null, submitted_at: null };
+
+test('the Check Alt rule: never sent, rejected, or an error with no reference does not block; anything Check Alt took or may have taken does', () => {
+  assert.deepEqual(checkAltDepositProgress(CA_QUEUED), []);
+  assert.deepEqual(checkAltDepositProgress({ ...CA_QUEUED, status: 'pending' }), []);
+  assert.deepEqual(checkAltDepositProgress(CA_REJECTED), []);
+  assert.deepEqual(checkAltDepositProgress({ ...CA_REJECTED, checkalt_reference: null, submitted_at: null }), []);
+  assert.deepEqual(checkAltDepositProgress(CA_ERROR), []);
+  // Queued but a send was attempted, or it carries a reference: not "never sent".
+  assert.deepEqual(checkAltDepositProgress({ ...CA_QUEUED, provider_http_attempted_at: '2026-11-12T00:00:00Z' }), ['status:queued', 'provider_http_attempted_at']);
+  assert.deepEqual(checkAltDepositProgress({ ...CA_QUEUED, checkalt_reference: 'R' }), ['status:queued', 'checkalt_reference']);
+  // An error that still carries a reference is something Check Alt may be tracking.
+  assert.deepEqual(checkAltDepositProgress({ ...CA_ERROR, checkalt_reference: 'R' }), ['status:error', 'provider_http_attempted_at', 'checkalt_reference']);
+  // A send whose outcome is unknown, and everything Check Alt accepted.
+  assert.deepEqual(checkAltDepositProgress({ ...CA_ERROR, status: 'submitting', failure_class: 'provider_timeout' }), ['status:submitting', 'provider_http_attempted_at']);
+  for (const status of ['submitted', 'pending_approval', 'cleared', 'returned', 'duplicate', 'something_new']) {
+    assert.deepEqual(checkAltDepositProgress({ ...CA_REJECTED, status }), [`status:${status}`, 'provider_http_attempted_at', 'checkalt_reference', 'submitted_at'], status);
+  }
+  assert.deepEqual(checkAltDepositProgress({ id: 'x' }), ['status:unknown']);
+  // Rejected or errored, but something cleared, returned, was approved, or the status is unresolved.
+  assert.deepEqual(checkAltDepositProgress({ ...CA_REJECTED, cleared_at: '2026-11-13T00:00:00Z' }), ['status:rejected', 'provider_http_attempted_at', 'checkalt_reference', 'submitted_at', 'cleared_at']);
+  assert.deepEqual(checkAltDepositProgress({ ...CA_ERROR, approved_at: '2026-11-13T00:00:00Z' }), ['status:error', 'provider_http_attempted_at', 'approved_at']);
+  assert.deepEqual(checkAltDepositProgress({ ...CA_ERROR, returned_at: '2026-11-13T00:00:00Z' }), ['status:error', 'provider_http_attempted_at', 'returned_at']);
+  assert.deepEqual(checkAltDepositProgress({ ...CA_REJECTED, status_unresolved: true }), ['status:rejected', 'provider_http_attempted_at', 'checkalt_reference', 'submitted_at', 'status_unresolved']);
+  for (const row of [undefined, null, {}, { '?column?': 1 }]) assert.deepEqual(checkAltDepositProgress(row), ['unreadable']);
+});
+
+test('a Check Alt deposit record that Check Alt never took goes with the check and is listed in the deletion log', async () => {
+  for (const rows of [[CA_REJECTED], [CA_ERROR], [CA_QUEUED], [CA_ERROR, CA_REJECTED]]) {
+    const client = mockClient({ checkAlt: { deposits: rows } });
+    const result = await remove(client);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(deleted(client), true);
+    const read = client.queries.find((q) => q.sql === CHECKALT_DEPOSITS_FOR_DELETE_SQL);
+    assert.deepEqual(read.params, [CHECK_ID]);
+    const funding = client.queries.find((q) => q.sql === CHECKALT_WALLET_FUNDING_FOR_DELETE_SQL);
+    assert.deepEqual(funding.params, [rows.map((row) => row.id)]);
+    // Read-only: the rows leave with the check through their cascading key; no statement of ours writes the table.
+    assert.equal(client.queries.some((q) => /(DELETE FROM|UPDATE|INSERT INTO) public\.checkalt_deposits/.test(q.sql)), false);
+    assert.ok(client.queries.indexOf(funding) < client.queries.findIndex((q) => /DELETE FROM public\.check_intake_items/.test(q.sql)));
+    assert.deepEqual(snapshotOf(client).checkalt_deposits_removed, rows);
+  }
+  // No Check Alt record: nothing listed.
+  const none = mockClient({ checkAlt: { deposits: [] } });
+  assert.equal((await remove(none)).ok, true);
+  assert.deepEqual(snapshotOf(none).checkalt_deposits_removed, []);
+  assert.equal(none.queries.some((q) => q.sql === CHECKALT_WALLET_FUNDING_FOR_DELETE_SQL), false);
+});
+
+test('a Check Alt deposit record that Check Alt took, or may have, still blocks and the refusal says what it reached without any stored value', async () => {
+  const submitted = { ...CA_REJECTED, status: 'submitted' };
+  const client = mockClient({ checkAlt: { deposits: [CA_ERROR, submitted] } });
+  const result = await remove(client);
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'check_has_financial_activity');
+  assert.equal(result.blocker, 'checkalt_deposits');
+  assert.deepEqual(result.reached, ['status:submitted', 'provider_http_attempted_at', 'checkalt_reference', 'submitted_at']);
+  assert.equal(result.message, 'This check cannot be deleted because it has dependent financial/provider records (checkalt_deposits). '
+    + 'Check Alt took this deposit or may have (status submitted; set: provider_http_attempted_at, checkalt_reference, submitted_at).');
+  for (const value of ['CA-REF-SECRET-9', '2026-11-12']) assert.ok(!result.message.includes(value), value);
+  assert.equal(deleted(client), false);
+  // A send whose outcome is unknown.
+  const unknown = await remove(mockClient({ checkAlt: { deposits: [{ ...CA_ERROR, status: 'submitting', failure_class: 'provider_timeout' }] } }));
+  assert.equal(unknown.blocker, 'checkalt_deposits');
+  assert.match(unknown.message, /Check Alt took this deposit or may have \(status submitting; set: provider_http_attempted_at\)\.$/);
+  // A wallet funding entry made from the record.
+  const funded = await remove(mockClient({ checkAlt: { deposits: [CA_REJECTED], funding: true } }));
+  assert.equal(funded.ok, false);
+  assert.equal(funded.blocker, 'wallet_funding_queue');
+  assert.equal(funded.message, 'This check cannot be deleted because it has dependent financial/provider records (wallet_funding_queue).');
+  // The records, or the funding queue, cannot be read: unverifiable, refused.
+  const unverified = await remove(mockClient({ checkAlt: { readError: '42501' } }));
+  assert.equal(unverified.error, 'blocker_verification_denied');
+  assert.equal(unverified.message, 'This check cannot be deleted because the service cannot verify financial/provider blockers (checkalt_deposits).');
+  const fundingDenied = await remove(mockClient({ checkAlt: { deposits: [CA_REJECTED], fundingError: '42501' } }));
+  assert.equal(fundingDenied.error, 'blocker_verification_denied');
+  assert.equal(fundingDenied.blocker, 'wallet_funding_queue');
+  // A table absent on this schema holds nothing.
+  assert.equal((await remove(mockClient({ checkAlt: { readError: '42P01' } }))).ok, true);
+  assert.equal((await remove(mockClient({ checkAlt: { deposits: [CA_REJECTED], fundingError: '42P01' } }))).ok, true);
+});
+
 test('the refusal message says what the deposit record reached, without any stored value', async () => {
   assert.equal(describeDepositQueueProgress(['status:provider_assigned', 'batch_id', 'provider']), 'status provider_assigned; set: batch_id, provider');
   assert.equal(describeDepositQueueProgress(['status:succeeded', 'provider', 'deposit_slip_number', 'cleared_at']), 'status succeeded; set: provider, deposit_slip_number, cleared_at');
