@@ -93,7 +93,7 @@ import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
 import { ReviewSettlementTab } from "@/components/check-review/ReviewSettlementTab";
 import { PostHomeownerUpdateCard } from "@/components/homeowner-ledger/PostHomeownerUpdateCard";
-import { Share2, CalendarRange } from "lucide-react";
+import { Share2, CalendarRange, Scale } from "lucide-react";
 import { CheckProjectScheduleTab } from "@/components/homeowner-ledger/CheckProjectScheduleTab";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
@@ -101,6 +101,7 @@ import { checkValidityWarning } from "@/lib/checkValidity";
 import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
+import { OUTSTANDING_CLAIMS_QUERY_KEY } from "@/lib/outstandingClaimsLoad";
 import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 
 
@@ -110,6 +111,8 @@ import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 const ReturnedChecksPanel = lazy(() =>
   import("@/components/checks/ReturnedChecksPanel").then(m => ({ default: m.ReturnedChecksPanel }))
 );
+// Checks → Outstanding (owner 2026-11-17): claims with a balance above $0 by the claim ledger's figure.
+const OutstandingClaimsPanel = lazy(() => import("@/components/checks/OutstandingClaimsPanel"));
 const LossDraftDashboard = lazy(() =>
   import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
 );
@@ -341,6 +344,7 @@ export default function CheckCommandCenter() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
+  const { tenant: pageTenant } = useTenant();
   const canMoveChecks = useCanMoveChecks();
   const isMobile = useIsMobile();
   const listView = useListViewState({ defaultTab: "endorsements" });
@@ -1264,6 +1268,8 @@ export default function CheckCommandCenter() {
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) return;
+    // Outstanding lists claims, not a check lane: the search filters that list in place.
+    if (activeTab === "outstanding") return;
 
     // We define a small helper for searching lane counts so we can accurately jump 
     // to a tab that contains the results.
@@ -1390,7 +1396,7 @@ export default function CheckCommandCenter() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         {/* Unified gradient nav cards — all primary navigation */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-1.5 sm:gap-2 md:gap-3">
+        <div className={`grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 ${canAccessManager ? "xl:grid-cols-10" : "xl:grid-cols-9"} gap-1.5 sm:gap-2 md:gap-3`}>
           {(() => {
             // Phase 8: prefer RPC totals for tab badges when the user has no
             // active search/class filter, so counts stay accurate past the
@@ -1415,6 +1421,8 @@ export default function CheckCommandCenter() {
             // Reissue moved into Manager → Reissue sub-tab.
             { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote },
             { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote },
+            // Claims with a balance above $0 by the claim ledger's figure (owner 2026-11-17). No badge: the list loads when opened.
+            { key: "outstanding",  label: "Outstanding",       count: null as number | null, icon: Scale },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield }] : []),
             { key: "messages",     label: "Messages",          count: null as number | null, icon: MessageSquare },
@@ -1753,6 +1761,62 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {activeTab === "outstanding" && (
+          <div className="mt-3 flex flex-col lg:flex-row gap-4 min-w-0" style={{ minHeight: "calc(100vh - 400px)" }}>
+            <div
+              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 w-full min-w-0 ${isMobile && selectedCheck ? "hidden" : ""}`}
+              style={!isMobile ? { width: selectedCheck ? "40%" : "100%" } : undefined}
+            >
+              <Suspense fallback={<TabLoader />}>
+                <OutstandingClaimsPanel
+                  tenantId={tenantId}
+                  companyName={pageTenant?.name ?? null}
+                  searchQuery={searchQuery}
+                  selectedCheckId={selectedCheck}
+                  onOpenCheck={(id) => setSelectedCheck(selectedCheck === id ? null : id)}
+                  compact={isMobile || !!selectedCheck}
+                />
+              </Suspense>
+            </div>
+
+            {selectedCheck && (
+              <div
+                className="check-detail-panel transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full"
+                style={!isMobile ? { width: "60%" } : undefined}
+              >
+                <div className="space-y-2">
+                  {isMobile && (
+                    <div className="sticky top-0 z-10 bg-background border-b pb-2 mb-2 -mx-4 px-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 -ml-2 h-8 text-xs"
+                        onClick={() => setSelectedCheck(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" /> Back to outstanding
+                      </Button>
+                    </div>
+                  )}
+                  {/* The check file, opened on its claim ledger (Funds). */}
+                  <CheckDetailPanel
+                    key={selectedCheck}
+                    checkId={selectedCheck}
+                    initialTab="funds"
+                    onRefresh={() => {
+                      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                      qc.invalidateQueries({ queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY] });
+                    }}
+                    onDeleted={() => {
+                      setSelectedCheck(null);
+                      qc.invalidateQueries({ queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY] });
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === "fundsreceived" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             <Card
@@ -2005,7 +2069,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && activeTab !== "fundsreceived" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "manager" && activeTab !== "branch" && activeTab !== "messages" && activeTab !== "partners" && activeTab !== "fundsreleased" && activeTab !== "fundsreceived" && activeTab !== "outstanding" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — hidden on mobile when a check is selected */}
             <Card
@@ -2821,13 +2885,16 @@ function CheckDetailPanel({
   checkId,
   onRefresh,
   onDeleted,
+  initialTab,
 }: {
   checkId: string;
   onRefresh: () => void;
   onDeleted?: () => void;
+  /** The tab shown first (Outstanding opens a check on its ledger: "funds"). Default: Overview. */
+  initialTab?: string;
 }) {
   const { requireStepUp } = useStepUp();
-  const [detailTab, setDetailTab] = useState("overview");
+  const [detailTab, setDetailTab] = useState(initialTab ?? "overview");
   const [undoing, setUndoing] = useState(false);
   const [reuploadingBack, setReuploadingBack] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
