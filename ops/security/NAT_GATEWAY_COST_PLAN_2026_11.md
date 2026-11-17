@@ -223,6 +223,41 @@ Verified:
 The 24-hour soak runs from 20:44:24 UTC. Step 3 ("NAT: delete the old NAT") is due no earlier
 than 2026-11-05 20:44 UTC, and only after us-east-1a traffic on the new NAT is confirmed.
 
+## Applied: steps 3 and 4, and the idle address (2026-11-17)
+
+Owner, 2026-11-17: "do 1 and 8", in reply to a cost review whose item 1 was "Delete
+`checksops-staging-nat` and its four IPs" and item 8 "Release the idle Elastic IP `100.50.171.44`".
+Run by Claude through boto3 as `user/claude-code`.
+
+Read first (all read-only, 2026-11-17):
+- **Route.** `rtb-057702ecbb292845f` 0.0.0.0/0 → `nat-1f2d1e419482e2737`, `active`. No route table
+  referenced `nat-15f538197c4a75331`.
+- **Soak.** `AWS/NATGateway` daily sums by `NatGatewayId` + `AvailabilityZone`, 2026-11-04 to
+  2026-11-16. Old NAT: `BytesOutToDestination` and `ConnectionEstablishedCount` 0 in all four AZs
+  on every day from 2026-11-05. New NAT: connections every day in both AZs (us-east-1a 16–508 a
+  day, us-east-1f 31–845 a day), `ErrorPortAllocation` 0, `PacketsDropCount` 0 after 2026-11-04.
+  This confirms us-east-1a on the new NAT, the open item from step 2.
+- **Cost.** Cost Explorer (the user now has `ce:GetCostAndUsage` through the AWS connector):
+  `RegionalNatGateway-Hours` 2,976 h, $133.92 in October (4 AZs × 744 h), and 2,120 h, $95.40 for
+  2026-11-01 to 11-16 (4 AZs, plus 2 more from 2026-11-04).
+
+Applied:
+- **Step 3.** `DeleteNatGateway` `nat-15f538197c4a75331`: state `deleted`, `DeleteTime`
+  2026-11-17 16:38:34 UTC.
+- **Step 4 needed no call.** The four addresses were service-managed (`ServiceManaged: rnat`) and
+  were released with the NAT: `describe-addresses` afterwards no longer lists
+  `eipalloc-00522d181fe59bb1d`, `eipalloc-06781d2314441cec9`, `eipalloc-001bd1b5e1c454c13` or
+  `eipalloc-0facc2a9a85845505`.
+- **Idle address.** `ReleaseAddress` `eipalloc-01f1f9b72ac281ce9` (100.50.171.44), read as
+  unassociated immediately before.
+
+Verified after: NATs are `nat-1f2d1e419482e2737` `available` and the old one `deleted`; the only
+Elastic IPs are 52.4.42.236 and 23.20.96.103, both attached to the new NAT; the route is unchanged
+and `active`.
+
+Not verified: no egress probe (`GET /providers/egress`) was run after the delete. The route did not
+change, so none was expected to be needed. The saving is not yet visible on the bill.
+
 ## Alternatives considered
 
 - **Leave it as it is** (~$146/month). No risk, no saving.
