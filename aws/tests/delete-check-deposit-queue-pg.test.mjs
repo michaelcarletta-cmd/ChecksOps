@@ -7,7 +7,10 @@
  *   - a check whose deposit record is still in the queue (pending_assignment, nothing else set) with its
  *     'prepare_deposit' audit row: both are removed with the check and returned by the plan; another check's
  *     deposit record and audit row are untouched;
- *   - a deposit record that left the queue (provider assigned to a batch; succeeded; an NSF flag) is refused and the
+ *   - a deposit record that was only assigned to a provider and an open batch (owner 2026-11-17, second case) goes with
+ *     the check too, with its 'assign_provider' audit row, and the batch's totals are reduced; a batch that is not
+ *     open, or that the API login cannot see or change, refuses the delete;
+ *   - a deposit record that went further (submitted; succeeded; an NSF flag) is refused and the
  *     plan names what it reached; a queue record with a related deposit record (provider attempt, exception,
  *     webhook, escalation, attachment, or an audit row of another action) is refused by that table; nothing changes;
  *   - when the API login may not delete deposit records (DELETE revoked, or no DELETE policy under RLS) the removal
@@ -42,8 +45,15 @@ const DEPOSIT_TABLES = ['deposit_items', 'deposit_audit_log', 'deposit_provider_
 // The fixture's deposit_items is (id, check_id, amount, status text, batch_id); the rest follows the Supabase tables.
 const FIXTURE = `
 INSERT INTO public.check_intake_items (id, tenant_id) VALUES ('${CHECK_B}', '${TENANT_A}'), ('${CHECK_C}', '${TENANT_A}');
+ALTER TABLE public.deposit_batches
+  ADD COLUMN status text NOT NULL DEFAULT 'open', ADD COLUMN submitted_at timestamptz, ADD COLUMN cleared_at timestamptz,
+  ADD COLUMN cleared_amount numeric(12,2) NOT NULL DEFAULT 0, ADD COLUMN failed_amount numeric(12,2) NOT NULL DEFAULT 0;
+INSERT INTO public.deposit_batches (id, provider, total_items, total_amount) VALUES ('${BATCH}', 'manual_branch', 2, 2150.00);
+CREATE POLICY delcheck_test_batch_all ON public.deposit_batches FOR ALL TO checksops USING (true) WITH CHECK (true);
+GRANT SELECT, UPDATE ON public.deposit_batches TO checksops;
 ALTER TABLE public.deposit_items
   ALTER COLUMN status SET DEFAULT 'pending_assignment',
+  ADD CONSTRAINT deposit_items_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.deposit_batches(id),
   ADD CONSTRAINT deposit_items_check_id_fkey FOREIGN KEY (check_id) REFERENCES public.check_intake_items(id),
   ADD CONSTRAINT deposit_items_check_id_key UNIQUE (check_id),
   ADD COLUMN provider text, ADD COLUMN check_number text, ADD COLUMN provider_reference text,
@@ -54,7 +64,7 @@ ALTER TABLE public.deposit_items
   ADD COLUMN created_at timestamptz NOT NULL DEFAULT now(), ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
 CREATE TABLE public.deposit_audit_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), deposit_item_id uuid REFERENCES public.deposit_items(id),
-  batch_id uuid, action text NOT NULL, actor_id uuid, amount numeric(12,2), notes text,
+  batch_id uuid REFERENCES public.deposit_batches(id), action text NOT NULL, actor_id uuid, amount numeric(12,2), notes text,
   created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE public.deposit_provider_attempts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), deposit_item_id uuid NOT NULL REFERENCES public.deposit_items(id),
@@ -112,7 +122,7 @@ async function withPg(t, prefix, port, fn) {
 /** Every deposit row and check, as text, to prove "nothing changed". */
 const state = async (admin) => {
   const out = {};
-  for (const table of [...DEPOSIT_TABLES, 'check_intake_items']) {
+  for (const table of [...DEPOSIT_TABLES, 'deposit_batches', 'check_intake_items']) {
     out[table] = (await admin.query(`SELECT to_jsonb(t)::text AS row FROM public.${table} t ORDER BY t.id`)).rows.map((r) => r.row);
   }
   return out;
@@ -158,7 +168,8 @@ test('PostgreSQL 16: a deposit record that never left the queue goes with the ch
 
   const a = await deleteAsApi(connectAs, CHECK_A);
   assert.equal(a.deleted, 1, JSON.stringify(a));
-  assert.deepEqual(a.removed, { items: 1, audit: 1 });
+  assert.deepEqual(a.removed, { items: 1, audit: 1, batches: 0 });
+  assert.deepEqual(a.plan.batches, []);
   // The plan carries the full rows for the deletion log.
   assert.equal(a.plan.items.length, 1);
   assert.equal(a.plan.items[0].id, ITEM_A);
@@ -183,7 +194,7 @@ test('PostgreSQL 16: a deposit record that never left the queue goes with the ch
   await admin.query('DELETE FROM public.deposit_audit_log WHERE deposit_item_id = $1::uuid', [ITEM_C]);
   await admin.query('DELETE FROM public.deposit_items WHERE id = $1::uuid', [ITEM_C]);
   const c = await deleteAsApi(connectAs, CHECK_C);
-  assert.deepEqual(c, { plan: { items: [], audit: [] }, removed: { items: 0, audit: 0 }, deleted: 1 });
+  assert.deepEqual(c, { plan: { items: [], audit: [], batches: [] }, removed: { items: 0, audit: 0, batches: 0 }, deleted: 1 });
   assert.deepEqual(await ids(admin, 'deposit_items'), [ITEM_B]);
 }));
 
@@ -201,8 +212,20 @@ test('PostgreSQL 16: a deposit record that left the queue, or has any related de
     submitted_at = NULL, deposit_slip_number = NULL, nsf_flag = false, closeout_complete = false, variance_amount = 0,
     exception_code = NULL, reconciled_at = NULL WHERE id = '${ITEM_A}'`;
 
-  await refusedWith(`UPDATE public.deposit_items SET status = 'provider_assigned', provider = 'manual_branch', batch_id = '${BATCH}' WHERE id = '${ITEM_A}'`,
-    reset, blocked(['status:provider_assigned', 'batch_id', 'provider']));
+  // Assigned to a provider and a batch only: the record no longer blocks by itself, but its batch must be open.
+  const assign = `UPDATE public.deposit_items SET status = 'provider_assigned', provider = 'manual_branch', batch_id = '${BATCH}' WHERE id = '${ITEM_A}'`;
+  const batchBlocked = (reached) => ({ error: 'check_has_financial_activity', blocker: 'deposit_batches', reached });
+  const batchReset = `${reset}; UPDATE public.deposit_batches SET status = 'open', submitted_at = NULL, cleared_at = NULL, cleared_amount = 0, failed_amount = 0 WHERE id = '${BATCH}'`;
+  await refusedWith(`${assign}; UPDATE public.deposit_batches SET status = 'submitted', submitted_at = '2026-11-10T00:00:00Z' WHERE id = '${BATCH}'`,
+    batchReset, batchBlocked(['status:submitted', 'submitted_at']));
+  await refusedWith(`${assign}; UPDATE public.deposit_batches SET status = 'sealed' WHERE id = '${BATCH}'`, batchReset, batchBlocked(['status:sealed']));
+  await refusedWith(`${assign}; UPDATE public.deposit_batches SET cleared_amount = 10 WHERE id = '${BATCH}'`, batchReset, batchBlocked(['cleared_amount']));
+  // Assigned and then anything more on the record itself: refused by the record.
+  await refusedWith(`${assign}; UPDATE public.deposit_items SET provider_reference = 'REF-1' WHERE id = '${ITEM_A}'`,
+    `${reset}; UPDATE public.deposit_items SET provider_reference = NULL WHERE id = '${ITEM_A}'`,
+    blocked(['status:provider_assigned', 'batch_id', 'provider', 'provider_reference']));
+  await refusedWith(`UPDATE public.deposit_items SET status = 'submitted', provider = 'manual_branch', batch_id = '${BATCH}', submitted_at = '2026-11-10T00:00:00Z' WHERE id = '${ITEM_A}'`,
+    reset, blocked(['status:submitted', 'batch_id', 'provider', 'submitted_at']));
   await refusedWith(`UPDATE public.deposit_items SET status = 'succeeded', provider = 'manual_branch', cleared_at = '2026-11-10T00:00:00Z', deposit_slip_number = 'S-1' WHERE id = '${ITEM_A}'`,
     reset, blocked(['status:succeeded', 'provider', 'deposit_slip_number', 'cleared_at']));
   // Still pending_assignment, but one field beyond the queue is enough.
@@ -218,16 +241,65 @@ test('PostgreSQL 16: a deposit record that left the queue, or has any related de
       `DELETE FROM public.${table} WHERE deposit_item_id = '${ITEM_A}'`,
       { error: 'check_has_financial_activity', blocker: table });
   }
-  await refusedWith(`INSERT INTO public.deposit_audit_log (deposit_item_id, action) VALUES ('${ITEM_A}', 'assign_provider')`,
-    `DELETE FROM public.deposit_audit_log WHERE deposit_item_id = '${ITEM_A}' AND action = 'assign_provider'`,
-    { error: 'check_has_financial_activity', blocker: 'deposit_audit_log' });
+  for (const action of ['mark_manual_deposit', 'record_submission']) {
+    await refusedWith(`INSERT INTO public.deposit_audit_log (deposit_item_id, action) VALUES ('${ITEM_A}', '${action}')`,
+      `DELETE FROM public.deposit_audit_log WHERE deposit_item_id = '${ITEM_A}' AND action = '${action}'`,
+      { error: 'check_has_financial_activity', blocker: 'deposit_audit_log' });
+  }
   assert.deepEqual(DEPOSIT_QUEUE_RELATED_BLOCKERS.map((row) => row.table), ['deposit_provider_attempts', 'deposit_exceptions',
     'deposit_webhook_events', 'deposit_escalation_events', 'deposit_attachments', 'deposit_audit_log']);
 
   // Back in the queue with nothing related, it is deletable again.
   const ok = await deleteAsApi(connectAs, CHECK_A);
   assert.equal(ok.deleted, 1, JSON.stringify(ok));
-  assert.deepEqual(ok.removed, { items: 1, audit: 1 });
+  assert.deepEqual(ok.removed, { items: 1, audit: 1, batches: 0 });
+}));
+
+test('PostgreSQL 16: a deposit record only assigned to a provider and an open batch goes with the check; the batch totals are reduced and the batch stays', { timeout: 600000 }, async (t) => withPg(t, 'pg-delcheck-queue-asg-', 60871, async ({ admin, connectAs }) => {
+  const AUDIT_ASSIGN = 'da000000-0000-4000-8000-0000000000a1';
+  // CHECK_A and CHECK_B are both assigned to the same open batch (2 items, 2150.00), as assign_provider writes it.
+  await admin.query(`UPDATE public.deposit_items SET status = 'provider_assigned', provider = 'manual_branch', batch_id = '${BATCH}' WHERE id IN ('${ITEM_A}', '${ITEM_B}');
+    INSERT INTO public.deposit_audit_log (id, deposit_item_id, batch_id, action, actor_id, amount) VALUES
+      ('${AUDIT_ASSIGN}', '${ITEM_A}', '${BATCH}', 'assign_provider', '${ACTOR}', 1250.00),
+      (gen_random_uuid(), '${ITEM_B}', '${BATCH}', 'assign_provider', '${ACTOR}', 900.00);`);
+  const before = await state(admin);
+  const batch = async () => (await admin.query(`SELECT total_items, total_amount::text, status FROM public.deposit_batches WHERE id = '${BATCH}'`)).rows[0];
+  assert.deepEqual(await batch(), { total_items: 2, total_amount: '2150.00', status: 'open' });
+
+  // When the API login may not change the batch, or cannot see it, the delete is refused and nothing changes.
+  await admin.query('REVOKE UPDATE ON public.deposit_batches FROM checksops');
+  assert.deepEqual(await deleteAsApi(connectAs, CHECK_A), { error: 'deposit_cleanup_denied' });
+  assert.deepEqual(await state(admin), before);
+  await admin.query('GRANT UPDATE ON public.deposit_batches TO checksops');
+  await admin.query('DROP POLICY delcheck_test_batch_all ON public.deposit_batches');
+  assert.deepEqual(await deleteAsApi(connectAs, CHECK_A), { error: 'check_has_financial_activity', blocker: 'deposit_batches', reached: ['unreadable'] });
+  assert.deepEqual(await state(admin), before);
+  await admin.query('CREATE POLICY delcheck_test_batch_all ON public.deposit_batches FOR ALL TO checksops USING (true) WITH CHECK (true)');
+
+  const a = await deleteAsApi(connectAs, CHECK_A);
+  assert.equal(a.deleted, 1, JSON.stringify(a));
+  assert.deepEqual(a.removed, { items: 1, audit: 2, batches: 1 });
+  assert.equal(a.plan.items[0].status, 'provider_assigned');
+  assert.equal(a.plan.items[0].batch_id, BATCH);
+  assert.deepEqual(a.plan.audit.map((row) => row.action).sort(), ['assign_provider', 'prepare_deposit']);
+  // The plan carries the batch as it was before the change, for the deletion log.
+  assert.equal(a.plan.batches.length, 1);
+  assert.equal(a.plan.batches[0].id, BATCH);
+  assert.equal(a.plan.batches[0].total_items, 2);
+  assert.equal(Number(a.plan.batches[0].total_amount), 2150);
+  // The batch stays, without this check's item and amount; the other check keeps its record and audit rows.
+  assert.deepEqual(await batch(), { total_items: 1, total_amount: '900.00', status: 'open' });
+  assert.deepEqual(await ids(admin, 'deposit_items'), [ITEM_B, ITEM_C]);
+  const after = await state(admin);
+  assert.deepEqual(after.deposit_items, before.deposit_items.filter((row) => !row.includes(ITEM_A)));
+  assert.deepEqual(after.deposit_audit_log, before.deposit_audit_log.filter((row) => !row.includes(ITEM_A)));
+
+  // The last item leaves an empty open batch behind (it is not deleted).
+  const b = await deleteAsApi(connectAs, CHECK_B);
+  assert.equal(b.deleted, 1, JSON.stringify(b));
+  assert.deepEqual(b.removed, { items: 1, audit: 2, batches: 1 });
+  assert.deepEqual(await batch(), { total_items: 0, total_amount: '0.00', status: 'open' });
+  assert.deepEqual(await ids(admin, 'deposit_items'), [ITEM_C]);
 }));
 
 test('PostgreSQL 16: when the API login may not delete deposit records the delete is refused and nothing is removed', { timeout: 600000 }, async (t) => withPg(t, 'pg-delcheck-queue-deny-', 60771, async ({ admin, connectAs }) => {

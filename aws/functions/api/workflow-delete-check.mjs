@@ -362,7 +362,10 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         message: depositQueue.error === 'blocker_verification_denied'
           ? `Refusing to delete: unable to verify financial/provider blockers (${depositQueue.blocker})`
           : `Refusing to delete a check with dependent financial/provider records (${depositQueue.blocker})${
-            depositQueue.reached ? `: its deposit record went beyond the deposit queue (${describeDepositQueueProgress(depositQueue.reached)})` : ''}`,
+            !depositQueue.reached ? ''
+              : depositQueue.blocker === 'deposit_batches'
+                ? `: its deposit batch is no longer open (${describeDepositQueueProgress(depositQueue.reached).replace('the deposit record', 'the deposit batch')})`
+                : `: its deposit record went beyond the deposit queue (${describeDepositQueueProgress(depositQueue.reached)})`}`,
         blocker: depositQueue.blocker,
         ...(depositQueue.reached ? { reached: depositQueue.reached } : {}),
       });
@@ -419,7 +422,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         blocker: 'deposit_items',
       });
     }
-    const depositQueueRemoved = { deposit_items: depositQueue.items, deposit_audit_log: depositQueue.audit };
+    const depositQueueRemoved = { deposit_items: depositQueue.items, deposit_audit_log: depositQueue.audit, deposit_batches_adjusted: depositQueue.batches };
 
     const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
     if (exists) {

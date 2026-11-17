@@ -20,7 +20,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CHECK_BILLING_EVENTS_FOR_DELETE_SQL, DEPOSIT_ITEMS_FOR_DELETE_SQL, DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL,
-  DEPOSIT_QUEUE_PROGRESS_FIELDS, DEPOSIT_QUEUE_RELATED_BLOCKERS, depositQueueProgress, describeDepositQueueProgress, handleDeleteCheck,
+  DEPOSIT_ASSIGNED_ONLY_PROGRESS, DEPOSIT_BATCHES_FOR_DELETE_SQL, DEPOSIT_QUEUE_PROGRESS_FIELDS, DEPOSIT_QUEUE_RELATED_BLOCKERS,
+  depositBatchProgress, depositBlockingProgress, depositQueueProgress, describeDepositQueueProgress, handleDeleteCheck,
   isProvisionalBillingEvent,
 } from '../functions/api/workflow.mjs';
 import { SET_MONEY_WRITE_SQL } from '../functions/api/money-write-flag.mjs';
@@ -105,6 +106,14 @@ const mockClient = ({ check = baseCheck, blockers = {}, billing = [], billingErr
           return { rows: (deposit.items || []).map((item) => ({ item })) };
         }
         if (sql === DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL) return { rows: (deposit.audit || []).map((entry) => ({ entry })) };
+        if (sql === DEPOSIT_BATCHES_FOR_DELETE_SQL) {
+          if (deposit.batchReadError) fail(deposit.batchReadError);
+          return { rows: (deposit.batches || []).map((batch) => ({ batch })) };
+        }
+        if (/UPDATE public\.deposit_batches/.test(sql)) {
+          if (deposit.batchUpdateError) fail(deposit.batchUpdateError);
+          return { rows: deposit.batchUpdateMisses ? [] : [{ id: params[0] }] };
+        }
         const related = DEPOSIT_QUEUE_RELATED_BLOCKERS.find((row) => row.sql === sql);
         if (related) return { rows: deposit.related === related.table ? ANY_ROW : [] };
         if (/DELETE FROM public\.deposit_audit_log/.test(sql)) {
@@ -300,12 +309,13 @@ test('a deposit record that never left the queue does not block: it and its prep
   assert.equal(deleted(client), true);
   const [auditDelete, itemDelete] = depositDeletes(client);
   assert.match(auditDelete.sql, /DELETE FROM public\.deposit_audit_log/);
-  assert.match(auditDelete.sql, /a\.action = 'prepare_deposit'/);
+  assert.match(auditDelete.sql, /a\.action IN \('prepare_deposit', 'assign_provider'\)/);
   assert.deepEqual(auditDelete.params, [[QUEUE_ITEM.id]]);
   // The DELETE repeats the queue-only test and is bound to this check.
-  assert.match(itemDelete.sql, /di\.status = 'pending_assignment'/);
-  assert.match(itemDelete.sql, /di\.batch_id IS NULL/);
-  assert.match(itemDelete.sql, /di\.provider IS NULL/);
+  assert.match(itemDelete.sql, /di\.status IN \('pending_assignment', 'provider_assigned'\)/);
+  assert.match(itemDelete.sql, /di\.provider_reference IS NULL/);
+  // A queue record is in no batch: no batch is read or changed.
+  assert.equal(client.queries.some((q) => /deposit_batches/.test(q.sql)), false);
   assert.match(itemDelete.sql, /di\.submitted_at IS NULL/);
   assert.match(itemDelete.sql, /di\.cleared_at IS NULL/);
   assert.deepEqual(itemDelete.params, [[QUEUE_ITEM.id], CHECK_ID]);
@@ -316,7 +326,7 @@ test('a deposit record that never left the queue does not block: it and its prep
   assert.ok(lastRelated >= 0 && lastRelated < save && save < at(auditDelete) && at(auditDelete) < at(itemDelete));
   assert.ok(at(itemDelete) < client.queries.findIndex((q) => /DELETE FROM public\.check_intake_items/.test(q.sql)));
   for (const row of DEPOSIT_QUEUE_RELATED_BLOCKERS) assert.ok(client.queries.some((q) => q.sql === row.sql), row.table);
-  assert.deepEqual(snapshotOf(client).deposit_queue_removed, { deposit_items: [QUEUE_ITEM], deposit_audit_log: [QUEUE_AUDIT] });
+  assert.deepEqual(snapshotOf(client).deposit_queue_removed, { deposit_items: [QUEUE_ITEM], deposit_audit_log: [QUEUE_AUDIT], deposit_batches_adjusted: [] });
   assert.deepEqual(snapshotOf(client).billing_events_kept, []);
 });
 
@@ -326,22 +336,106 @@ test('a check with no deposit record deletes as before and the deletion log list
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.deepEqual(depositDeletes(client), []);
   assert.equal(client.queries.some((q) => q.sql === 'SAVEPOINT delete_deposit_queue'), false);
-  assert.deepEqual(snapshotOf(client).deposit_queue_removed, { deposit_items: [], deposit_audit_log: [] });
+  assert.deepEqual(snapshotOf(client).deposit_queue_removed, { deposit_items: [], deposit_audit_log: [], deposit_batches_adjusted: [] });
 });
 
-test('a deposit record that left the queue still blocks and the refusal names what it reached', async () => {
-  const assigned = { ...QUEUE_ITEM, status: 'provider_assigned', provider: 'manual_branch', batch_id: 'b1000000-0000-4000-8000-000000000001' };
-  const client = mockClient({ deposit: { items: [assigned], audit: [QUEUE_AUDIT] } });
+const BATCH_ID = 'b1000000-0000-4000-8000-000000000001';
+const ASSIGNED_ITEM = { ...QUEUE_ITEM, status: 'provider_assigned', provider: 'manual_branch', batch_id: BATCH_ID };
+const ASSIGN_AUDIT = { id: 'da000000-0000-4000-8000-00000000000b', deposit_item_id: QUEUE_ITEM.id, batch_id: BATCH_ID, action: 'assign_provider', actor_id: APP_ID, amount: 1250, notes: null };
+const OPEN_BATCH = { id: BATCH_ID, provider: 'manual_branch', status: 'open', total_items: 1, total_amount: 1250, cleared_amount: 0, failed_amount: 0, submitted_at: null, cleared_at: null };
+
+// Owner 2026-11-17: the check was refused with "status provider_assigned; set: batch_id, provider". A record that was only
+// assigned (nothing submitted) now goes with the check when its batch is still open.
+test('the assigned-only rule: provider_assigned, batch and provider alone do not block; anything more does; the batch must be open', () => {
+  assert.deepEqual([...DEPOSIT_ASSIGNED_ONLY_PROGRESS], ['status:provider_assigned', 'batch_id', 'provider']);
+  assert.deepEqual(depositBlockingProgress(QUEUE_ITEM), []);
+  assert.deepEqual(depositBlockingProgress(ASSIGNED_ITEM), []);
+  // The record's own progress is unchanged: it still names what it reached.
+  assert.deepEqual(depositQueueProgress(ASSIGNED_ITEM), ['status:provider_assigned', 'batch_id', 'provider']);
+  // One field more and everything it reached blocks.
+  assert.deepEqual(depositBlockingProgress({ ...ASSIGNED_ITEM, submitted_at: '2026-11-10T00:00:00Z' }), ['status:provider_assigned', 'batch_id', 'provider', 'submitted_at']);
+  assert.deepEqual(depositBlockingProgress({ ...ASSIGNED_ITEM, provider_reference: 'R' }), ['status:provider_assigned', 'batch_id', 'provider', 'provider_reference']);
+  assert.deepEqual(depositBlockingProgress({ ...ASSIGNED_ITEM, status: 'submitted' }), ['status:submitted', 'batch_id', 'provider']);
+  assert.deepEqual(depositBlockingProgress({ ...ASSIGNED_ITEM, nsf_flag: true }), ['status:provider_assigned', 'batch_id', 'provider', 'nsf_flag']);
+  for (const row of [undefined, null, {}]) assert.deepEqual(depositBlockingProgress(row), ['unreadable']);
+  assert.deepEqual(depositBatchProgress(OPEN_BATCH), []);
+  assert.deepEqual(depositBatchProgress({ ...OPEN_BATCH, cleared_amount: '0.00', failed_amount: '0.00' }), []);
+  assert.deepEqual(depositBatchProgress({ ...OPEN_BATCH, status: 'submitted', submitted_at: '2026-11-10T00:00:00Z' }), ['status:submitted', 'submitted_at']);
+  assert.deepEqual(depositBatchProgress({ ...OPEN_BATCH, status: 'sealed' }), ['status:sealed']);
+  assert.deepEqual(depositBatchProgress({ ...OPEN_BATCH, cleared_amount: '10.00' }), ['cleared_amount']);
+  assert.deepEqual(depositBatchProgress({ ...OPEN_BATCH, failed_amount: 5 }), ['failed_amount']);
+  for (const row of [undefined, null, {}]) assert.deepEqual(depositBatchProgress(row), ['unreadable']);
+});
+
+test('a deposit record that was only assigned to a provider and an open batch goes with the check: audit rows removed, batch totals reduced, all listed in the deletion log', async () => {
+  const client = mockClient({ deposit: { items: [ASSIGNED_ITEM], audit: [QUEUE_AUDIT, ASSIGN_AUDIT], batches: [OPEN_BATCH] } });
+  const result = await remove(client);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(deleted(client), true);
+  const batchRead = client.queries.find((q) => q.sql === DEPOSIT_BATCHES_FOR_DELETE_SQL);
+  assert.deepEqual(batchRead.params, [[BATCH_ID]]);
+  const batchUpdate = client.queries.find((q) => /UPDATE public\.deposit_batches/.test(q.sql));
+  assert.match(batchUpdate.sql, /total_items = GREATEST\(b\.total_items - 1, 0\)/);
+  assert.match(batchUpdate.sql, /total_amount = GREATEST\(b\.total_amount - COALESCE\(\$2::numeric, 0\), 0\)/);
+  assert.match(batchUpdate.sql, /b\.status = 'open' AND b\.submitted_at IS NULL AND b\.cleared_at IS NULL/);
+  assert.deepEqual(batchUpdate.params, [BATCH_ID, 1250]);
+  // Audit rows first (they reference the record and the batch), then the batch totals while the record exists, then the record.
+  const [auditDelete, itemDelete] = depositDeletes(client);
+  const at = (q) => client.queries.indexOf(q);
+  assert.ok(at(batchRead) < at(auditDelete) && at(auditDelete) < at(batchUpdate) && at(batchUpdate) < at(itemDelete));
+  assert.ok(at(itemDelete) < client.queries.findIndex((q) => /DELETE FROM public\.check_intake_items/.test(q.sql)));
+  // The batch row is never deleted.
+  assert.equal(client.queries.some((q) => /DELETE FROM public\.deposit_batches/.test(q.sql)), false);
+  assert.deepEqual(snapshotOf(client).deposit_queue_removed, { deposit_items: [ASSIGNED_ITEM], deposit_audit_log: [QUEUE_AUDIT, ASSIGN_AUDIT], deposit_batches_adjusted: [OPEN_BATCH] });
+});
+
+test('an assigned record whose batch is not open, cannot be read, or cannot be changed still refuses the delete', async () => {
+  const submittedBatch = { ...OPEN_BATCH, status: 'submitted', submitted_at: '2026-11-10T00:00:00Z' };
+  const closed = mockClient({ deposit: { items: [ASSIGNED_ITEM], audit: [QUEUE_AUDIT, ASSIGN_AUDIT], batches: [submittedBatch] } });
+  const refused = await remove(closed);
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error, 'check_has_financial_activity');
+  assert.equal(refused.blocker, 'deposit_batches');
+  assert.deepEqual(refused.reached, ['status:submitted', 'submitted_at']);
+  assert.equal(refused.message, 'This check cannot be deleted because it has dependent financial/provider records (deposit_batches). '
+    + 'Its deposit batch is no longer open (status submitted; set: submitted_at).');
+  assert.ok(!refused.message.includes('2026-11-10'));
+  assert.equal(deleted(closed), false);
+  assert.deepEqual(depositDeletes(closed), []);
+  // The batch row is not visible to the caller: it cannot be shown to be open.
+  const hidden = await remove(mockClient({ deposit: { items: [ASSIGNED_ITEM], audit: [QUEUE_AUDIT, ASSIGN_AUDIT], batches: [] } }));
+  assert.equal(hidden.blocker, 'deposit_batches');
+  assert.deepEqual(hidden.reached, ['unreadable']);
+  assert.match(hidden.message, /Its deposit batch is no longer open \(the deposit batch could not be read\)\.$/);
+  const unverified = await remove(mockClient({ deposit: { items: [ASSIGNED_ITEM], batchReadError: '42501' } }));
+  assert.equal(unverified.error, 'blocker_verification_denied');
+  assert.equal(unverified.blocker, 'deposit_batches');
+  // The batch moved on between the plan and the removal, or the role may not change it: undone, nothing deleted.
+  const moved = mockClient({ deposit: { items: [ASSIGNED_ITEM], audit: [QUEUE_AUDIT, ASSIGN_AUDIT], batches: [OPEN_BATCH], batchUpdateMisses: true } });
+  const incomplete = await remove(moved);
+  assert.equal(incomplete.error, 'deposit_cleanup_incomplete');
+  assert.equal(deleted(moved), false);
+  assert.ok(moved.queries.some((q) => q.sql === 'ROLLBACK TO SAVEPOINT delete_deposit_queue'));
+  const denied = mockClient({ deposit: { items: [ASSIGNED_ITEM], audit: [QUEUE_AUDIT, ASSIGN_AUDIT], batches: [OPEN_BATCH], batchUpdateError: '42501' } });
+  assert.equal((await remove(denied)).error, 'deposit_cleanup_denied');
+  assert.equal(deleted(denied), false);
+});
+
+test('a deposit record that went beyond assignment still blocks and the refusal names what it reached', async () => {
+  const submitted = { ...ASSIGNED_ITEM, status: 'submitted', submitted_at: '2026-11-10T00:00:00Z' };
+  const client = mockClient({ deposit: { items: [submitted], audit: [QUEUE_AUDIT], batches: [OPEN_BATCH] } });
   const result = await remove(client);
   assert.equal(result.ok, false);
   assert.equal(result.error, 'check_has_financial_activity');
   assert.equal(result.blocker, 'deposit_items');
-  assert.deepEqual(result.reached, ['status:provider_assigned', 'batch_id', 'provider']);
+  assert.deepEqual(result.reached, ['status:submitted', 'batch_id', 'provider', 'submitted_at']);
   // The website shows only the message (src/integrations/aws/client.ts admin_delete_check), so the message says it.
   assert.equal(result.message, 'This check cannot be deleted because it has dependent financial/provider records (deposit_items). '
-    + 'Its deposit record went beyond the deposit queue (status provider_assigned; set: batch_id, provider).');
+    + 'Its deposit record went beyond the deposit queue (status submitted; set: batch_id, provider, submitted_at).');
   assert.equal(deleted(client), false);
   assert.deepEqual(depositDeletes(client), []);
+  // Read before any batch: a record that blocks by itself never reaches the batch read.
+  assert.equal(client.queries.some((q) => /deposit_batches/.test(q.sql)), false);
 });
 
 // Owner 2026-11-17: the delete of a check was still refused with "(deposit_items)" and nothing on the website said what
