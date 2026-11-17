@@ -779,6 +779,151 @@ export async function settleBillingEventsForCheckDelete(client, checkId) {
   }
 }
 
+// Owner 2026-11-17: a check's deposit record does not block a delete when it never left the deposit queue, that is
+// status pending_assignment and no batch, provider, submission, reconciliation, clearing, exception, NSF or closeout
+// data (workflow-rpc.mjs prepare_deposit writes exactly that row plus one 'prepare_deposit' deposit_audit_log row).
+// That record and its 'prepare_deposit' audit rows go with the check and are listed in the check_deletion_log
+// snapshot (deposit_queue_removed). Anything further still blocks: a deposit record that reached any of the fields
+// below, or any related deposit record (provider attempts, exceptions, webhooks, escalations, attachments, or an
+// audit row of another action).
+export const DEPOSIT_ITEMS_FOR_DELETE_SQL = `SELECT to_jsonb(di) AS item
+  FROM public.deposit_items di
+ WHERE di.check_id = $1::uuid
+ ORDER BY di.created_at, di.id`;
+
+/** deposit_items columns that are set only once a deposit leaves the queue. */
+export const DEPOSIT_QUEUE_PROGRESS_FIELDS = Object.freeze([
+  'batch_id', 'provider', 'provider_reference', 'provider_payload', 'provider_response', 'provider_status_raw',
+  'submitted_at', 'last_synced_at',
+  'increase_account_id', 'increase_check_deposit_id', 'increase_status', 'increase_submitted_at',
+  'increase_last_synced_at', 'increase_raw_response',
+  'reconciled_amount', 'reconciled_at', 'reconciled_by', 'bank_reference', 'bank_confirmed_at', 'bank_confirmed_by',
+  'deposit_slip_number', 'variance_reason', 'accounting_synced_at',
+  'cleared_at',
+  'exception_reason', 'exception_code', 'return_reason',
+  'closeout_at', 'closeout_by',
+]);
+
+/** What a deposit record reached beyond the queue ([] when it never left it). An unreadable row counts as reached. */
+export const depositQueueProgress = (row) => {
+  if (!row || typeof row !== 'object' || !row.id) return ['unreadable'];
+  const reached = [];
+  if (row.status !== 'pending_assignment') reached.push(`status:${row.status ?? 'unknown'}`);
+  for (const field of DEPOSIT_QUEUE_PROGRESS_FIELDS) {
+    if (row[field] !== undefined && row[field] !== null) reached.push(field);
+  }
+  if (row.variance_amount !== undefined && row.variance_amount !== null && Number(row.variance_amount) !== 0) reached.push('variance_amount');
+  if (row.nsf_flag === true) reached.push('nsf_flag');
+  if (row.closeout_complete === true) reached.push('closeout_complete');
+  return reached;
+};
+
+/** Related deposit records: any row for the check's deposit record blocks the delete. */
+export const DEPOSIT_QUEUE_RELATED_BLOCKERS = Object.freeze([
+  ...['deposit_provider_attempts', 'deposit_exceptions', 'deposit_webhook_events', 'deposit_escalation_events', 'deposit_attachments']
+    .map((table) => ({ table, sql: `SELECT 1 FROM public.${table} WHERE deposit_item_id = ANY($1::uuid[]) LIMIT 1` })),
+  { table: 'deposit_audit_log', sql: `SELECT 1 FROM public.deposit_audit_log
+      WHERE deposit_item_id = ANY($1::uuid[]) AND action IS DISTINCT FROM 'prepare_deposit' LIMIT 1` },
+]);
+
+export const DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL = `SELECT to_jsonb(a) AS entry
+  FROM public.deposit_audit_log a
+ WHERE a.deposit_item_id = ANY($1::uuid[]) AND a.action = 'prepare_deposit'
+ ORDER BY a.created_at, a.id`;
+
+const inDeleteSavepoint = async (client, name, fn) => {
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    const out = await fn();
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return out;
+  } catch (error) {
+    try { await client.query(`ROLLBACK TO SAVEPOINT ${name}`); } catch { /* ignore */ }
+    try { await client.query(`RELEASE SAVEPOINT ${name}`); } catch { /* ignore */ }
+    throw error;
+  }
+};
+
+/**
+ * Reads the check's deposit records (read-only). { items, audit } lists the queue-only records and their
+ * 'prepare_deposit' audit rows that go with the check (both [] when the check has no deposit record).
+ * { error, blocker, reached? } when a deposit record left the queue, a related deposit record exists, or the
+ * records cannot be read: the delete is then refused.
+ */
+export async function planDepositQueueForCheckDelete(client, checkId) {
+  const read = async (name, table, sql, params) => {
+    try {
+      return { rows: await inDeleteSavepoint(client, name, async () => (await client.query(sql, params)).rows || []) };
+    } catch (error) {
+      // A table absent on this schema snapshot holds nothing.
+      if (error?.code === '42P01') return { rows: [] };
+      if (error?.code === '42501') return { error: 'blocker_verification_denied', blocker: table };
+      throw error;
+    }
+  };
+  const found = await read('delete_deposit_queue_read', 'deposit_items', DEPOSIT_ITEMS_FOR_DELETE_SQL, [checkId]);
+  if (found.error) return found;
+  if (!found.rows.length) return { items: [], audit: [] };
+  const items = found.rows.map((row) => row?.item);
+  for (const item of items) {
+    const reached = depositQueueProgress(item);
+    if (reached.length) return { error: 'check_has_financial_activity', blocker: 'deposit_items', reached };
+  }
+  const ids = items.map((item) => String(item.id));
+  for (const [idx, related] of DEPOSIT_QUEUE_RELATED_BLOCKERS.entries()) {
+    const rows = await read(`delete_deposit_queue_related_${idx}`, related.table, related.sql, [ids]);
+    if (rows.error) return rows;
+    if (rows.rows.length) return { error: 'check_has_financial_activity', blocker: related.table };
+  }
+  const audit = await read('delete_deposit_queue_audit', 'deposit_audit_log', DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL, [ids]);
+  if (audit.error) return audit;
+  return { items, audit: audit.rows.map((row) => row?.entry ?? row) };
+}
+
+/**
+ * Removes the planned queue-only deposit records and their 'prepare_deposit' audit rows. The DELETE repeats the
+ * queue-only test, so a record that moved on since the plan is not removed. { error } when a row is refused or
+ * left behind (the API role may not delete it, or another record still references it): the delete is then
+ * refused and nothing is removed.
+ */
+export async function removeDepositQueueForCheckDelete(client, checkId, plan) {
+  if (!plan?.items?.length) return { items: 0, audit: 0 };
+  const ids = plan.items.map((item) => String(item.id));
+  await client.query('SAVEPOINT delete_deposit_queue');
+  const undo = async () => {
+    try { await client.query('ROLLBACK TO SAVEPOINT delete_deposit_queue'); } catch { /* ignore */ }
+    try { await client.query('RELEASE SAVEPOINT delete_deposit_queue'); } catch { /* ignore */ }
+  };
+  try {
+    let audit = 0;
+    if (plan.audit.length) {
+      audit = ((await client.query(`DELETE FROM public.deposit_audit_log a
+         WHERE a.deposit_item_id = ANY($1::uuid[]) AND a.action = 'prepare_deposit'
+         RETURNING a.id`, [ids])).rows || []).length;
+    }
+    const items = ((await client.query(`DELETE FROM public.deposit_items di
+       WHERE di.id = ANY($1::uuid[])
+         AND di.check_id = $2::uuid
+         AND di.status = 'pending_assignment'
+         AND di.batch_id IS NULL
+         AND di.provider IS NULL
+         AND di.submitted_at IS NULL
+         AND di.cleared_at IS NULL
+       RETURNING di.id`, [ids, checkId])).rows || []).length;
+    if (audit !== plan.audit.length || items !== plan.items.length) {
+      await undo();
+      return { error: 'deposit_cleanup_incomplete' };
+    }
+    await client.query('RELEASE SAVEPOINT delete_deposit_queue');
+    return { items, audit };
+  } catch (error) {
+    await undo();
+    // 42501: the role may not delete these rows; 23503: a record this code does not know still references them.
+    if (error?.code === '42501' || error?.code === '23503') return { error: 'deposit_cleanup_denied' };
+    throw error;
+  }
+}
+
 export const handleDeleteCheck = async (event, deps = {}) => {
   const gate = requireWorkflowEnabled(event, deps);
   if (gate.blocked) {
@@ -818,10 +963,24 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       });
     }
 
+    // A deposit record that never left the deposit queue does not block (owner 2026-11-17): it is removed with
+    // the check below. One that went further, or any related deposit record, still does.
+    const depositQueue = await planDepositQueueForCheckDelete(client, looked.check.id);
+    if (depositQueue.error) {
+      const unverified = depositQueue.error === 'blocker_verification_denied';
+      return denied(spoof, {
+        error: depositQueue.error,
+        message: unverified
+          ? `This check cannot be deleted because the service cannot verify financial/provider blockers (${depositQueue.blocker}).`
+          : `This check cannot be deleted because it has dependent financial/provider records (${depositQueue.blocker}).`,
+        blocker: depositQueue.blocker,
+        ...(depositQueue.reached ? { reached: depositQueue.reached } : {}),
+      });
+    }
+
     // Refuse delete once a check has entered any financial/provider pipeline tables.
     // Deleting those records is intentionally out of scope for the AWS workflow write tranche.
     const blockers = [
-      { table: 'deposit_items', sql: 'SELECT 1 FROM public.deposit_items WHERE check_id = $1::uuid LIMIT 1' },
       { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
@@ -957,6 +1116,17 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       });
     }
 
+    // The queue-only deposit record and its 'prepare_deposit' audit rows go with the check.
+    const depositRemoved = await removeDepositQueueForCheckDelete(client, looked.check.id, depositQueue);
+    if (depositRemoved.error) {
+      return denied(spoof, {
+        error: depositRemoved.error,
+        message: 'This check cannot be deleted because its deposit queue record could not be removed. Nothing was deleted.',
+        blocker: 'deposit_items',
+      });
+    }
+    const depositQueueRemoved = { deposit_items: depositQueue.items, deposit_audit_log: depositQueue.audit };
+
     // Preserve an audit snapshot before deleting the check + check_audit_log rows.
     let auditSavepointHeld = false;
     await client.query('SAVEPOINT delete_audit_snapshot');
@@ -978,7 +1148,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
               row.status ?? null,
               String(reason),
               mapping.application_user_id,
-              JSON.stringify({ ...row, billing_events_kept: billing.kept }),
+              JSON.stringify({ ...row, billing_events_kept: billing.kept, deposit_queue_removed: depositQueueRemoved }),
             ],
           );
         }
