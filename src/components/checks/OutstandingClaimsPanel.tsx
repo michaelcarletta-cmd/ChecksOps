@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { AlertTriangle, Loader2, Scale } from "lucide-react";
@@ -6,6 +6,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { extractInsuredName } from "@/features/check-command/status";
 import { displayCase } from "@/lib/displayCase";
 import { OUTSTANDING_CLAIMS_QUERY_KEY, loadOutstandingClaims } from "@/lib/outstandingClaimsLoad";
 import { filterOutstandingClaimRows, outstandingTotals } from "@/lib/outstandingClaims";
@@ -38,8 +42,29 @@ export default function OutstandingClaimsPanel({
   const { data, isLoading, error } = useQuery({
     queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY, tenantId],
     enabled: !!tenantId,
-    queryFn: () => loadOutstandingClaims(supabase, tenantId!),
+    queryFn: () => loadOutstandingClaims(supabase, tenantId!, { insuredNameFromPayeeLine: extractInsuredName }),
   });
+
+  // Deductibles can be hidden (owner 2026-11-17: public adjusters and attorneys do not collect deductibles, only
+  // contractors do). The choice is this user's, remembered in this browser; the outstanding amount is unchanged.
+  const { user } = useAuth();
+  const deductibleKey = `checksops.outstanding.showDeductible.${user?.id ?? "anonymous"}`;
+  const [showDeductible, setShowDeductible] = useState(true);
+  useEffect(() => {
+    try {
+      setShowDeductible(window.localStorage.getItem(deductibleKey) !== "0");
+    } catch {
+      setShowDeductible(true);
+    }
+  }, [deductibleKey]);
+  const changeShowDeductible = useCallback((next: boolean) => {
+    setShowDeductible(next);
+    try {
+      window.localStorage.setItem(deductibleKey, next ? "1" : "0");
+    } catch {
+      // Storage unavailable (private mode): the choice lasts for this visit only.
+    }
+  }, [deductibleKey]);
 
   const rows = useMemo(() => filterOutstandingClaimRows(data?.rows ?? [], searchQuery), [data, searchQuery]);
   const totals = useMemo(() => outstandingTotals(rows), [rows]);
@@ -60,6 +85,7 @@ export default function OutstandingClaimsPanel({
         companyName: companyName ?? "",
         asOfLabel: `As of ${format(now, "MM/dd/yyyy")}`,
         displayName: displayCase,
+        showDeductible,
       });
       const name = reportFileName(["outstanding-claims", format(now, "yyyy-MM-dd")], kind);
       if (kind === "pdf") downloadReportFile(reportTablePdf(table), name, PDF_MIME);
@@ -84,7 +110,13 @@ export default function OutstandingClaimsPanel({
               </span>
             )}
           </CardTitle>
-          <ReportExportMenu onExport={exportShown} busy={exporting} disabled={isLoading || !!error || rows.length === 0} label="Export Outstanding claims" />
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch id="outstanding-show-deductible" checked={showDeductible} onCheckedChange={changeShowDeductible} />
+              <Label htmlFor="outstanding-show-deductible" className="text-xs font-normal cursor-pointer">Show deductible</Label>
+            </div>
+            <ReportExportMenu onExport={exportShown} busy={exporting} disabled={isLoading || !!error || rows.length === 0} label="Export Outstanding claims" />
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Claims with a balance above $0: expected (full RCV plus any expected supplement) minus the checks received.
@@ -119,7 +151,7 @@ export default function OutstandingClaimsPanel({
                   {!compact && <TableHead className="text-xs text-right">Expected</TableHead>}
                   {!compact && <TableHead className="text-xs text-right">Received</TableHead>}
                   {!compact && <TableHead className="text-xs text-right whitespace-nowrap">Recoverable Dep.</TableHead>}
-                  {!compact && <TableHead className="text-xs text-right">Deductible</TableHead>}
+                  {!compact && showDeductible && <TableHead className="text-xs text-right">Deductible</TableHead>}
                   <TableHead className="text-xs text-right">Outstanding</TableHead>
                 </TableRow>
               </TableHeader>
@@ -146,19 +178,20 @@ export default function OutstandingClaimsPanel({
                       <TableCell className="py-2">
                         <div className="text-sm font-medium">{row.claimNumber ? `#${row.claimNumber}` : "No claim number"}</div>
                         <div className="text-xs text-muted-foreground">
-                          {row.policyholderName ? displayCase(row.policyholderName) : "No policyholder"}
+                          {row.policyholderName ? displayCase(row.policyholderName) : "Unknown insured"}
                           {" · "}{row.checkCount} check{row.checkCount === 1 ? "" : "s"}
                         </div>
                         {compact && (
                           <div className="text-xs text-muted-foreground tabular-nums">
-                            {money(row.received)} of {money(row.expected)} · Dep. {money(row.recoverableDepreciation)} · Ded. {money(row.deductible)}
+                            {money(row.received)} of {money(row.expected)} · Dep. {money(row.recoverableDepreciation)}
+                            {showDeductible ? ` · Ded. ${money(row.deductible)}` : ""}
                           </div>
                         )}
                       </TableCell>
                       {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.expected)}</TableCell>}
                       {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.received)}</TableCell>}
                       {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.recoverableDepreciation)}</TableCell>}
-                      {!compact && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.deductible)}</TableCell>}
+                      {!compact && showDeductible && <TableCell className="py-2 text-right text-sm tabular-nums">{money(row.deductible)}</TableCell>}
                       <TableCell className="py-2 text-right text-sm font-semibold tabular-nums text-amber-600">{money(row.outstanding)}</TableCell>
                     </TableRow>
                   );
@@ -170,7 +203,7 @@ export default function OutstandingClaimsPanel({
                   {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.expected)}</TableCell>}
                   {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.received)}</TableCell>}
                   {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.recoverableDepreciation)}</TableCell>}
-                  {!compact && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.deductible)}</TableCell>}
+                  {!compact && showDeductible && <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.deductible)}</TableCell>}
                   <TableCell className="py-2 text-right text-xs font-semibold tabular-nums">{money(totals.outstanding)}</TableCell>
                 </TableRow>
               </TableFooter>

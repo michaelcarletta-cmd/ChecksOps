@@ -6,6 +6,12 @@
  * leaves when the balance reaches $0. Each row also shows recoverable depreciation and the deductible,
  * and opens the claim's most recent check (the check file and its ledger).
  *
+ * Owner 2026-11-17 (after the first production use): a row always names at least one insured. When the
+ * claim has no policyholder name, the name comes from the claim's checks, as the Checks lanes do: an
+ * insured payee of a check, then the insured read from a check's payee line. And the deductible can be
+ * hidden (public adjusters and attorneys do not collect deductibles, only contractors do): the list and
+ * its Excel and PDF then leave the deductible out; the outstanding amount itself is unchanged.
+ *
  * Website only: the rows are built from claims, claim_settlements and check_intake_items as the
  * Claim Ledger card reads them. The builders are pure; the Excel and PDF files come from the same
  * writers as the recipient report (payments/recipientReportExport.ts).
@@ -34,11 +40,16 @@ export interface OutstandingCheckInput {
   status?: string | null;
   check_stage?: string | null;
   created_at?: string | null;
+  /** The check's raw payee line (OCR). */
+  payee_line?: string | null;
+  /** The check's payees (embedded read). */
+  check_payees?: Array<{ payee_name?: string | null; payee_type?: string | null }> | null;
 }
 
 export interface OutstandingClaimRow {
   claimId: string;
   claimNumber: string | null;
+  /** The claim's policyholder, or else an insured named on one of its checks; null only when no check names one. */
   policyholderName: string | null;
   policyholderAddress: string | null;
   /** Full RCV plus any expected supplement. */
@@ -69,6 +80,32 @@ const newestFirst = (a: OutstandingCheckInput, b: OutstandingCheckInput) =>
   || String(b.id).localeCompare(String(a.id));
 
 /**
+ * At least one insured name for a claim: the claim's policyholder; else an insured payee of one of its checks
+ * (newest check first); else the insured read from a check's payee line (insuredNameFromPayeeLine, the Checks
+ * page's extractInsuredName). The same order the Checks lanes use.
+ */
+export function insuredNameForClaim(
+  claim: OutstandingClaimInput | null | undefined,
+  checksNewestFirst: OutstandingCheckInput[],
+  insuredNameFromPayeeLine?: (payeeLine: string | null | undefined) => string | null,
+): string | null {
+  const fromClaim = text(claim?.policyholder_name);
+  if (fromClaim) return fromClaim;
+  for (const check of checksNewestFirst) {
+    for (const payee of check.check_payees ?? []) {
+      if (String(payee?.payee_type ?? "").toLowerCase() === "insured" && text(payee?.payee_name)) return text(payee?.payee_name);
+    }
+  }
+  if (insuredNameFromPayeeLine) {
+    for (const check of checksNewestFirst) {
+      const parsed = text(insuredNameFromPayeeLine(check.payee_line));
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
+/**
  * One row per claim that has at least one check and a balance above $0 (compared in whole cents),
  * largest balance first. A claim with no settlement entered expects $0 and is not listed; a check
  * with no claim is ignored; a check row repeated in the input counts once.
@@ -77,6 +114,8 @@ export function buildOutstandingClaimRows(input: {
   claims: OutstandingClaimInput[];
   settlements: OutstandingSettlementInput[];
   checks: OutstandingCheckInput[];
+  /** Reads an insured name out of a check's payee line (the Checks page's extractInsuredName). */
+  insuredNameFromPayeeLine?: (payeeLine: string | null | undefined) => string | null;
 }): OutstandingClaimRow[] {
   const claims = new Map<string, OutstandingClaimInput>();
   for (const claim of input.claims || []) if (claim?.id) claims.set(String(claim.id), claim);
@@ -100,11 +139,12 @@ export function buildOutstandingClaimRows(input: {
     const totals = claimLedgerTotals(settlements.get(claimId), checks);
     if (centsOf(totals.remaining) <= 0) continue;
     const claim = claims.get(claimId);
-    const latest = [...checks].sort(newestFirst)[0];
+    const newest = [...checks].sort(newestFirst);
+    const latest = newest[0];
     rows.push({
       claimId,
       claimNumber: text(claim?.claim_number),
-      policyholderName: text(claim?.policyholder_name),
+      policyholderName: insuredNameForClaim(claim, newest, input.insuredNameFromPayeeLine),
       policyholderAddress: text(claim?.policyholder_address),
       expected: totals.totalExpected,
       received: totals.totalReceived,
@@ -173,31 +213,35 @@ export function outstandingClaimsTable(input: {
   asOfLabel: string;
   /** Formats a stored name for display (displayCase in the app). */
   displayName?: (value: string) => string;
+  /** false leaves the Deductible column out (the viewer hid deductibles). Default true. */
+  showDeductible?: boolean;
 }): ReportTable {
   const search = String(input.search ?? "").trim();
   const show = input.displayName ?? ((value: string) => value);
   const totals = outstandingTotals(input.rows);
   const join = (...parts: Array<string | null | undefined>) => parts.map((p) => String(p ?? "").trim()).filter(Boolean).join(" – ");
-  const rows: ReportCell[][] = input.rows.map((r) => [
+  const deductibleAt = OUTSTANDING_CLAIMS_COLUMNS.findIndex((c) => c.label === "Deductible");
+  const keep = <T,>(cells: T[]): T[] => (input.showDeductible === false ? cells.filter((_cell, i) => i !== deductibleAt) : cells);
+  const rows: ReportCell[][] = input.rows.map((r) => keep<ReportCell>([
     r.claimNumber ?? "",
-    r.policyholderName ? show(r.policyholderName) : "",
+    r.policyholderName ? show(r.policyholderName) : "Unknown insured",
     r.checkCount,
     r.expected,
     r.received,
     r.recoverableDepreciation,
     r.deductible,
     r.outstanding,
-  ]);
+  ]));
   return {
     sheetName: "Outstanding",
     title: join(input.companyName, "Outstanding Claims"),
     subtitle: join("Claims with a balance above $0", search ? `matching "${search}"` : null, input.asOfLabel),
-    columns: OUTSTANDING_CLAIMS_COLUMNS,
+    columns: keep(OUTSTANDING_CLAIMS_COLUMNS),
     rows,
-    totals: [[
+    totals: [keep<ReportCell>([
       `Total (${totals.count} claim${totals.count === 1 ? "" : "s"})`, "", "",
       totals.expected, totals.received, totals.recoverableDepreciation, totals.deductible, totals.outstanding,
-    ]],
+    ])],
     note: "Outstanding = expected (full RCV across all categories plus any expected supplement) minus the checks received on the claim.",
   };
 }

@@ -17,6 +17,7 @@ import {
   OUTSTANDING_CLAIMS_COLUMNS,
   buildOutstandingClaimRows,
   filterOutstandingClaimRows,
+  insuredNameForClaim,
   outstandingClaimsTable,
   outstandingTotals,
 } from '../../src/lib/outstandingClaims.ts';
@@ -284,11 +285,96 @@ test('Checks page: an Outstanding tile, its own panel beside the check file open
   assert.match(panel, /import \{ ReportExportMenu, type ReportExportKind \} from "@\/components\/ledger\/ReportExportMenu";/);
   assert.match(panel, /<ReportExportMenu onExport=\{exportShown\}/);
   assert.match(panel, /await import\("@\/lib\/payments\/recipientReportExport"\)/);
-  assert.match(panel, /queryFn: \(\) => loadOutstandingClaims\(supabase, tenantId!\)/);
+  assert.match(panel, /queryFn: \(\) => loadOutstandingClaims\(supabase, tenantId!, \{ insuredNameFromPayeeLine: extractInsuredName \}\)/);
   for (const heading of ['Expected', 'Received', 'Recoverable Dep.', 'Deductible', 'Outstanding']) assert.ok(panel.includes(`>${heading}</TableHead>`), heading);
   // Rows are keyboard reachable.
   assert.match(panel, /role="button"\s+tabIndex=\{0\}/);
   assert.match(panel, /e\.key === "Enter" \|\| e\.key === " "/);
   // Website only: the panel writes nothing.
   assert.doesNotMatch(panel, /\.(insert|update|delete|upsert|rpc)\(/);
+});
+
+// Owner 2026-11-17, after the first production use: "It says no policy holder in outstanding tab. It should say at least
+// one insured name. Also, public adjusters or attorneys will not be collecting deductibles only contractors. Add a button
+// to toggle off deductibles or a way to waive deductibles being visible for certain users".
+const fromPayeeLine = (line) => {
+  const m = /^PAY TO THE ORDER OF (.+?)(?: AND | & |$)/i.exec(String(line ?? ''));
+  return m ? m[1] : null;
+};
+
+test('a row names at least one insured: the claim\'s policyholder, else an insured payee of a check, else the payee line', () => {
+  const claim = { id: 'c1', claim_number: 'N-1', policyholder_name: '  ' };
+  const older = { id: 'k1', claim_id: 'c1', amount: 1, created_at: '2026-01-01T00:00:00Z', payee_line: 'PAY TO THE ORDER OF OLD NAME AND ACME BANK',
+    check_payees: [{ payee_name: 'Acme Bank', payee_type: 'mortgage_company' }, { payee_name: 'Theresa Johnson', payee_type: 'insured' }] };
+  const newer = { id: 'k2', claim_id: 'c1', amount: 1, created_at: '2026-02-01T00:00:00Z', payee_line: 'PAY TO THE ORDER OF PAT SMITH & ACME BANK', check_payees: [] };
+  // The claim's own name wins.
+  assert.equal(insuredNameForClaim({ ...claim, policyholder_name: 'Maria Garcia' }, [newer, older], fromPayeeLine), 'Maria Garcia');
+  // No name on the claim: an insured payee of any of its checks, before any payee line.
+  assert.equal(insuredNameForClaim(claim, [newer, older], fromPayeeLine), 'Theresa Johnson');
+  // No insured payee: the newest check's payee line.
+  assert.equal(insuredNameForClaim(claim, [newer, { ...older, check_payees: null }], fromPayeeLine), 'PAT SMITH');
+  // A mortgage company payee is never used as the insured.
+  assert.equal(insuredNameForClaim(claim, [{ ...older, check_payees: [{ payee_name: 'Acme Bank', payee_type: 'mortgage_company' }], payee_line: null }], fromPayeeLine), null);
+  // Without a payee-line reader, or with nothing to read, there is no name.
+  assert.equal(insuredNameForClaim(claim, [newer], undefined), null);
+  assert.equal(insuredNameForClaim(null, [], fromPayeeLine), null);
+
+  const rows = buildOutstandingClaimRows({
+    claims: [claim],
+    settlements: [{ claim_id: 'c1', replacement_cost_value: 1000, deductible: 250 }],
+    checks: [older, newer],
+    insuredNameFromPayeeLine: fromPayeeLine,
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].policyholderName, 'Theresa Johnson');
+  // The name is searchable like a policyholder name.
+  assert.deepEqual(filterOutstandingClaimRows(rows, 'theresa').map((r) => r.claimId), ['c1']);
+  // The loader passes the reader through and asks for the payee line and payees.
+  for (const column of ['payee_line', 'check_payees(payee_name, payee_type)']) assert.ok(OUTSTANDING_CHECK_COLUMNS.includes(column), column);
+});
+
+test('the loader uses the insured-name reader it is given', async () => {
+  const client = fakeClient({
+    check_intake_items: [{ id: 'k1', tenant_id: 't', claim_id: 'c1', amount: 10, created_at: '2026-02-01T00:00:00Z', payee_line: 'PAY TO THE ORDER OF PAT SMITH & ACME BANK' }],
+    claims: [{ id: 'c1', claim_number: 'N-1', policyholder_name: null }],
+    claim_settlements: [{ claim_id: 'c1', replacement_cost_value: 100 }],
+  });
+  assert.equal((await loadOutstandingClaims(client, 't', { insuredNameFromPayeeLine: fromPayeeLine })).rows[0].policyholderName, 'PAT SMITH');
+  assert.equal((await loadOutstandingClaims(client, 't')).rows[0].policyholderName, null);
+});
+
+test('deductibles can be hidden: the export drops the column; the outstanding amount and the other columns do not change', () => {
+  const rows = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS });
+  const shown = outstandingClaimsTable({ rows, asOfLabel: 'As of today' });
+  const hidden = outstandingClaimsTable({ rows, asOfLabel: 'As of today', showDeductible: false });
+  assert.deepEqual(hidden.columns.map((c) => c.label), ['Claim #', 'Policyholder', 'Checks', 'Expected', 'Received', 'Recoverable Dep.', 'Outstanding']);
+  assert.deepEqual(hidden.rows[0], ['CLM-100', 'THERESA JOHNSON', 2, 74000.5, 42000.25, 10000, 32000.25]);
+  assert.deepEqual(hidden.totals, [['Total (2 claims)', '', '', 94000.5, 62000.24, 13000, 32000.26]]);
+  for (const row of [...hidden.rows, ...hidden.totals]) assert.equal(row.length, hidden.columns.length);
+  // Same figures as with the column shown, minus that one cell.
+  assert.deepEqual(shown.rows[0].filter((_c, i) => i !== 6), hidden.rows[0]);
+  assert.equal(shown.columns.length, 8);
+  assert.equal(outstandingClaimsTable({ rows, asOfLabel: 'x', showDeductible: true }).columns.length, 8);
+  // A claim with no insured name anywhere exports as "Unknown insured", never blank.
+  const bare = buildOutstandingClaimRows({ claims: [], settlements: SETTLEMENTS, checks: CHECKS });
+  assert.equal(outstandingClaimsTable({ rows: bare, asOfLabel: 'x' }).rows[0][1], 'Unknown insured');
+});
+
+test('panel: a per-user "Show deductible" switch, remembered in the browser, and "Unknown insured" instead of "No policyholder"', () => {
+  const panel = read('src/components/checks/OutstandingClaimsPanel.tsx');
+  assert.match(panel, /import \{ extractInsuredName \} from "@\/features\/check-command\/status";/);
+  assert.match(panel, /const deductibleKey = `checksops\.outstanding\.showDeductible\.\$\{user\?\.id \?\? "anonymous"\}`;/);
+  assert.match(panel, /window\.localStorage\.getItem\(deductibleKey\) !== "0"/);
+  assert.match(panel, /window\.localStorage\.setItem\(deductibleKey, next \? "1" : "0"\)/);
+  assert.match(panel, /<Switch id="outstanding-show-deductible" checked=\{showDeductible\} onCheckedChange=\{changeShowDeductible\} \/>/);
+  assert.match(panel, /<Label htmlFor="outstanding-show-deductible"[^>]*>Show deductible<\/Label>/);
+  // Header, row cell and total all follow the switch; so does the export.
+  assert.equal((panel.match(/\{!compact && showDeductible && </g) || []).length, 3);
+  assert.match(panel, /showDeductible \? ` · Ded\. \$\{money\(row\.deductible\)\}` : ""/);
+  assert.match(panel, /displayName: displayCase,\s+showDeductible,/);
+  assert.ok(panel.includes('"Unknown insured"'));
+  assert.ok(!panel.includes('No policyholder'));
+  // The Checks lanes read the insured name the same way (policyholder, insured payee, payee line).
+  const page = read('src/pages/CheckCommandCenter.tsx');
+  assert.match(page, /linked\?\.policyholder_name \|\| insuredPayee \|\| parsedInsured \|\| "Unknown insured"/);
 });

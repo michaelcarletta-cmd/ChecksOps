@@ -15,7 +15,8 @@ import {
   type OutstandingSettlementInput,
 } from "./outstandingClaims.ts";
 
-export const OUTSTANDING_CHECK_COLUMNS = "id, claim_id, check_number, amount, carrier_name, issue_date, status, check_stage, created_at";
+/** The claim-linked check columns, with the payee line and payees an insured name can come from (as the Checks lanes read them). */
+export const OUTSTANDING_CHECK_COLUMNS = "id, claim_id, check_number, amount, carrier_name, issue_date, status, check_stage, created_at, payee_line, check_payees(payee_name, payee_type)";
 export const OUTSTANDING_CLAIM_COLUMNS = "id, claim_number, policyholder_name, policyholder_address";
 /** React Query key of the Outstanding list (with the tenant id). */
 export const OUTSTANDING_CLAIMS_QUERY_KEY = "outstanding-claims";
@@ -55,7 +56,11 @@ async function readInChunks<T>(ids: string[], read: (chunk: string[]) => Promise
   return rows;
 }
 
-export async function loadOutstandingClaims(client: OutstandingClient, tenantId: string): Promise<OutstandingClaimsResult> {
+export async function loadOutstandingClaims(
+  client: OutstandingClient,
+  tenantId: string,
+  opts: { insuredNameFromPayeeLine?: (payeeLine: string | null | undefined) => string | null } = {},
+): Promise<OutstandingClaimsResult> {
   const checks = await fetchQueueList<OutstandingCheckInput>((from, to) => client
     .from("check_intake_items")
     .select(OUTSTANDING_CHECK_COLUMNS, { count: "exact" })
@@ -72,7 +77,7 @@ export async function loadOutstandingClaims(client: OutstandingClient, tenantId:
     readInChunks<OutstandingSettlementInput>(claimIds, (chunk) => client.from("claim_settlements").select("*").in("claim_id", chunk)),
   ]);
   return {
-    rows: buildOutstandingClaimRows({ claims, settlements, checks: checks.rows }),
+    rows: buildOutstandingClaimRows({ claims, settlements, checks: checks.rows, insuredNameFromPayeeLine: opts.insuredNameFromPayeeLine }),
     incomplete: checks.incomplete,
     checkCount: checks.rows.length,
     claimCount: claimIds.length,
