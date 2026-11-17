@@ -291,6 +291,6 @@ export const handleJwksCheck = async (event) => {
     restoredTablesRlsEnabled: true,
     jwks,
     tokenCheck,
-    networking: 'cognito-idp interface VPC endpoint (PrivateLink), not NAT, RDS remains private',
+    networking: 'cognito-idp over the NAT gateway (the interface VPC endpoint was removed 2026-11-17), RDS remains private',
   };
 };

@@ -2564,6 +2564,20 @@
       "reason": "PR #1844 (partner send from a shared check) updates the moov-production-send tree_hash; open PR #1845 (production SPA lock record, index-BZl3Tfjf, run 43320826494) edits the production-spa and production-release entries of the same file, and each PR's overlap check failed on the other. Owner approved 2026-11-12: \"Merge 1845\", then, asked for this exception, \"Ok proceed\". This exception is limited to that single file; PR #1845 merges second, merges main and re-derives its tree hashes. It does not merge, edit or deploy PR #1845.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 429,
+      "path": "aws/functions/api/authorization.mjs",
+      "reason": "This PR changes one string in authorization.mjs: the `networking` text returned by GET /authorization/jwks-check, which still said PrivateLink after the Cognito interface endpoint was removed on 2026-11-17 (aws/rls/COGNITO_IDP_VPCE.md). Open draft PR #429 (Pre-cutover claim ownership invariant, opened 2026-09-22, not updated since) adds five lines to the same file, all in the authorization probe (an import, bodyOrgId, an event parameter and a bindActiveTenantSlug call); none is in handleJwksCheck, so the two changes do not touch the same lines. The first attempt (#1986) was refused by this check and the owner chose to drop the code change; then, told the file stays blocked until #429 and #430 are merged, closed or given an exception, the owner said \"Work on JWKS route\" (2026-11-17). The owner reviews this exception with the PR that adds it. It is limited to this single file. It does not merge, edit, close or deploy PR #429; that PR merges main before it can land.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 430,
+      "path": "aws/functions/api/authorization.mjs",
+      "reason": "This PR changes one string in authorization.mjs: the `networking` text returned by GET /authorization/jwks-check, which still said PrivateLink after the Cognito interface endpoint was removed on 2026-11-17 (aws/rls/COGNITO_IDP_VPCE.md). Open draft PR #430 (E12 — Core AWS production stabilization, opened 2026-09-22, not updated since) adds five lines to the same file, all in the authorization probe (an import, bodyOrgId, an event parameter and a bindActiveTenantSlug call); none is in handleJwksCheck, so the two changes do not touch the same lines. The first attempt (#1986) was refused by this check and the owner chose to drop the code change; then, told the file stays blocked until #429 and #430 are merged, closed or given an exception, the owner said \"Work on JWKS route\" (2026-11-17). The owner reviews this exception with the PR that adds it. It is limited to this single file. It does not merge, edit, close or deploy PR #430; that PR merges main before it can land.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
