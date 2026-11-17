@@ -117,11 +117,12 @@ test('financial delete blockers include provider and disbursement tables', () =>
     FINANCIAL_DELETE_BLOCKERS.map((row) => row.table).sort(),
     [
       'check_payment_directions',
-      'checkalt_deposits',
       'claim_check_payments',
       'disbursement_batches',
     ],
   );
+  // checkalt_deposits is decided by workflow.mjs planCheckAltDepositsForCheckDelete (owner 2026-11-17): a record Check Alt
+  // never took goes with the check; one it took, or may have, still blocks (the Check Alt test below).
   // deposit_items is decided by workflow.mjs planDepositQueueForCheckDelete (owner 2026-11-17): a record that never left
   // the deposit queue goes with the check; anything further still blocks (the deposit_items test below).
 });
@@ -222,6 +223,10 @@ test('CheckAlt / deposit_items financial dependency remains blocked', async () =
   assert.equal(result.ok, false);
   assert.equal(result.error, 'cleanup_denied');
   assert.equal(result.blocker, 'checkalt_deposits');
+  // A row that cannot be read as a Check Alt deposit record never counts as one Check Alt did not take.
+  assert.deepEqual(result.reached, ['unreadable']);
+  assert.equal(result.message, 'Refusing to delete a check with dependent financial/provider records (checkalt_deposits): '
+    + 'Check Alt took this deposit or may have (the Check Alt deposit record could not be read)');
 });
 
 test('a deposit record that cannot be shown to be queue-only remains blocked (deposit_items)', async () => {

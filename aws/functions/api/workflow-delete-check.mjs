@@ -27,6 +27,7 @@ import { isPartnerLinked, isTerminalFinancial, TENANT_MEMBER_SQL } from './workf
 import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
 import {
   describeDepositQueueProgress,
+  planCheckAltDepositsForCheckDelete,
   planDepositQueueForCheckDelete,
   removeDepositQueueForCheckDelete,
   settleBillingEventsForCheckDelete,
@@ -109,8 +110,9 @@ const lookupWorkflowCheck = async (client, checkId) => {
 
 // deposit_items is not in this list: workflow.mjs planDepositQueueForCheckDelete decides it (a record that never
 // left the deposit queue goes with the check; one that went further, or any related deposit record, blocks).
+// checkalt_deposits is not in this list either: workflow.mjs planCheckAltDepositsForCheckDelete decides it (a record
+// Check Alt never took goes with the check; one it took, or may have, blocks).
 export const FINANCIAL_DELETE_BLOCKERS = Object.freeze([
-  { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'check_payment_directions', sql: 'SELECT 1 FROM public.check_payment_directions WHERE check_id = $1::uuid LIMIT 1' },
@@ -371,6 +373,20 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       });
     }
 
+    const checkAlt = await planCheckAltDepositsForCheckDelete(client, looked.check.id);
+    if (checkAlt.error) {
+      return denied(spoof, {
+        error: 'cleanup_denied',
+        message: checkAlt.error === 'blocker_verification_denied'
+          ? `Refusing to delete: unable to verify financial/provider blockers (${checkAlt.blocker})`
+          : `Refusing to delete a check with dependent financial/provider records (${checkAlt.blocker})${
+            !checkAlt.reached ? ''
+              : `: Check Alt took this deposit or may have (${describeDepositQueueProgress(checkAlt.reached).replace('the deposit record', 'the Check Alt deposit record')})`}`,
+        blocker: checkAlt.blocker,
+        ...(checkAlt.reached ? { reached: checkAlt.reached } : {}),
+      });
+    }
+
     for (const [idx, blocker] of FINANCIAL_DELETE_BLOCKERS.entries()) {
       try {
         const blocked = await runWithSavepoint(client, `delete_blocker_${idx}`, async () => {
@@ -443,7 +459,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
             row.status ?? null,
             String(reason),
             mapping.application_user_id,
-            JSON.stringify({ ...row, billing_events_kept: billing.kept, deposit_queue_removed: depositQueueRemoved }),
+            JSON.stringify({ ...row, billing_events_kept: billing.kept, deposit_queue_removed: depositQueueRemoved, checkalt_deposits_removed: checkAlt.deposits }),
           ],
         );
       }

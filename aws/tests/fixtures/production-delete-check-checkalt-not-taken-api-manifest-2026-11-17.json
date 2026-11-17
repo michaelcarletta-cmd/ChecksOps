@@ -1,0 +1,15 @@
+{
+  "workstream_id": "delete-check-checkalt-not-taken-api",
+  "authorization": "Pending owner review (2026-11-17). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Delete Check and a Check Alt deposit record that Check Alt never took (owner 2026-11-17: after the assigned-deposit change the delete of the owner's check answered \"(checkalt_deposits)\"; the owner: \"Stil can't delete checkalt_deposits\" and \"We tried to deposit but the image wasn't accepted\"). workflow.mjs: a Check Alt deposit record no longer blocks Delete Check when Check Alt never took the deposit (checkAltDepositProgress, planCheckAltDepositsForCheckDelete): queued or pending and never sent (no send attempt, no Check Alt reference, nothing submitted); or rejected; or error with no Check Alt reference; and in every case nothing cleared, returned or approved and the status not marked unresolved. Such records leave with the check through their ON DELETE CASCADE key (no statement writes checkalt_deposits) and are listed in the deletion log (checkalt_deposits_removed). Still refused: submitting (a send whose outcome is unknown), submitted, pending_approval, cleared, returned, duplicate, any other status, a record that cannot be read, or a wallet funding entry made from the record (blocker wallet_funding_queue); the refusal says what the record reached, status and field names only (\"Check Alt took this deposit or may have (...)\"). The other blockers (disbursement batches, claim check payments, payment directions, claim disbursements, a deposited claim check) are unchanged. No new import, no new SQL: sql_before stays SQL 169 (recorded live in production and staging). One REPLACE from the bytes production runs (the assigned-deposit bytes applied 2026-11-17, production run 44103825531, VERIFIED by re-inspect run 44104153669): workflow.mjs 5fe6eab0 -> 2d7f101b. workflow-delete-check.mjs (do_not_overlay, not deployed) follows by importing the helper. No member is added; order unchanged; index.mjs is untouched. Not verified: the state of the owner's Check Alt record, and whether the checkalt_deposits key cascades in live staging and production as it does in the Supabase schema (if it does not, the check's DELETE is refused by the key and nothing is removed). Planning only.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "5fe6eab0b6e1d8875f8109e3697fae65d1040cfa0307dd3583899b98afb38a26",
+      "accepted_sha256": "2d7f101b95335ce89a9114298d5ac229a5d28ba5009a3dabfba83d265487d9bc",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-delete-check-assigned-deposit-api-applied-manifest-2026-11-17.json"
+    }
+  }
+}
