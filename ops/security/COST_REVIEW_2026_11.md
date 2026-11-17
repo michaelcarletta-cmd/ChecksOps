@@ -153,7 +153,7 @@ change every VPC Lambda runs only in `subnet-0df2518070c5b9ff0` (us-east-1a).
 
 Read first: no file in the repository uses a zone-specific endpoint name. Verified:
 `GET /staging/db-health` 30 of 30 HTTP 200 from 20:24 to 20:25:58, while the staging endpoint was
-changing. Production API access log 20:15–20:28: HTTP 200 for every request (2 a minute until
+changing. Production API access log 20:15–20:28: HTTP 200 for every request (1 or 2 a minute until
 20:25, then 45 to 63 a minute); Lambda average duration 85–206 ms; no log line matching a timeout,
 a connection error or a secret error. Two endpoint interfaces fewer is 2 x 730 h x $0.01 =
 about $14.60 a month.
