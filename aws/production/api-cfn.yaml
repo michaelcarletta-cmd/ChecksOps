@@ -64,7 +64,7 @@ Resources:
       MemorySize: 1024
       Role: !Ref ExistingExecutionRoleArn
       TracingConfig:
-        Mode: Active
+        Mode: PassThrough
       Code:
         S3Bucket: !Ref CodeS3Bucket
         S3Key: !Ref CodeS3Key
