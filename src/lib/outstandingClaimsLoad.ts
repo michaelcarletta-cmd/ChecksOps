@@ -13,6 +13,7 @@ import {
   type OutstandingClaimInput,
   type OutstandingClaimRow,
   type OutstandingSettlementInput,
+  type OutstandingShareInput,
 } from "./outstandingClaims.ts";
 
 /** The claim-linked check columns, with the payee line and payees an insured name can come from (as the Checks lanes read them). */
@@ -35,6 +36,32 @@ export interface OutstandingClaimsResult {
   incomplete: boolean;
   checkCount: number;
   claimCount: number;
+  /** False when the partner shares or names could not be read: rows then list no partners. */
+  partnersLoaded: boolean;
+}
+
+type ShareRow = OutstandingShareInput & { id: string };
+
+/**
+ * The partners this company's checks are actively shared with (shared_checks it is the source of, not revoked)
+ * and their names (tenants_public). Best effort: a failed read leaves the list without partners, not broken.
+ */
+async function loadPartnerShares(client: OutstandingClient, tenantId: string): Promise<{ shares: ShareRow[]; partnerNames: Array<{ id: string; name?: string | null }>; ok: boolean }> {
+  try {
+    const shares = await fetchQueueList<ShareRow>((from, to) => client
+      .from("shared_checks")
+      .select("id, check_id, target_tenant_id", { count: "exact" })
+      .eq("source_tenant_id", tenantId)
+      .is("revoked_at", null)
+      .order("id", { ascending: true })
+      .range(from, to) as PromiseLike<QueuePage<ShareRow>>);
+    if (shares.error) return { shares: [], partnerNames: [], ok: false };
+    const partnerIds = [...new Set(shares.rows.map((share) => String(share.target_tenant_id || "")).filter(Boolean))];
+    const partnerNames = await readInChunks<{ id: string; name?: string | null }>(partnerIds, (chunk) => client.from("tenants_public").select("id, name").in("id", chunk));
+    return { shares: shares.rows, partnerNames, ok: !shares.incomplete };
+  } catch {
+    return { shares: [], partnerNames: [], ok: false };
+  }
 }
 
 const chunksOf = <T,>(items: T[], size: number): T[][] => {
@@ -72,14 +99,19 @@ export async function loadOutstandingClaims(
   if (checks.error) throw checks.error;
 
   const claimIds = [...new Set(checks.rows.map((check) => String(check.claim_id || "")).filter(Boolean))];
-  const [claims, settlements] = await Promise.all([
+  const [claims, settlements, partners] = await Promise.all([
     readInChunks<OutstandingClaimInput>(claimIds, (chunk) => client.from("claims").select(OUTSTANDING_CLAIM_COLUMNS).in("id", chunk)),
     readInChunks<OutstandingSettlementInput>(claimIds, (chunk) => client.from("claim_settlements").select("*").in("claim_id", chunk)),
+    loadPartnerShares(client, tenantId),
   ]);
   return {
-    rows: buildOutstandingClaimRows({ claims, settlements, checks: checks.rows, insuredNameFromPayeeLine: opts.insuredNameFromPayeeLine }),
+    rows: buildOutstandingClaimRows({
+      claims, settlements, checks: checks.rows, insuredNameFromPayeeLine: opts.insuredNameFromPayeeLine,
+      shares: partners.shares, partnerNames: partners.partnerNames,
+    }),
     incomplete: checks.incomplete,
     checkCount: checks.rows.length,
     claimCount: claimIds.length,
+    partnersLoaded: partners.ok,
   };
 }
