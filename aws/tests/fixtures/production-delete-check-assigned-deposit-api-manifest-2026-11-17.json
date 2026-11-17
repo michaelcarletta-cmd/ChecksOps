@@ -1,0 +1,15 @@
+{
+  "workstream_id": "delete-check-assigned-deposit-api",
+  "authorization": "Pending owner review (2026-11-17). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Delete Check and a deposit record that was only assigned (owner 2026-11-17: after the refusal-message change the delete of the owner's check answered \"Its deposit record went beyond the deposit queue (status provider_assigned; set: batch_id, provider).\" and the owner reported \"still cant delete\"). workflow.mjs: a deposit record that was only assigned to a provider and a batch (status provider_assigned, batch_id and provider set, nothing else: what workflow-rpc.mjs assign_provider writes) no longer blocks Delete Check, provided its batch is readable, still open, and has nothing submitted or cleared (depositBlockingProgress, depositBatchProgress). The record and its 'prepare_deposit' and 'assign_provider' audit rows go with the check; the batch's total_items and total_amount are reduced by this record and the batch row stays (never deleted); the record, the audit rows and the batch as it was are listed in the deletion log (deposit_queue_removed.deposit_batches_adjusted). Still refused: a record that reached anything more (submission, provider reference, reconciliation, clearing, exception, NSF, closeout), a batch that is not open (blocker deposit_batches, message \"Its deposit batch is no longer open (...)\"), and any related deposit record (provider attempts, exceptions, webhooks, escalations, attachments, an audit row of another action). If the API role may not change the batch or delete the rows, the delete refuses and nothing is removed. No new import, no new SQL: sql_before stays SQL 169 (recorded live in production and staging). One REPLACE from the bytes production runs (the refusal-message bytes applied 2026-11-17, production run 44093405113, VERIFIED by re-inspect run 44093709935): workflow.mjs f49df872 -> 5fe6eab0. workflow-delete-check.mjs (do_not_overlay, not deployed) follows by importing the helpers. No member is added; order unchanged; index.mjs is untouched. Not verified: whether the API role may update deposit_batches and delete deposit_items / deposit_audit_log rows in live staging and production. Planning only.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "f49df8729818b503c955c964509c1c1a8cd64cdd84c7e0fc8e191c12baad4545",
+      "accepted_sha256": "5fe6eab0b6e1d8875f8109e3697fae65d1040cfa0307dd3583899b98afb38a26",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-delete-check-reached-message-api-applied-manifest-2026-11-17.json"
+    }
+  }
+}

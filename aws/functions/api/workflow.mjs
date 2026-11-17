@@ -782,10 +782,14 @@ export async function settleBillingEventsForCheckDelete(client, checkId) {
 // Owner 2026-11-17: a check's deposit record does not block a delete when it never left the deposit queue, that is
 // status pending_assignment and no batch, provider, submission, reconciliation, clearing, exception, NSF or closeout
 // data (workflow-rpc.mjs prepare_deposit writes exactly that row plus one 'prepare_deposit' deposit_audit_log row).
-// That record and its 'prepare_deposit' audit rows go with the check and are listed in the check_deletion_log
-// snapshot (deposit_queue_removed). Anything further still blocks: a deposit record that reached any of the fields
-// below, or any related deposit record (provider attempts, exceptions, webhooks, escalations, attachments, or an
-// audit row of another action).
+// Nor, since the owner's check was refused with "status provider_assigned; set: batch_id, provider" (2026-11-17), when
+// it was only assigned to a provider and a batch (workflow-rpc.mjs assign_provider: those three fields plus one
+// 'assign_provider' audit row) and that batch is still open with nothing submitted or cleared.
+// The record and its 'prepare_deposit' / 'assign_provider' audit rows go with the check, an assigned record is taken
+// out of its batch's totals, and all of it is listed in the check_deletion_log snapshot (deposit_queue_removed).
+// Anything further still blocks: a deposit record that reached any other field below, a batch that is not open, or
+// any related deposit record (provider attempts, exceptions, webhooks, escalations, attachments, or an audit row of
+// another action).
 export const DEPOSIT_ITEMS_FOR_DELETE_SQL = `SELECT to_jsonb(di) AS item
   FROM public.deposit_items di
  WHERE di.check_id = $1::uuid
@@ -819,6 +823,37 @@ export const depositQueueProgress = (row) => {
 };
 
 /**
+ * Assigned to a provider and a batch, with nothing after it (owner 2026-11-17): these alone do not block Delete Check.
+ * The batch itself must still be open and unsubmitted (planDepositQueueForCheckDelete reads it).
+ */
+export const DEPOSIT_ASSIGNED_ONLY_PROGRESS = Object.freeze(['status:provider_assigned', 'batch_id', 'provider']);
+
+/** What blocks the delete: [] for a queue record or one that was only assigned; otherwise everything it reached. */
+export const depositBlockingProgress = (row) => {
+  const reached = depositQueueProgress(row);
+  return reached.every((entry) => DEPOSIT_ASSIGNED_ONLY_PROGRESS.includes(entry)) ? [] : reached;
+};
+
+/** Why a deposit batch blocks the delete ([] when it is open and nothing was submitted or cleared from it). */
+export const depositBatchProgress = (batch) => {
+  if (!batch || typeof batch !== 'object' || !batch.id) return ['unreadable'];
+  const reached = [];
+  if (batch.status !== 'open') reached.push(`status:${batch.status ?? 'unknown'}`);
+  for (const field of ['submitted_at', 'cleared_at']) {
+    if (batch[field] !== undefined && batch[field] !== null) reached.push(field);
+  }
+  for (const field of ['cleared_amount', 'failed_amount']) {
+    if (batch[field] !== undefined && batch[field] !== null && Number(batch[field]) !== 0) reached.push(field);
+  }
+  return reached;
+};
+
+export const DEPOSIT_BATCHES_FOR_DELETE_SQL = `SELECT to_jsonb(b) AS batch
+  FROM public.deposit_batches b
+ WHERE b.id = ANY($1::uuid[])
+ ORDER BY b.id`;
+
+/**
  * What a refused deposit record reached, in words, for the refusal message (the website shows only the message):
  * "status provider_assigned; set: batch_id, provider". Field names and the status only, never a stored value.
  */
@@ -837,12 +872,12 @@ export const DEPOSIT_QUEUE_RELATED_BLOCKERS = Object.freeze([
   ...['deposit_provider_attempts', 'deposit_exceptions', 'deposit_webhook_events', 'deposit_escalation_events', 'deposit_attachments']
     .map((table) => ({ table, sql: `SELECT 1 FROM public.${table} WHERE deposit_item_id = ANY($1::uuid[]) LIMIT 1` })),
   { table: 'deposit_audit_log', sql: `SELECT 1 FROM public.deposit_audit_log
-      WHERE deposit_item_id = ANY($1::uuid[]) AND action IS DISTINCT FROM 'prepare_deposit' LIMIT 1` },
+      WHERE deposit_item_id = ANY($1::uuid[]) AND (action IS NULL OR action NOT IN ('prepare_deposit', 'assign_provider')) LIMIT 1` },
 ]);
 
 export const DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL = `SELECT to_jsonb(a) AS entry
   FROM public.deposit_audit_log a
- WHERE a.deposit_item_id = ANY($1::uuid[]) AND a.action = 'prepare_deposit'
+ WHERE a.deposit_item_id = ANY($1::uuid[]) AND a.action IN ('prepare_deposit', 'assign_provider')
  ORDER BY a.created_at, a.id`;
 
 const inDeleteSavepoint = async (client, name, fn) => {
@@ -877,13 +912,25 @@ export async function planDepositQueueForCheckDelete(client, checkId) {
   };
   const found = await read('delete_deposit_queue_read', 'deposit_items', DEPOSIT_ITEMS_FOR_DELETE_SQL, [checkId]);
   if (found.error) return found;
-  if (!found.rows.length) return { items: [], audit: [] };
+  if (!found.rows.length) return { items: [], audit: [], batches: [] };
   const items = found.rows.map((row) => row?.item);
   for (const item of items) {
-    const reached = depositQueueProgress(item);
+    const reached = depositBlockingProgress(item);
     if (reached.length) return { error: 'check_has_financial_activity', blocker: 'deposit_items', reached };
   }
   const ids = items.map((item) => String(item.id));
+  // An assigned record sits in a batch: the batch must be readable, open, and have nothing submitted or cleared.
+  const batchIds = [...new Set(items.map((item) => item.batch_id).filter(Boolean).map(String))];
+  let batches = [];
+  if (batchIds.length) {
+    const read_ = await read('delete_deposit_queue_batches', 'deposit_batches', DEPOSIT_BATCHES_FOR_DELETE_SQL, [batchIds]);
+    if (read_.error) return read_;
+    batches = read_.rows.map((row) => row?.batch ?? row);
+    for (const batchId of batchIds) {
+      const reached = depositBatchProgress(batches.find((batch) => String(batch?.id) === batchId));
+      if (reached.length) return { error: 'check_has_financial_activity', blocker: 'deposit_batches', reached };
+    }
+  }
   for (const [idx, related] of DEPOSIT_QUEUE_RELATED_BLOCKERS.entries()) {
     const rows = await read(`delete_deposit_queue_related_${idx}`, related.table, related.sql, [ids]);
     if (rows.error) return rows;
@@ -891,7 +938,7 @@ export async function planDepositQueueForCheckDelete(client, checkId) {
   }
   const audit = await read('delete_deposit_queue_audit', 'deposit_audit_log', DEPOSIT_QUEUE_AUDIT_FOR_DELETE_SQL, [ids]);
   if (audit.error) return audit;
-  return { items, audit: audit.rows.map((row) => row?.entry ?? row) };
+  return { items, audit: audit.rows.map((row) => row?.entry ?? row), batches };
 }
 
 /**
@@ -901,7 +948,7 @@ export async function planDepositQueueForCheckDelete(client, checkId) {
  * refused and nothing is removed.
  */
 export async function removeDepositQueueForCheckDelete(client, checkId, plan) {
-  if (!plan?.items?.length) return { items: 0, audit: 0 };
+  if (!plan?.items?.length) return { items: 0, audit: 0, batches: 0 };
   const ids = plan.items.map((item) => String(item.id));
   await client.query('SAVEPOINT delete_deposit_queue');
   const undo = async () => {
@@ -912,24 +959,35 @@ export async function removeDepositQueueForCheckDelete(client, checkId, plan) {
     let audit = 0;
     if (plan.audit.length) {
       audit = ((await client.query(`DELETE FROM public.deposit_audit_log a
-         WHERE a.deposit_item_id = ANY($1::uuid[]) AND a.action = 'prepare_deposit'
+         WHERE a.deposit_item_id = ANY($1::uuid[]) AND a.action IN ('prepare_deposit', 'assign_provider')
          RETURNING a.id`, [ids])).rows || []).length;
+    }
+    // Take each assigned record out of its batch's totals while the record still exists (the batch is reached
+    // through its records). Only an open, unsubmitted batch is changed; the batch row itself stays.
+    let batches = 0;
+    const batched = plan.items.filter((item) => item.batch_id);
+    for (const item of batched) {
+      batches += ((await client.query(`UPDATE public.deposit_batches b
+          SET total_items = GREATEST(b.total_items - 1, 0),
+              total_amount = GREATEST(b.total_amount - COALESCE($2::numeric, 0), 0),
+              updated_at = now()
+        WHERE b.id = $1::uuid AND b.status = 'open' AND b.submitted_at IS NULL AND b.cleared_at IS NULL
+        RETURNING b.id`, [String(item.batch_id), item.amount ?? null])).rows || []).length;
     }
     const items = ((await client.query(`DELETE FROM public.deposit_items di
        WHERE di.id = ANY($1::uuid[])
          AND di.check_id = $2::uuid
-         AND di.status = 'pending_assignment'
-         AND di.batch_id IS NULL
-         AND di.provider IS NULL
+         AND di.status IN ('pending_assignment', 'provider_assigned')
+         AND di.provider_reference IS NULL
          AND di.submitted_at IS NULL
          AND di.cleared_at IS NULL
        RETURNING di.id`, [ids, checkId])).rows || []).length;
-    if (audit !== plan.audit.length || items !== plan.items.length) {
+    if (audit !== plan.audit.length || items !== plan.items.length || batches !== batched.length) {
       await undo();
       return { error: 'deposit_cleanup_incomplete' };
     }
     await client.query('RELEASE SAVEPOINT delete_deposit_queue');
-    return { items, audit };
+    return { items, audit, batches };
   } catch (error) {
     await undo();
     // 42501: the role may not delete these rows; 23503: a record this code does not know still references them.
@@ -987,7 +1045,10 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         message: unverified
           ? `This check cannot be deleted because the service cannot verify financial/provider blockers (${depositQueue.blocker}).`
           : `This check cannot be deleted because it has dependent financial/provider records (${depositQueue.blocker}).${
-            depositQueue.reached ? ` Its deposit record went beyond the deposit queue (${describeDepositQueueProgress(depositQueue.reached)}).` : ''}`,
+            !depositQueue.reached ? ''
+              : depositQueue.blocker === 'deposit_batches'
+                ? ` Its deposit batch is no longer open (${describeDepositQueueProgress(depositQueue.reached).replace('the deposit record', 'the deposit batch')}).`
+                : ` Its deposit record went beyond the deposit queue (${describeDepositQueueProgress(depositQueue.reached)}).`}`,
         blocker: depositQueue.blocker,
         ...(depositQueue.reached ? { reached: depositQueue.reached } : {}),
       });
@@ -1140,7 +1201,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
         blocker: 'deposit_items',
       });
     }
-    const depositQueueRemoved = { deposit_items: depositQueue.items, deposit_audit_log: depositQueue.audit };
+    const depositQueueRemoved = { deposit_items: depositQueue.items, deposit_audit_log: depositQueue.audit, deposit_batches_adjusted: depositQueue.batches };
 
     // Preserve an audit snapshot before deleting the check + check_audit_log rows.
     let auditSavepointHeld = false;
