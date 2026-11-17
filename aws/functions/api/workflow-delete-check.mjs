@@ -13,6 +13,8 @@
  * - partner/shared and terminal financial states block
  * - deposit/provider/disbursement rows block; billing charges do not (SQL 169 keeps them, unlinked;
  *   the provisional rows go, as in workflow.mjs settleBillingEventsForCheckDelete)
+ * - a deposit record that never left the deposit queue does not block: it and its 'prepare_deposit' audit rows
+ *   go with the check (workflow.mjs planDepositQueueForCheckDelete / removeDepositQueueForCheckDelete)
  * - non-financial dependents are cleaned
  * - check_deletion_log audit
  * - check-scoped S3 cleanup after successful DB delete (skipped when storage writes are off)
@@ -23,7 +25,11 @@ import { applicationWorkflowWritesEnabled } from './workflow-flags.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
 import { isPartnerLinked, isTerminalFinancial, TENANT_MEMBER_SQL } from './workflow-transitions.mjs';
 import { isCheckScopedPathFor, normalizePath, s3KeyFor } from './storage-paths.mjs';
-import { settleBillingEventsForCheckDelete } from './workflow.mjs';
+import {
+  planDepositQueueForCheckDelete,
+  removeDepositQueueForCheckDelete,
+  settleBillingEventsForCheckDelete,
+} from './workflow.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_CHECK_DELETE_KEYS = 2000;
@@ -100,8 +106,9 @@ const lookupWorkflowCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
+// deposit_items is not in this list: workflow.mjs planDepositQueueForCheckDelete decides it (a record that never
+// left the deposit queue goes with the check; one that went further, or any related deposit record, blocks).
 export const FINANCIAL_DELETE_BLOCKERS = Object.freeze([
-  { table: 'deposit_items', sql: 'SELECT 1 FROM public.deposit_items WHERE check_id = $1::uuid LIMIT 1' },
   { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
   { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
@@ -347,6 +354,18 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       });
     }
 
+    const depositQueue = await planDepositQueueForCheckDelete(client, looked.check.id);
+    if (depositQueue.error) {
+      return denied(spoof, {
+        error: 'cleanup_denied',
+        message: depositQueue.error === 'blocker_verification_denied'
+          ? `Refusing to delete: unable to verify financial/provider blockers (${depositQueue.blocker})`
+          : `Refusing to delete a check with dependent financial/provider records (${depositQueue.blocker})`,
+        blocker: depositQueue.blocker,
+        ...(depositQueue.reached ? { reached: depositQueue.reached } : {}),
+      });
+    }
+
     for (const [idx, blocker] of FINANCIAL_DELETE_BLOCKERS.entries()) {
       try {
         const blocked = await runWithSavepoint(client, `delete_blocker_${idx}`, async () => {
@@ -389,6 +408,17 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       });
     }
 
+    // Same rule as the deployed delete: the queue-only deposit record and its 'prepare_deposit' audit rows go.
+    const depositRemoved = await removeDepositQueueForCheckDelete(client, looked.check.id, depositQueue);
+    if (depositRemoved.error) {
+      return denied(spoof, {
+        error: 'cleanup_denied',
+        message: `Refusing to delete: the check's deposit queue record could not be removed (${depositRemoved.error})`,
+        blocker: 'deposit_items',
+      });
+    }
+    const depositQueueRemoved = { deposit_items: depositQueue.items, deposit_audit_log: depositQueue.audit };
+
     const exists = (await client.query("SELECT to_regclass('public.check_deletion_log') AS t")).rows[0]?.t;
     if (exists) {
       const row = (await client.query(
@@ -408,7 +438,7 @@ export const handleDeleteCheck = async (event, deps = {}) => {
             row.status ?? null,
             String(reason),
             mapping.application_user_id,
-            JSON.stringify({ ...row, billing_events_kept: billing.kept }),
+            JSON.stringify({ ...row, billing_events_kept: billing.kept, deposit_queue_removed: depositQueueRemoved }),
           ],
         );
       }
