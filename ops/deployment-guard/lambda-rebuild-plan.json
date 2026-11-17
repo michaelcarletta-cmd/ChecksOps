@@ -4,7 +4,7 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "accepted",
+      "status": "applied",
       "members": {
         "secrets.mjs": {
           "live_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
@@ -44,6 +44,25 @@
           "candidate": 54
         },
         "notes": "Ninth staging rebuild, for the Secrets Manager read cache (2026-11-17 cost review, item 3; #1980 \"Cost: cache Secrets Manager reads for five minutes per container, and move the pins that fix secrets.mjs\", merge d01314340). Why: CloudTrail for the 24 hours to 2026-11-17 shows 53,265 GetSecretValue calls for the production database secret by checksops-production-api-execution, one per API request; getSecretStringFromAws in secrets.mjs now keeps each secret string for five minutes per container, and a failed fetch is not cached. sql53-production-readonly-inspect.mjs changes with it because SQL53_READONLY_INSPECT_SECRETS_SHA256 pins the bytes of secrets.mjs (f8fa9ee6... -> a4d589fd...): the two reach a function together, and neither is an overlay member. The third member is another workstream's: workflow-delete-check.mjs (the Delete Check changes marked planning only, the latest of them commit eeb1fa8, merged by #1970 on 2026-11-17; do_not_overlay in the production overlay plan, so it reaches a function only with a rebuild). A rebuild ships the whole of main and cannot leave it behind; the owner was shown the three names and chose to ship them. Owner 2026-11-17: \"land the secrets cache and move both pins\", \"merge 1980 when green\", \"ship the secrets cache with a guarded rebuild\", \"run the staging inspect\", then, shown this inspect's three files and told the third is the Delete Check change: \"ship all three to staging\". Inspect run 44146738768 (main d01314340, read-only, mutation false): live CodeSha256 B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=, RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644, 6789 live members; candidate ZIP 8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30, 6789 members; 210 same, 3 changed (secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...), 0 added, 0 removed, dependencies 54/54 with no delta; state BLOCKED with exactly those three as unlisted_change, which this section lists. The job's smoke read /health, /db-health and /db-readonly-validate 200. The live package is not the eighth rebuild's (history[7], g5DY/ZDw...): CodeSha256 has moved to B9zvTiOU... since, through guarded overlays; the last is the Delete Check workflow.mjs REPLACE of 2026-11-17 (staging apply run 44112953362, production apply run 44114061250, recorded in the production overlay plan with the same CodeSha256 B9zvTiOU... on production). Their members count as same here. The live RevisionId d2fc1ab8... is the one left by the 2026-11-17 17:39:54 UTC TracingConfig change (Active -> PassThrough) and the 17:21:43 UTC VpcConfig change (one subnet), both configuration only: CodeSha256 was B9zvTiOU... before and after each (ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md). Not verified by this record: nothing is applied; no person has exercised Delete Check or a database password rotation on staging against these bytes. Apply needs the owner's exact phrase for that run."
+      },
+      "applied": {
+        "run_id": "44151849515",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44151849515",
+        "main_commit": "37699e14b0a642e11a5fbb36489402786047d1ba",
+        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+        "code_sha256_before": "B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=",
+        "revision_id_before": "d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644",
+        "code_sha256_after": "j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA=",
+        "revision_id_after": "a8a0d167-4398-42c7-bb85-9c9655380ee8",
+        "candidate_zip_sha256": "8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30",
+        "applied_at": "2026-11-17T18:49:27.710Z",
+        "state": "VERIFIED",
+        "smoke": [
+          "/health",
+          "/db-health",
+          "/db-readonly-validate"
+        ],
+        "notes": "Ninth staging rebuild, for the Secrets Manager read cache (#1980: secrets.mjs and sql53-production-readonly-inspect.mjs changed) and, with it, the Delete Check workstream's workflow-delete-check.mjs, applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-17; with \"ship all three to staging\" and \"merge 1982 when green\") from main 37699e14b (the merged plan #1982 plus #1983, a documentation-only merge), with expected_live_code_sha256 B9zvTiOU... (inspect 44146738768). Apply run 44151849515: every step success. The job's own inspect step read READY (3 changed: secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...; 0 added, 0 removed, dependencies 54/54; live RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644, candidate 8f9da924..., 6789 candidate members, 0 unlisted problems, mutation false) and took the lease of workstream github-staging-rebuild-44151849515 (acquired 2026-11-17T18:49:25.526Z). The receipt-gated writer consumed the receipt (MAC 61a8a01f9ba8ccac3c0d32ab33b5d10e59837a9e9a9dcde626549e41f018a832); its before fingerprint read B9zvTiOU... (RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644) and it updated checksops-staging-api to CodeSha256 j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA= (writer RevisionId 854f4286-7bc8-49ec-b6d0-5ab224337a90, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId a8a0d167-4398-42c7-bb85-9c9655380ee8, mutation false); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. A separate GetFunctionConfiguration read-back after the run (as user/claude-code) showed CodeSha256 j52pJCHg..., RevisionId a8a0d167-4398-42c7-bb85-9c9655380ee8, LastUpdateStatus Successful, TracingConfig PassThrough, the one subnet subnet-0df2518070c5b9ff0 and 46 environment variables, so the configuration changes of 2026-11-17 survived the rebuild; then GET /staging/db-health 12 of 12 HTTP 200, /staging/authorization/jwks-check 8 of 8, /staging/providers/egress 200. Staging acceptance is this guarded apply and its verification only. Not verified by this record: that Secrets Manager calls from staging fell (no CloudTrail count was taken after the apply), a database password rotation against the cache, and Delete Check exercised by a person on staging."
       },
       "history": [
         {
@@ -1059,15 +1078,19 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "mortgage-ops-usage.mjs": {
-          "live_sha256": "abd5fe7a8caba4cf9c48ff4ce0d2cb5ab7cb6e1d122a1c389ac66ede44acb044",
-          "accepted_sha256": "6e60d033efda9a308bc3a3b8367781e0562cbfabca6fe6d29e4a2064f27ccbdd"
+        "secrets.mjs": {
+          "live_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
+          "accepted_sha256": "a4d589fd37ecc1a5a57aa3bcfd4aedac2df06d55fb88ada10c8e47715318db58"
         },
-        "tenant-billing-engine.mjs": {
-          "live_sha256": "5859fc13399bad9c8f603fee893819ca330f074e7e7c63773beda7899f59a4c8",
-          "accepted_sha256": "ea380af7abc61941cce5c0ed9d2857f3deab71043440c2f3f83c5f8a8aac1001"
+        "sql53-production-readonly-inspect.mjs": {
+          "live_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+          "accepted_sha256": "e31a2d1794ae7c085e46d48ef8f567414abff63b97fc51990f0806917656a57d"
+        },
+        "workflow-delete-check.mjs": {
+          "live_sha256": "bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f",
+          "accepted_sha256": "c0430309e9bcbb29defb03ee69be096f4f3e3ee8234e12f26e61e60098645b88"
         }
       },
       "added": {},
@@ -1078,43 +1101,24 @@
         "changed": {}
       },
       "inspect": {
-        "run_id": "43604759009",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43604759009",
-        "main_commit": "49f34426ed26471b17b76bbb64d0dab044731bbe",
-        "live_code_sha256": "7GMBgbERmU7uZr9wPeAwrfeEZJKVUGMCFiP4z73JSFs=",
-        "live_revision_id": "429f587c-e750-49b8-8195-86f00004a0cf",
+        "run_id": "44152135321",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44152135321",
+        "main_commit": "37699e14b0a642e11a5fbb36489402786047d1ba",
+        "live_code_sha256": "B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=",
+        "live_revision_id": "a1441c7d-6379-4adc-adae-266b60304af6",
         "live_member_count": 6789,
-        "candidate_zip_sha256": "8390d8fd90f081407c1bada388e62948b1ba04a7322b11e2aca978746d288968",
+        "candidate_zip_sha256": "8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30",
         "candidate_member_count": 6789,
-        "same": 211,
-        "changed": 2,
+        "same": 210,
+        "changed": 3,
         "added": 0,
         "removed": 0,
         "dependency_counts": {
           "live": 54,
           "candidate": 54
         },
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43604345243",
-        "notes": "Eighth production rebuild, for the no additional-check charge API (owner 2026-11-12: \"There will be no more $5 charge ... do not allow that charge to occur\"; #1899 \"API: no Mortgage Ops charge for an additional check\", merge 3f888db79). Why: the live API's accrual (mortgage-ops-usage.mjs accrueMortgageOpsAcceptedRequest, imported by workflow-rpc.mjs executeAcceptMortgage and mortgage-desk-esign.mjs accrueDeskAssignment) still writes mortgage_ops_additional_check into check_billing_events at the tenant's additional rate; SQL 160 (applied 2026-11-14, production record #1895) covered only the database's own path. mortgage-ops-usage.mjs is not an overlay member and reaches a function only with a rebuild; tenant-billing-engine.mjs carries the same change and has a planning-only REPLACE row in the production overlay plan (aws/tests/fixtures/production-no-additional-check-api-manifest-2026-11-14.json, 5859fc13 -> ea380af7), which this rebuild carries instead of a separate overlay run. Owner 2026-11-14: \"DEPLOY FULL API PACKAGE TO STAGING\", \"merge #1900\", \"run the production API rebuild inspect\". Inspect run 43604759009 (main 49f34426e, read-only, mutation false): live CodeSha256 7GMBgbERmU7uZr9wPeAwrfeEZJKVUGMCFiP4z73JSFs=, RevisionId 429f587c-e750-49b8-8195-86f00004a0cf, 6789 live members, the package staging ran before its eighth rebuild (staging inspect 43602853354 and the apply 43604345243's preflight read the same CodeSha256). It is not the seventh production rebuild's DvQOhuCiv... (apply 43464046767): the vendor payments API's guarded production overlays (#1890; production apply runs 43548581455 workflow-rpc.mjs, 43548654658 tenant-billing-handlers.mjs, 43548826506 moov-send.mjs -> 7GMBgbER..., recorded in aws/tests/fixtures/production-vendor-payments-api-applied-manifest-2026-11-14.json with RevisionId 429f587c-e750-49b8-8195-86f00004a0cf after the applies) put main's bytes live, which this inspect counts as same, so the rebuild carries no other workstream's change. The candidate 8390d8fd... (6789 members) is the ZIP the staging apply 43604345243 put live and VERIFIED. Diff: 2 changed (mortgage-ops-usage.mjs abd5fe7a... -> 6e60d033..., tenant-billing-engine.mjs 5859fc13... -> ea380af7...), 0 added, 0 removed, 211 same, dependencies identical (54 live, 54 candidate). Each accepted hash is main's bytes at 49f34426e (unchanged since 3f888db79); each live hash is main's bytes before #1899 (6f002c49a); the live mortgage-ops-usage.mjs abd5fe7a... is the bytes the fifth production section (history[4], apply 43215807509) accepted, and the live tenant-billing-engine.mjs 5859fc13... is the live_sha256 the no additional-check manifest records. /health and /db-health 200. The inspect reported BLOCKED with two problems, SOURCE_RECONCILIATION_REQUIRED (unlisted_change), exactly the two this section lists; the same members as staging's eighth section. The seventh section moves verbatim into history[6]. Staging acceptance: the staging apply run 43604345243 (VERIFIED, /health, /db-health and /db-readonly-validate 200). That guarded apply and its verification are the whole staging acceptance: no person-run additional-check accept on staging after the rebuild is recorded. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", this inspect's live CodeSha256 as expected_live_code_sha256, the staging acceptance reference, and the production environment reviewer's approval."
-      },
-      "applied": {
-        "run_id": "43606264549",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43606264549",
-        "main_commit": "aa107d30997f3aa1db6570949211181c083f12cd",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43604345243",
-        "code_sha256_before": "7GMBgbERmU7uZr9wPeAwrfeEZJKVUGMCFiP4z73JSFs=",
-        "revision_id_before": "429f587c-e750-49b8-8195-86f00004a0cf",
-        "code_sha256_after": "g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg=",
-        "revision_id_after": "e116e629-9b3a-41f2-bfbc-1e19a37f2301",
-        "candidate_zip_sha256": "8390d8fd90f081407c1bada388e62948b1ba04a7322b11e2aca978746d288968",
-        "applied_at": "2026-11-14T14:43:12.331Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "notes": "Eighth production rebuild, for the no additional-check charge API (#1899: mortgage-ops-usage.mjs and tenant-billing-engine.mjs changed), applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-14, verbatim; passed to the workflow as exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\") from main aa107d309 (the merged plan #1901), with expected_live_code_sha256 7GMBgbER... (inspect 43604759009) and staging acceptance run 43604345243. Main's API code (aws/functions/api) is unchanged between the inspect's main 49f34426e and aa107d309 (git diff empty; #1901 changed only the plan and its test). Apply run 43606264549: no step failed (no error line in the run log). The job's own inspect step read READY, problems 0, mutation false (2 changed: mortgage-ops-usage.mjs abd5fe7a... -> 6e60d033..., tenant-billing-engine.mjs 5859fc13... -> ea380af7...; 0 added, 0 removed, 211 same, dependencies 54/54; live RevisionId 429f587c-e750-49b8-8195-86f00004a0cf, 6789 live members, candidate 8390d8fd..., 6789 candidate members) and took the lease of workstream github-production-rebuild-43606264549 (acquired 2026-11-14T14:43:09.365Z). The receipt-gated writer consumed the receipt (MAC 6430005b15a252881da2db9b3455ad14966387231ece2cfba81a01802d2c56ff); its immediately_before fingerprint read 7GMBgbER... (RevisionId 429f587c-e750-49b8-8195-86f00004a0cf) and it updated checksops-production-prep-api to CodeSha256 g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg= (writer RevisionId 90d494ba-69ea-49d1-8368-f63385b40164, lastUpdateStatus InProgress, errors []); configuration unchanged (Role, Runtime, Handler, MemorySize, Timeout, VpcConfig, 50 variable names, variables_sha256 268f7983... before and after); its after fingerprint and \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId e116e629-9b3a-41f2-bfbc-1e19a37f2301, mutation false); the public production smoke returned 200 ok for /health and /db-health. Production now runs the package staging runs since its eighth rebuild 43604345243 (g5DY/ZDw...). Staging acceptance is the guarded staging apply 43604345243 and its verification only: no person-run additional-check accept on staging after the rebuild is recorded. Not verified by this record: a separate GetFunctionConfiguration read-back after the run, the GitHub job id (not printed in the run log), a pre-dispatch production inspect on main aa107d309 (none cited; the job's own inspect step read READY), and an additional-check accept in production recording no charge."
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44151849515",
+        "notes": "Ninth production rebuild, for the Secrets Manager read cache (2026-11-17 cost review, item 3; #1980, merge d01314340). Why: CloudTrail for the 24 hours to 2026-11-17 shows 53,265 GetSecretValue calls for the production database secret by checksops-production-api-execution, one per API request; getSecretStringFromAws in secrets.mjs now keeps each secret string for five minutes per container, and a failed fetch is not cached. sql53-production-readonly-inspect.mjs changes with it because SQL53_READONLY_INSPECT_SECRETS_SHA256 pins the bytes of secrets.mjs: the live inspect refuses unless the two are the pair the rebuild puts live together. The third member is another workstream's: workflow-delete-check.mjs (the Delete Check changes marked planning only, the latest of them commit eeb1fa8, merged by #1970 on 2026-11-17; do_not_overlay in the production overlay plan, so it reaches a function only with a rebuild). Its companion workflow.mjs is already live through the 2026-11-17 overlay (production apply run 44114061250) and counts as same here. Owner 2026-11-17: \"ship the secrets cache with a guarded rebuild\", \"ship all three to staging\", \"merge 1982 when green\", \"DEPLOY FULL API PACKAGE TO STAGING\". The production inspect is read-only and was run without a separate phrase, as ops/production-lambda-rebuild.md and the guarded-step procedure allow. Inspect run 44152135321 (main 37699e14b, read-only, mutation false): live CodeSha256 B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=, RevisionId a1441c7d-6379-4adc-adae-266b60304af6, 6789 live members; candidate ZIP 8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30, 6789 members, the ZIP staging applied and verified (staging apply run 44151849515); 210 same, 3 changed (secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...), 0 added, 0 removed, dependencies 54/54 with no delta; state BLOCKED with exactly those three as unlisted_change, which this section lists. The job's smoke read /health and /db-health 200. The live package is not the eighth rebuild's (history[7], g5DY/ZDw...): guarded overlays since then moved CodeSha256 to B9zvTiOU... (the production overlay plan records it after apply run 44114061250). The live RevisionId a1441c7d... is the one left by the 2026-11-17 configuration changes (17:23:06 UTC VpcConfig to one subnet, 17:40:37 UTC TracingConfig PassThrough), both configuration only with CodeSha256 unchanged (ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md, ops/security/COST_REVIEW_2026_11.md). Staging acceptance: the green staging apply run above, VERIFIED, with its smoke and a read-back after the run. Not verified by this record: nothing is applied to production; no person has exercised Delete Check or a database password rotation against these bytes; the fall in Secrets Manager calls on staging was not counted. Apply needs the owner's exact phrase for that run and the production environment reviewer."
       },
       "history": [
         {
@@ -1717,6 +1721,65 @@
               "/db-health"
             ],
             "notes": "Seventh production rebuild, for the transfer to bank API (#1876), applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-13, after \"Merge the production plan PR when green\"; passed to the workflow as exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\") from main 4bcdd8db2 (the merged plan #1878), with expected_live_code_sha256 bphhLdCS... and staging acceptance run 43460848634. Before dispatch, read-only production inspect run 43463908901 (job 132017799572) on main 4bcdd8db2 read READY, problems [], mutation false: live bphhLdCS... (RevisionId 8e6bb1be-7e8b-4234-a7ef-458e2acd0371, 6786 members), candidate 0ef40e86..., 4 changed, 3 added, 0 removed, 206 same, dependencies 54/54; /health and /db-health 200. Apply run 43464046767 (job 132018292125): every step success. The job's own inspect step read READY (the same 4 changed, 3 added, 0 removed, 206 same, dependencies 54/54). The receipt-gated writer's immediately_before fingerprint read bphhLdCS... (RevisionId 8e6bb1be-7e8b-4234-a7ef-458e2acd0371) and it updated checksops-production-prep-api to CodeSha256 DvQOhuCiv/Li3EeVjr+WsErARsPA4S95lgBMgwsGEhg= (update RevisionId 48c6785c-718e-4217-9655-232d52860e15, lastUpdateStatus InProgress, errors []); its after fingerprint and \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId 17f6bd67-f508-421f-abb7-7c5c3441741e, mutation false); the public production smoke returned 200 ok for /health and /db-health. Live read-back (read-only GetFunctionConfiguration after the apply): CodeSha256 DvQOhuCiv/... (the package staging runs since its seventh rebuild 43460848634), RevisionId 17f6bd67, LastModified 2026-11-13T16:34:47Z, LastUpdateStatus Successful, State Active, 50 variables; https://checksops.com/prep/health returned status ok. Staging acceptance is the guarded staging apply 43460848634 and its verification only: no person exercised Transfer to bank on staging before production (the website button is not built yet), and no transfer to bank was sent on staging. Not verified by this record: any transfer to bank request or flow in production, and a person using Transfer to bank in any environment."
+          }
+        },
+        {
+          "status": "applied",
+          "members": {
+            "mortgage-ops-usage.mjs": {
+              "live_sha256": "abd5fe7a8caba4cf9c48ff4ce0d2cb5ab7cb6e1d122a1c389ac66ede44acb044",
+              "accepted_sha256": "6e60d033efda9a308bc3a3b8367781e0562cbfabca6fe6d29e4a2064f27ccbdd"
+            },
+            "tenant-billing-engine.mjs": {
+              "live_sha256": "5859fc13399bad9c8f603fee893819ca330f074e7e7c63773beda7899f59a4c8",
+              "accepted_sha256": "ea380af7abc61941cce5c0ed9d2857f3deab71043440c2f3f83c5f8a8aac1001"
+            }
+          },
+          "added": {},
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "43604759009",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43604759009",
+            "main_commit": "49f34426ed26471b17b76bbb64d0dab044731bbe",
+            "live_code_sha256": "7GMBgbERmU7uZr9wPeAwrfeEZJKVUGMCFiP4z73JSFs=",
+            "live_revision_id": "429f587c-e750-49b8-8195-86f00004a0cf",
+            "live_member_count": 6789,
+            "candidate_zip_sha256": "8390d8fd90f081407c1bada388e62948b1ba04a7322b11e2aca978746d288968",
+            "candidate_member_count": 6789,
+            "same": 211,
+            "changed": 2,
+            "added": 0,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43604345243",
+            "notes": "Eighth production rebuild, for the no additional-check charge API (owner 2026-11-12: \"There will be no more $5 charge ... do not allow that charge to occur\"; #1899 \"API: no Mortgage Ops charge for an additional check\", merge 3f888db79). Why: the live API's accrual (mortgage-ops-usage.mjs accrueMortgageOpsAcceptedRequest, imported by workflow-rpc.mjs executeAcceptMortgage and mortgage-desk-esign.mjs accrueDeskAssignment) still writes mortgage_ops_additional_check into check_billing_events at the tenant's additional rate; SQL 160 (applied 2026-11-14, production record #1895) covered only the database's own path. mortgage-ops-usage.mjs is not an overlay member and reaches a function only with a rebuild; tenant-billing-engine.mjs carries the same change and has a planning-only REPLACE row in the production overlay plan (aws/tests/fixtures/production-no-additional-check-api-manifest-2026-11-14.json, 5859fc13 -> ea380af7), which this rebuild carries instead of a separate overlay run. Owner 2026-11-14: \"DEPLOY FULL API PACKAGE TO STAGING\", \"merge #1900\", \"run the production API rebuild inspect\". Inspect run 43604759009 (main 49f34426e, read-only, mutation false): live CodeSha256 7GMBgbERmU7uZr9wPeAwrfeEZJKVUGMCFiP4z73JSFs=, RevisionId 429f587c-e750-49b8-8195-86f00004a0cf, 6789 live members, the package staging ran before its eighth rebuild (staging inspect 43602853354 and the apply 43604345243's preflight read the same CodeSha256). It is not the seventh production rebuild's DvQOhuCiv... (apply 43464046767): the vendor payments API's guarded production overlays (#1890; production apply runs 43548581455 workflow-rpc.mjs, 43548654658 tenant-billing-handlers.mjs, 43548826506 moov-send.mjs -> 7GMBgbER..., recorded in aws/tests/fixtures/production-vendor-payments-api-applied-manifest-2026-11-14.json with RevisionId 429f587c-e750-49b8-8195-86f00004a0cf after the applies) put main's bytes live, which this inspect counts as same, so the rebuild carries no other workstream's change. The candidate 8390d8fd... (6789 members) is the ZIP the staging apply 43604345243 put live and VERIFIED. Diff: 2 changed (mortgage-ops-usage.mjs abd5fe7a... -> 6e60d033..., tenant-billing-engine.mjs 5859fc13... -> ea380af7...), 0 added, 0 removed, 211 same, dependencies identical (54 live, 54 candidate). Each accepted hash is main's bytes at 49f34426e (unchanged since 3f888db79); each live hash is main's bytes before #1899 (6f002c49a); the live mortgage-ops-usage.mjs abd5fe7a... is the bytes the fifth production section (history[4], apply 43215807509) accepted, and the live tenant-billing-engine.mjs 5859fc13... is the live_sha256 the no additional-check manifest records. /health and /db-health 200. The inspect reported BLOCKED with two problems, SOURCE_RECONCILIATION_REQUIRED (unlisted_change), exactly the two this section lists; the same members as staging's eighth section. The seventh section moves verbatim into history[6]. Staging acceptance: the staging apply run 43604345243 (VERIFIED, /health, /db-health and /db-readonly-validate 200). That guarded apply and its verification are the whole staging acceptance: no person-run additional-check accept on staging after the rebuild is recorded. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", this inspect's live CodeSha256 as expected_live_code_sha256, the staging acceptance reference, and the production environment reviewer's approval."
+          },
+          "applied": {
+            "run_id": "43606264549",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43606264549",
+            "main_commit": "aa107d30997f3aa1db6570949211181c083f12cd",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43604345243",
+            "code_sha256_before": "7GMBgbERmU7uZr9wPeAwrfeEZJKVUGMCFiP4z73JSFs=",
+            "revision_id_before": "429f587c-e750-49b8-8195-86f00004a0cf",
+            "code_sha256_after": "g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg=",
+            "revision_id_after": "e116e629-9b3a-41f2-bfbc-1e19a37f2301",
+            "candidate_zip_sha256": "8390d8fd90f081407c1bada388e62948b1ba04a7322b11e2aca978746d288968",
+            "applied_at": "2026-11-14T14:43:12.331Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "notes": "Eighth production rebuild, for the no additional-check charge API (#1899: mortgage-ops-usage.mjs and tenant-billing-engine.mjs changed), applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-14, verbatim; passed to the workflow as exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\") from main aa107d309 (the merged plan #1901), with expected_live_code_sha256 7GMBgbER... (inspect 43604759009) and staging acceptance run 43604345243. Main's API code (aws/functions/api) is unchanged between the inspect's main 49f34426e and aa107d309 (git diff empty; #1901 changed only the plan and its test). Apply run 43606264549: no step failed (no error line in the run log). The job's own inspect step read READY, problems 0, mutation false (2 changed: mortgage-ops-usage.mjs abd5fe7a... -> 6e60d033..., tenant-billing-engine.mjs 5859fc13... -> ea380af7...; 0 added, 0 removed, 211 same, dependencies 54/54; live RevisionId 429f587c-e750-49b8-8195-86f00004a0cf, 6789 live members, candidate 8390d8fd..., 6789 candidate members) and took the lease of workstream github-production-rebuild-43606264549 (acquired 2026-11-14T14:43:09.365Z). The receipt-gated writer consumed the receipt (MAC 6430005b15a252881da2db9b3455ad14966387231ece2cfba81a01802d2c56ff); its immediately_before fingerprint read 7GMBgbER... (RevisionId 429f587c-e750-49b8-8195-86f00004a0cf) and it updated checksops-production-prep-api to CodeSha256 g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg= (writer RevisionId 90d494ba-69ea-49d1-8368-f63385b40164, lastUpdateStatus InProgress, errors []); configuration unchanged (Role, Runtime, Handler, MemorySize, Timeout, VpcConfig, 50 variable names, variables_sha256 268f7983... before and after); its after fingerprint and \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId e116e629-9b3a-41f2-bfbc-1e19a37f2301, mutation false); the public production smoke returned 200 ok for /health and /db-health. Production now runs the package staging runs since its eighth rebuild 43604345243 (g5DY/ZDw...). Staging acceptance is the guarded staging apply 43604345243 and its verification only: no person-run additional-check accept on staging after the rebuild is recorded. Not verified by this record: a separate GetFunctionConfiguration read-back after the run, the GitHub job id (not printed in the run log), a pre-dispatch production inspect on main aa107d309 (none cited; the job's own inspect step read READY), and an additional-check accept in production recording no charge."
           }
         }
       ]
