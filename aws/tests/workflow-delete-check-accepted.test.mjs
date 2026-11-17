@@ -119,10 +119,11 @@ test('financial delete blockers include provider and disbursement tables', () =>
       'check_payment_directions',
       'checkalt_deposits',
       'claim_check_payments',
-      'deposit_items',
       'disbursement_batches',
     ],
   );
+  // deposit_items is decided by workflow.mjs planDepositQueueForCheckDelete (owner 2026-11-17): a record that never left
+  // the deposit queue goes with the check; anything further still blocks (the deposit_items test below).
 });
 
 test('delete aborts when check_deletion_log insert fails', async () => {
@@ -221,4 +222,16 @@ test('CheckAlt / deposit_items financial dependency remains blocked', async () =
   assert.equal(result.ok, false);
   assert.equal(result.error, 'cleanup_denied');
   assert.equal(result.blocker, 'checkalt_deposits');
+});
+
+test('a deposit record that cannot be shown to be queue-only remains blocked (deposit_items)', async () => {
+  const client = mockClient({ blockers: { deposit_items: true } });
+  const result = await handleDeleteCheck(
+    jwtEvent({ check_id: CHECK_ID, reason: 'duplicate intake' }),
+    depsFor(client),
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'cleanup_denied');
+  assert.equal(result.blocker, 'deposit_items');
+  assert.deepEqual(result.reached, ['unreadable']);
 });
