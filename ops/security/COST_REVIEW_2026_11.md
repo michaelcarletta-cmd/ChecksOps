@@ -21,7 +21,7 @@ GuardDuty finding reports.
 | 6 | X-Ray `Active` → `PassThrough` | "do 3 and 6", then "apply the x-ray change live" | templates merged (#1974); applied live 2026-11-17 17:39–17:40 UTC | #1974 and below |
 | 7 | Security Hub: disable CIS 1.2.0 | "do 7, 9 and 10 and 2" | done | below |
 | 9 | Staging backup retention 35 → 7 days | same | done | below |
-| 3 | Cache Secrets Manager reads | "do 3 and 6", then "land the secrets cache and move both pins" | code merged (#1980); **not live**: staging rebuild plan merged (#1982), apply waits for the owner's phrase | #1980, #1982, `ops/deployment-guard/lambda-rebuild-plan.json` |
+| 3 | Cache Secrets Manager reads | "do 3 and 6", "land the secrets cache and move both pins", "ship the secrets cache with a guarded rebuild", then the two apply phrases | **live in staging and production** since 2026-11-17 (staging apply 44151849515, production apply 44155016281); `GetSecretValue` by the production API role fell from about 1,000 per five minutes to 60 for 1,442 requests | #1980, #1982, #1984, `ops/deployment-guard/lambda-rebuild-plan.json` |
 | 4 | Merge the two Secrets Manager endpoints | "do 4 and 5" | **not done**, with the owner | below |
 | 10 | Terminate the "SQL53 temporary runner" | "do 7, 9 and 10 and 2" | **not done, and must not be** | below |
 | 2 | Shrink the NAT from two AZs to one | same, then "do it deterministically", then "proceed as roof" | done 2026-11-17 17:21–17:32 UTC, us-east-1a kept | `ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md`, "Applied: one zone" |
@@ -84,6 +84,18 @@ existing tests fail, because the bytes of `secrets.mjs` are pinned:
 inspect refuses when the live file differs) and the accepted staging hash in
 `ops/deployment-guard/lambda-rebuild-plan.json` (1 test). No pin was edited. Landing the cache
 means moving both pins in the same reviewed PR; that is the owner's decision.
+
+**Update, same day.** The paragraph above is the state before the owner's decision. The owner chose
+to land it ("land the secrets cache and move both pins"): #1980 merged the cache and moved the
+pins, with hashes from `hashSql53PackageMember`, and no accepted hash in the rebuild plan was
+edited. It reached both functions by a guarded full rebuild
+(`ops/production-lambda-rebuild.md`): staging apply run 44151849515 (18:49:27 UTC) and production
+apply run 44155016281 (19:07:12 UTC), each `VERIFIED`, on the owner's exact phrases. The rebuild
+also carried `workflow-delete-check.mjs`, the Delete Check workstream's rebuild-only change, which
+the owner was shown and chose to ship ("ship all three to staging"). CloudTrail afterwards:
+`GetSecretValue` by `checksops-production-api-execution` was 1,209 and 1,006 in the two
+five-minute windows before the apply and 60 in the first full one after it, for 1,442 requests.
+The full record is the ninth sections of `ops/deployment-guard/lambda-rebuild-plan.json`.
 
 ## Item 4: not a delete
 
