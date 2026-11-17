@@ -80,7 +80,7 @@ Globals:
       - arm64
     Timeout: 29
     MemorySize: 1024
-    Tracing: Active
+    Tracing: PassThrough
     Environment:
       Variables:
         CHECKSOPS_ENV: !Ref Environment
