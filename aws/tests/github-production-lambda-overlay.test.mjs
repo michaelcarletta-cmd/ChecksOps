@@ -10079,11 +10079,15 @@ test('Claim Ledger relink API (owner 2026-11-14, SQL 167): workflow-rpc.mjs REPL
   assert.ok(PLAN.notes.includes(evidence), evidence);
   // Still live after the eighth production rebuild (apply 43606264549): it changed only mortgage-ops-usage.mjs and
   // tenant-billing-engine.mjs, so its inspect counted workflow-rpc.mjs as same; no reconcile is needed for this row.
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The eighth section is history[7] since the ninth production section (inspect 44152135321, the Secrets Manager read
+  // cache), which does not list workflow-rpc.mjs either.
+  const rebuildPlan = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = rebuildPlan.history[7];
   assert.equal(rebuild.applied.run_id, '43606264549');
   assert.equal(rebuild.applied.state, 'VERIFIED');
   assert.deepEqual(Object.keys(rebuild.members).sort(), ['mortgage-ops-usage.mjs', 'tenant-billing-engine.mjs']);
   assert.equal(rebuild.members[RPC], undefined);
+  assert.equal(rebuildPlan.members[RPC], undefined);
   // SQL 167: applied in staging (recorded in its production pin's staging_acceptance and the staging SQL record) and in
   // production (its applied record, #1910), which sql_prerequisites cites.
   const pin = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/sql167-claim-ledger-relink-check-production-apply.json'), 'utf8'));
@@ -10187,7 +10191,8 @@ test('Transfer to bank settlement bank API (owner 2026-11-15): moov-wallet-withd
   for (const section of sections.slice(seventh + 1)) {
     for (const key of ['members', 'added', 'removed']) assert.equal(section[key]?.[WITHDRAW], undefined, `${section.applied?.run_id} ${key}`);
   }
-  assert.equal(rebuild.applied.run_id, '43606264549');
+  // The eighth production rebuild is history[7] since the ninth section (inspect 44152135321), checked by the loop above too.
+  assert.equal(rebuild.history[7].applied.run_id, '43606264549');
   // One new local import, the tile's own selection function: sweep-read.mjs, not an overlay member, unchanged on main since
   // the sixth production rebuild put it live; no ADD is needed and the order is unchanged.
   const imports = localImports(fs.readFileSync(path.join(API, WITHDRAW), 'utf8'), WITHDRAW);

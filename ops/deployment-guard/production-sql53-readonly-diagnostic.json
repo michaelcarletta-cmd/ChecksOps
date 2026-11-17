@@ -13,7 +13,7 @@
     "sql53-production-readonly-inspect.mjs"
   ],
   "owned_overlay_member_sha256": {
-    "sql53-production-readonly-inspect.mjs": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68"
+    "sql53-production-readonly-inspect.mjs": "e31a2d1794ae7c085e46d48ef8f567414abff63b97fc51990f0806917656a57d"
   },
   "index_mjs_policy": "surgical_patch_of_live_index_only",
   "do_not_overlay_from_origin_main": [

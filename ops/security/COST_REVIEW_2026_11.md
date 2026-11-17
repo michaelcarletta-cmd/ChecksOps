@@ -18,10 +18,10 @@ GuardDuty finding reports.
 |---|---|---|---|---|
 | 1, 8 | Delete the old four-AZ NAT and its addresses; release idle `100.50.171.44` | "do 1 and 8" | done | `ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md` |
 | 5 | Delete the Cognito interface endpoint | "do 4 and 5" | done, with a 19-request production 401 burst | `aws/rls/COGNITO_IDP_VPCE.md` |
-| 6 | X-Ray `Active` → `PassThrough` in the API templates | "do 3 and 6" | templates merged (#1974); **not applied live** | #1974 |
+| 6 | X-Ray `Active` → `PassThrough` | "do 3 and 6", then "apply the x-ray change live" | templates merged (#1974); applied live 2026-11-17 17:39–17:40 UTC | #1974 and below |
 | 7 | Security Hub: disable CIS 1.2.0 | "do 7, 9 and 10 and 2" | done | below |
 | 9 | Staging backup retention 35 → 7 days | same | done | below |
-| 3 | Cache Secrets Manager reads | "do 3 and 6" | **not done**, with the owner | below |
+| 3 | Cache Secrets Manager reads | "do 3 and 6", then "land the secrets cache and move both pins" | code merged (#1980); **not live**: staging rebuild plan merged (#1982), apply waits for the owner's phrase | #1980, #1982, `ops/deployment-guard/lambda-rebuild-plan.json` |
 | 4 | Merge the two Secrets Manager endpoints | "do 4 and 5" | **not done**, with the owner | below |
 | 10 | Terminate the "SQL53 temporary runner" | "do 7, 9 and 10 and 2" | **not done, and must not be** | below |
 | 2 | Shrink the NAT from two AZs to one | same, then "do it deterministically", then "proceed as roof" | done 2026-11-17 17:21–17:32 UTC, us-east-1a kept | `ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md`, "Applied: one zone" |
@@ -46,6 +46,26 @@ Automated backups of staging older than 7 days are deleted by RDS and cannot be 
 Documents that still say staging keeps 35 days describe the state before this change:
 `ops/security/AWS_ACCOUNT_HARDENING_2026_11.md` (item 6),
 `ops/security/RDS_PRIVATE_SUBNETS_PLAN_2026_11.md`, `aws/cutover/OPERATOR_SECURITY_HANDOFF_2TO6.md`.
+
+## Item 6: X-Ray tracing is `PassThrough` on both API functions
+
+Owner, 2026-11-17: "apply the x-ray change live". No guarded workflow changes `TracingConfig`
+(`ops/lambda-configuration-change.md` covers environment variables only), so this was a direct
+`UpdateFunctionConfiguration` with `TracingConfig.Mode=PassThrough` and the `RevisionId` checked, as
+the account root user through the AWS connector, like the other writes of this review.
+
+| function | time (UTC) | `RevisionId` before → after | unchanged |
+|---|---|---|---|
+| `checksops-staging-api` | 17:39:54 | `68668373-2865-4be4-9a9e-a5f451550fbc` → `d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644` | `CodeSha256` `B9zvTiOU…`, 46 environment variables, subnet, security group |
+| `checksops-production-prep-api` | 17:40:37 | `dfef83fc-d69b-497f-a768-61ced5ffbf10` → `a1441c7d-6379-4adc-adae-266b60304af6` | `CodeSha256` `B9zvTiOU…`, 50 environment variables, subnet, both security groups |
+
+Verified: staging `GET /staging/authorization/jwks-check` 10 of 10 HTTP 200, `/staging/db-health`
+and `/staging/providers/egress` 200. Production Lambda `Errors` 0 and average duration 140–170 ms
+in the minutes around the change. Production `REPORT` log lines with `Sampled: true`: 160 of 161
+at 17:39, 88 of 144 at 17:40, **0 of 83 at 17:41**. The live setting now matches the templates
+merged by #1974. Cost Explorer for October: `USE1-XRay-TracesStored` 1,259,588 traces, $5.80.
+
+Not verified: the X-Ray line on a later bill.
 
 ## Item 10: the runner is not a leftover
 
