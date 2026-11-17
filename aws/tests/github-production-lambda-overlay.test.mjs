@@ -219,7 +219,16 @@ const assignedDepositAppliedBytes = () => {
   assert.match(applied, /^[0-9a-f]{64}$/);
   return applied;
 };
-const CHECKALT_NOT_TAKEN_ROW = () => ({ operation: 'replace', accepted_sha256: sha('aws/functions/api/workflow.mjs'), expected_live_sha256: assignedDepositAppliedBytes(), sql_before: SQL169_FILE, manifest: DELETE_CHECKALT_NOT_TAKEN_REL });
+// Applied 2026-11-17 (production run 44114061250, VERIFIED by its verify step and by re-inspect run 44114386188): the row
+// expects main's bytes and names the applied record, which chains to the planning manifest (it keeps the pre-apply state).
+// checkAltNotTakenRecordPre restates the plan as it stood before that apply.
+const DELETE_CHECKALT_NOT_TAKEN_APPLIED_REL = 'aws/tests/fixtures/production-delete-check-checkalt-not-taken-api-applied-manifest-2026-11-17.json';
+const CHECKALT_NOT_TAKEN_ROW = () => ({ operation: 'replace', accepted_sha256: sha('aws/functions/api/workflow.mjs'), expected_live_sha256: sha('aws/functions/api/workflow.mjs'), sql_before: SQL169_FILE, manifest: DELETE_CHECKALT_NOT_TAKEN_APPLIED_REL });
+const CHECKALT_NOT_TAKEN_PLANNING_ROW = () => ({ operation: 'replace', accepted_sha256: sha('aws/functions/api/workflow.mjs'), expected_live_sha256: assignedDepositAppliedBytes(), sql_before: SQL169_FILE, manifest: DELETE_CHECKALT_NOT_TAKEN_REL });
+const checkAltNotTakenRecordPre = (plan) => {
+  plan.members['workflow.mjs'] = { ...plan.members['workflow.mjs'], expected_live_sha256: assignedDepositAppliedBytes(), manifest: DELETE_CHECKALT_NOT_TAKEN_REL };
+  return plan;
+};
 const depositQueueRecordPre = (plan) => {
   plan.members['workflow.mjs'] = { ...plan.members['workflow.mjs'], expected_live_sha256: keepChargesAppliedBytes(), manifest: DELETE_DEPOSIT_QUEUE_REL };
   return plan;
@@ -4044,8 +4053,8 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   // deposit-queue REPLACE (its own test below), applied 2026-11-17 and recorded.
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  // Since the Check Alt plan (2026-11-17, planning only) the row names that planning manifest.
-  assert.equal(row.manifest, DELETE_CHECKALT_NOT_TAKEN_REL);
+  // Since the Check Alt REPLACE was applied (2026-11-17) the row names that applied record.
+  assert.equal(row.manifest, DELETE_CHECKALT_NOT_TAKEN_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json'), 'utf8')).members[MEMBER].live_sha256, LIVE);
   assert.notEqual(row.expected_live_sha256, LIVE);
   assert.notEqual(row.accepted_sha256, LIVE);
@@ -4088,7 +4097,7 @@ test('Cash jobs: workflow.mjs replaced the applied Delete Check bytes with the c
   // to the deposit-queue REPLACE from the keep-charges applied bytes (applied 2026-11-17).
   // ... and on again to the refusal-message REPLACE (applied 2026-11-17), from the deposit-queue applied bytes, and to the
   // assigned-deposit REPLACE (applied 2026-11-17) from the refusal-message applied bytes, and then to the Check Alt
-  // REPLACE (planning only) from the assigned-deposit applied bytes.
+  // REPLACE (applied 2026-11-17) from the assigned-deposit applied bytes.
   assert.deepEqual(row, CHECKALT_NOT_TAKEN_ROW());
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, HOMEOWNER_TIMELINE_LINK_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
   // SQL 121 is applied in staging (run 40591140684) and recorded live in production from its applied pin
@@ -5182,7 +5191,7 @@ test('Homeowner timeline and endorsement email record: workflow.mjs then endorse
     assert.equal(before.members[member].expected_live_sha256, accepted, member);
     assert.equal(before.members[member].manifest, member === 'workflow.mjs' ? DELETE_KEEP_CHARGES_REL : TIMELINE_ENDORSEMENT_APPLIED_REL, member);
     // Since the deposit-queue REPLACE was applied (2026-11-17) workflow.mjs's row names that applied record.
-    assert.equal(PLAN.members[member].manifest, member === 'workflow.mjs' ? DELETE_CHECKALT_NOT_TAKEN_REL : TIMELINE_ENDORSEMENT_APPLIED_REL, member);
+    assert.equal(PLAN.members[member].manifest, member === 'workflow.mjs' ? DELETE_CHECKALT_NOT_TAKEN_APPLIED_REL : TIMELINE_ENDORSEMENT_APPLIED_REL, member);
     // The planning manifest keeps the pre-apply state.
     assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, previous), 'utf8')).members[member].accepted_sha256, accepted, member);
   }
@@ -10530,10 +10539,12 @@ test('Delete Check assigned deposit record (2026-11-17): workflow.mjs REPLACEs t
   const ready = await run(inspect, { root: ROOT, plan: preApply, inspectLive: liveFor(MEMBER, { sha256: live, plan: preApply }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The applied bytes are now the Check Alt REPLACE's starting point (READY); main's bytes ALREADY_ACCEPTED.
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'READY');
+  // The applied bytes were the Check Alt REPLACE's starting point (READY on the plan before that apply) and are a
+  // reconciliation stop since it (2026-11-17); main's bytes ALREADY_ACCEPTED.
+  const checkAltPre = checkAltNotTakenRecordPre(structuredClone(PLAN));
+  assert.equal((await run(inspect, { root: ROOT, plan: checkAltPre, inspectLive: liveFor(MEMBER, { sha256: accepted, plan: checkAltPre }) })).state, 'READY');
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of [live, depositQueueAppliedBytes(), keepChargesAppliedBytes(), WORKFLOW_TIMELINE_APPLIED, 'a'.repeat(64)]) {
+  for (const other of [accepted, live, depositQueueAppliedBytes(), keepChargesAppliedBytes(), WORKFLOW_TIMELINE_APPLIED, 'a'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -10548,7 +10559,7 @@ test('Delete Check assigned deposit record (2026-11-17): workflow.mjs REPLACEs t
   );
 });
 
-test('Delete Check Check Alt record not taken (2026-11-17, planning only): workflow.mjs REPLACEs the assigned-deposit applied bytes, hold unchanged (SQL 169, recorded live), no new import', async () => {
+test('Delete Check Check Alt record not taken (2026-11-17): workflow.mjs REPLACEs the assigned-deposit applied bytes, hold unchanged (SQL 169, recorded live), no new import; production run 44114061250 applied it', async () => {
   const MEMBER = 'workflow.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, DELETE_CHECKALT_NOT_TAKEN_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
@@ -10565,7 +10576,26 @@ test('Delete Check Check Alt record not taken (2026-11-17, planning only): workf
   assert.ok(manifest.notes.includes(`workflow.mjs ${live.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: live, accepted_sha256: accepted, operation: 'replace', previous_manifest: DELETE_ASSIGNED_DEPOSIT_APPLIED_REL } });
   assert.notEqual(accepted, live);
+  // Applied 2026-11-17 on main d07c1aaf7 (owner "DEPLOY workflow.mjs TO PRODUCTION"): the applied record chains the member to
+  // the planning manifest; the row expects main's bytes and names it. checkAltNotTakenRecordPre restates the plan before the apply.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, DELETE_CHECKALT_NOT_TAKEN_APPLIED_REL), 'utf8'));
+  assert.equal(record.workstream_id, 'delete-check-checkalt-not-taken-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-17\)/);
+  assert.equal(record.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: DELETE_CHECKALT_NOT_TAKEN_REL } });
+  for (const runId of ['44112635478', '44112953362', '44113237598', '44113710412', '44114061250', '44114386188']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['d07c1aaf7bbceadfe08b79b9d79282920bc78cec', '"run the API staging overlay"', '"DEPLOY workflow.mjs TO PRODUCTION"', 'f4d349cc-3213-473e-9b3b-b415624efc9b',
+    'ec669170-3bc4-418d-ba9b-c66ab20eb3c4', 'B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=', 'VERIFIED', 'ALREADY_ACCEPTED', 'errors []', 'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${DELETE_CHECKALT_NOT_TAKEN_APPLIED_REL}. The row expects the applied bytes and names the delete check Check Alt not taken applied record; its hold, SQL 169, is recorded live.`));
   assert.deepEqual(PLAN.members[MEMBER], CHECKALT_NOT_TAKEN_ROW());
+  const preApply = checkAltNotTakenRecordPre(structuredClone(PLAN));
+  assert.deepEqual(preApply.members[MEMBER], CHECKALT_NOT_TAKEN_PLANNING_ROW());
   assert.ok(PLAN.notes.includes(`Delete Check Check Alt record not taken (2026-11-17, planning only): workflow.mjs REPLACE ${live.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes(`Manifest ${DELETE_CHECKALT_NOT_TAKEN_REL}. Nothing deployed.`));
   assert.equal(PLAN.sql_prerequisites[SQL169_FILE].verified_live, true);
@@ -10584,17 +10614,20 @@ test('Delete Check Check Alt record not taken (2026-11-17, planning only): workf
   assert.ok(PLAN.do_not_overlay.includes('workflow-delete-check.mjs'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: live }) });
+  // Inspect: before the apply READY on the assigned-deposit applied bytes (production inspect run 44113710412, replayed on the
+  // pre-apply plan); now ALREADY_ACCEPTED on main's (re-inspect run 44114386188), and the pre-apply bytes, or anything else, a stop.
+  const ready = await run(inspect, { root: ROOT, plan: preApply, inspectLive: liveFor(MEMBER, { sha256: live, plan: preApply }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of [reachedMessageAppliedBytes(), depositQueueAppliedBytes(), keepChargesAppliedBytes(), WORKFLOW_TIMELINE_APPLIED, 'b'.repeat(64)]) {
+  for (const other of [live, reachedMessageAppliedBytes(), depositQueueAppliedBytes(), keepChargesAppliedBytes(), WORKFLOW_TIMELINE_APPLIED, 'b'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
     );
   }
-  const held = structuredClone(PLAN);
+  // The apply as it stood (the pre-apply plan) waited for SQL 169: with it recorded not live, the apply is refused.
+  const held = structuredClone(preApply);
   held.sql_prerequisites[SQL169_FILE] = { ...PLAN.sql_prerequisites[SQL169_FILE], verified_live: false, evidence: null };
   await assert.rejects(
     run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), applyDeps(MEMBER, { plan: held }).deps),
