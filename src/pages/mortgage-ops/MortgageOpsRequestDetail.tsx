@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import { mortgageSupabase as supabase, mortgageUsesAwsBackend } from "@/integrations/supabase/mortgageClient";
 import {
   attachMortgageDeskFile,
@@ -83,6 +83,7 @@ import { VoidStampedCheckImage } from "@/components/mortgage-ops/VoidStampedChec
 import { DeskSendHomeownerLinkButton } from "@/components/mortgage-ops/DeskSendHomeownerLinkButton";
 import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
+import { isFirstPanelLoad, showPanelSpinner } from "@/lib/mortgageDeskPanelLoad";
 import { displayCase } from "@/lib/displayCase";
 
 
@@ -367,9 +368,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const sharedLibraryPaths = new Set((sharedLibrary ?? []).flatMap((g) => g.documents.map((d) => d.file_path)));
   const attachedLibraryDocs = libraryDocs.filter((d) => !sharedLibraryPaths.has(d.file_path));
 
+  // The request this panel currently shows. Only the first load of a request shows the spinner: the panel also
+  // reloads on a timer (every 12 s on AWS), on new messages and after every action, and swapping the whole panel
+  // for a spinner each time threw away the scroll position and whatever the agent was typing.
+  const shownRequestId = useRef<string | null>(null);
+
   const load = useCallback(async () => {
     if (!requestId) return;
-    setLoading(true);
+    const firstLoad = isFirstPanelLoad(shownRequestId.current, requestId);
+    if (firstLoad) setLoading(true);
     try {
       const { data: r, error: rErr } = await supabase
         .from("mortgage_handling_requests")
@@ -378,6 +385,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         .maybeSingle();
       if (rErr || !r) throw rErr || new Error("not found");
       setReq(r as RequestRow);
+      shownRequestId.current = requestId;
       // Re-read below when the request has a check; never another request's loss draft.
       if (!r.check_intake_item_id) setLossDraft(null);
 
@@ -560,9 +568,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       }
 
     } catch (e: any) {
-      toast.error(e?.message || "Failed to load request");
+      // A background refresh that fails keeps what is on screen and says nothing; the next one tries again.
+      if (firstLoad) toast.error(e?.message || "Failed to load request");
     } finally {
-      setLoading(false);
+      if (firstLoad) setLoading(false);
     }
   }, [requestId, user?.id, user?.email]);
 
@@ -1095,7 +1104,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           </SheetTitle>
         </SheetHeader>
 
-        {loading || !req ? (
+        {showPanelSpinner({ loading, loadedRequestId: req?.id ?? null, requestId }) || !req ? (
           <div className="py-16 flex justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
