@@ -10,12 +10,15 @@ test('the Desk request page shows the check and timeline from the Desk API and V
   const page = read('src/pages/mortgage-ops/MortgageOpsRequestDetail.tsx');
   // The check row and timeline come from the workspace (SQL 163), not a direct check_intake_items read.
   assert.match(page, /if \(ws\?\.check\) \{/);
-  assert.match(page, /setCheck\(deskCheckToRow\(ws\.check, r\.tenant_id\)\)/);
+  // The Desk API's check is the one shown when the agent cannot read the tenant's row; it is set once per load
+  // (mortgage-desk-panel-no-reload-flash.test.mjs: the card must not leave the screen on a refresh).
+  assert.match(page, /if \(!cRes\.data\) nextCheck = deskCheckToRow\(ws\.check, r\.tenant_id\);/);
+  assert.match(page, /setCheck\(nextCheck\);/);
   assert.match(page, /setHomeownerTimeline\(ws\?\.homeowner_timeline \|\| \[\]\)/);
   // The mapping never carries routing or account numbers to the agent.
   assert.match(page, /routing_number: null,\s*\n\s*account_number: null,/);
   // Images are the VOID canvas, not a linked <img>.
-  assert.match(page, /<VoidStampedCheckImage src=\{images\.front\} label="Front" \/>/);
+  assert.match(page, /<VoidStampedCheckImage src=\{images\.front\} label="Front" onError=\{\(\) => \{ failedImages\.current\.front = true; \}\} \/>/);
   assert.doesNotMatch(page, /<img src=\{images\.front\}/);
   // The contact log lists the homeowner timeline.
   assert.match(page, /Contact log/);
