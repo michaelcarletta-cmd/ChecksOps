@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Stops the checksops-staging RDS instance at 01:00 and starts it at 07:00 America/New_York every
+  day (2026-11-17 cost review). Stack checksops-staging-db-night-schedule. Staging only: the role
+  can stop and start that one instance and nothing else. Delete the stack to end the schedule; the
+  instance stays in whatever state it is in.
+
+Parameters:
+  DbInstanceIdentifier:
+    Type: String
+    Default: checksops-staging
+    AllowedValues:
+      - checksops-staging
+    Description: The staging instance. The production instance is not an allowed value.
+  ScheduleTimezone:
+    Type: String
+    Default: America/New_York
+  StopCron:
+    Type: String
+    Default: cron(0 1 * * ? *)
+  StartCron:
+    Type: String
+    Default: cron(0 7 * * ? *)
+
+Resources:
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ChecksOpsStagingDbNightSchedule
+      Description: EventBridge Scheduler role that may stop and start checksops-staging only.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: stop-start-staging-db
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: StopStartStagingInstanceOnly
+                Effect: Allow
+                Action:
+                  - rds:StopDBInstance
+                  - rds:StartDBInstance
+                Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:db:${DbInstanceIdentifier}
+
+  StopSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: checksops-staging-db-stop-nightly
+      Description: Stop checksops-staging at 01:00 America/New_York every day.
+      ScheduleExpression: !Ref StopCron
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      State: ENABLED
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: arn:aws:scheduler:::aws-sdk:rds:stopDBInstance
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: !Sub '{"DbInstanceIdentifier":"${DbInstanceIdentifier}"}'
+        RetryPolicy:
+          MaximumRetryAttempts: 2
+          MaximumEventAgeInSeconds: 900
+
+  StartSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: checksops-staging-db-start-morning
+      Description: Start checksops-staging at 07:00 America/New_York every day.
+      ScheduleExpression: !Ref StartCron
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      State: ENABLED
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: arn:aws:scheduler:::aws-sdk:rds:startDBInstance
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: !Sub '{"DbInstanceIdentifier":"${DbInstanceIdentifier}"}'
+        RetryPolicy:
+          MaximumRetryAttempts: 5
+          MaximumEventAgeInSeconds: 3600
+
+Outputs:
+  SchedulerRoleArn:
+    Value: !GetAtt SchedulerRole.Arn
+  StopScheduleArn:
+    Value: !GetAtt StopSchedule.Arn
+  StartScheduleArn:
+    Value: !GetAtt StartSchedule.Arn

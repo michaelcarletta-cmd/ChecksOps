@@ -180,3 +180,58 @@ against a commitment of 8,760 h x $0.047 = about $412 for the year, which cannot
 The other offers at the time, for the record: production Partial Upfront $195 + $0.022 an hour,
 All Upfront $379; staging (db.t4g.micro, single-AZ) No Upfront $0.012 an hour, Partial Upfront
 $49 + $0.006 an hour, All Upfront $95.
+
+## Second round, continued: Internet Monitor off, staging database stopped at night
+
+Owner, 2026-11-17: "do 3 and 5" of the second list (3: stop the staging database on a schedule;
+5: turn off CloudWatch Internet Monitor on the CloudFront distribution). Asked how to handle the
+staging database, with what stopping it would affect, the owner chose "Nights only": stop 1am to
+7am Eastern every day and move the nightly staging job to 7:30am. The writes ran as the account
+root user through the AWS connector.
+
+**Internet Monitor.** `UpdateMonitor` `cloudfront_E1B0ZWWO5559U5-Monitor` `Status=INACTIVE` at
+20:37:08 UTC; read back `INACTIVE`. The monitor was created on 2026-11-09, nothing in the
+repository refers to it and no alarm uses it. It is switched off, not deleted; the distribution
+`E1B0ZWWO5559U5` was read back `Deployed` and enabled and was not changed. Cost Explorer for
+2026-11-01 to 11-16: `USE1-CW:InternetMonitor-MonitoredResource` $1.75.
+
+**Staging database, nights.** Stack `checksops-staging-db-night-schedule` from
+`aws/staging/db-night-schedule.yaml` (3,227 bytes, the template the stack was created from),
+`CREATE_COMPLETE` at about 20:40 UTC:
+
+- role `ChecksOpsStagingDbNightSchedule`, assumable by EventBridge Scheduler from this account,
+  allowed `rds:StopDBInstance` and `rds:StartDBInstance` on `checksops-staging` only (the template
+  does not accept another instance name);
+- schedule `checksops-staging-db-stop-nightly`, `cron(0 1 * * ? *)` America/New_York;
+- schedule `checksops-staging-db-start-morning`, `cron(0 7 * * ? *)` America/New_York.
+
+Two things moved out of the stopped hours:
+
+- `ModifyDBInstance` `checksops-staging` `PreferredMaintenanceWindow` `wed:06:52-wed:07:22` →
+  `wed:03:00-wed:03:30` (UTC) at 20:40:26, no pending values. The backup window, 04:03–04:33 UTC,
+  is before the stop in both winter and summer time and was not changed.
+- `PutRule` `moov-monthly-tenant-billing` ("Staging monthly tenant billing simulation")
+  `cron(15 6 * * ? *)` → `cron(30 12 * * ? *)` (UTC: 7:30am Eastern in winter, 8:30am in summer) at
+  20:40:28; state, description and its one target unchanged. Its API destination
+  `checksops-staging-scheduled` was `INACTIVE` when read, so the rule was not delivering before
+  this change either.
+
+Read first: the three alarms on the staging database (`checksops-prod-rds-connections`, `-cpu`,
+`-free-storage`, which despite the name watch `checksops-staging`) and
+`checksops-staging-api-errors-inspect` all have `TreatMissingData: notBreaching`, so a stopped
+database does not raise the database alarms. There is no RDS Proxy and no read replica.
+
+What it costs to work at night: between 1am and 7am Eastern the staging API has no database.
+Every production database or Lambda step needs a staging step first, so work in those hours starts
+with `aws rds start-db-instance --db-instance-identifier checksops-staging` (CloudShell or the
+console; about 5 to 10 minutes). The stop schedule stops it again the next night. A request that
+reaches the staging API in those hours and needs the database fails, and a Lambda error there can
+raise `checksops-staging-api-errors-inspect`.
+
+Saving: db.t4g.micro at $0.016 an hour, 6 of 24 hours, about $3 a month (storage is still billed
+while stopped). To end it, delete the stack.
+
+Not verified: that the schedules fire. Neither has run yet; the first stop is 2026-11-18 01:00
+Eastern (06:00 UTC) and the first start 07:00 Eastern (12:00 UTC). The `Input` key
+(`DbInstanceIdentifier`) follows the universal-target form in the EventBridge Scheduler
+documentation and has not been observed working here.
