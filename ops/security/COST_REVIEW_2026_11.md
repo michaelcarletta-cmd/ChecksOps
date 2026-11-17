@@ -235,3 +235,50 @@ Not verified: that the schedules fire. Neither has run yet; the first stop is 20
 Eastern (06:00 UTC) and the first start 07:00 Eastern (12:00 UTC). The `Input` key
 (`DbInstanceIdentifier`) follows the universal-target form in the EventBridge Scheduler
 documentation and has not been observed working here.
+
+## Second round, continued: Config recording frequency and one unused secret
+
+Owner, 2026-11-17: "do 6 and 7" of the second list (6: record AWS Config changes daily instead of
+continuously, or exclude noisy types; 7: delete unused secrets). The writes ran as the account root
+user through the AWS connector. Both turned out smaller than the review estimated.
+
+**Config.** Recorder `checksops-production-config-items` stays `CONTINUOUS` for everything except
+five resource types, which now record once a day (`PutConfigurationRecorder`, 20:53:41 UTC;
+recording group and role read back unchanged, recorder `recording: true`, `lastStatus SUCCESS`):
+`AWS::Lambda::Function`, `AWS::EC2::Instance`, `AWS::RDS::DBInstance`,
+`AWS::SSM::AssociationCompliance`, `AWS::SSM::ManagedInstanceInventory`.
+
+Why those: `AWS/Config` `ConfigurationItemsRecorded` for the 14 days to 2026-11-17 counts 470
+items, of which Lambda functions 169, the EC2 instance (the SQL runner starting and stopping) 114,
+RDS instances 29 and the two SSM types 23. IAM roles, security groups, S3 buckets, VPC resources
+and every other type are still recorded continuously. The staging database's new night schedule
+would otherwise have added two RDS items a day.
+
+The saving is small: at $0.003 an item, about 335 of 470 items in 14 days are of these types, so
+at most about $2 a month, and less in a quiet month. The review said $3 to $5; that was an
+over-estimate made before the per-type counts were read. What it costs: a change to a Lambda
+function, the runner or a database instance can take up to 24 hours to appear in Config and in the
+Security Hub controls that read it.
+
+To undo: `PutConfigurationRecorder` with `recordingModeOverrides: []`.
+
+**Secrets.** Of the secrets the review named as possibly unused, one was:
+
+- `checksops/isolated/azure-document-intelligence-504e`: `DeleteSecret` with a 30-day recovery
+  window at 20:53:42 UTC, deletion date 2026-12-17. It belonged to the isolated validation function
+  `checksops-ocr-azure-validation-504e`, which `ops/security/lambda-retirement-2026-11.json`
+  proposed to retire and which is no longer among the account's functions. CloudTrail for the
+  previous 60 days shows no `GetSecretValue` on it (only `DescribeSecret` by Resource Explorer);
+  `LastAccessedDate` 2026-09-18, the day it was created. `aws/tests/ocr-azure-secret.test.mjs` uses
+  the name only as a string to prove such a secret is refused. About $0.40 a month. Until
+  2026-12-17 it can be brought back with `RestoreSecret`.
+
+Left alone, with the reason:
+
+- `checksops/staging/master-uat-password`: in use. CloudTrail shows `GetSecretValue` by many
+  `ChecksOpsCursorCloudStaging` sessions in the previous 60 days. The review was wrong to list it.
+- `checksops/production/moov-webhook`: a production secret with one `GetSecretValue` (by root) in
+  60 days and no reference in the repository. Not deleted on that evidence; the owner decides.
+- `events!connection/checksops-staging-scheduled/...`: owned by the EventBridge connection of the
+  staging billing job, whose API destination is `INACTIVE`. It goes only if that connection does.
+- `checksops/staging/storage-migration-token`: already scheduled for deletion since 2026-10-21.
