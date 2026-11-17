@@ -234,4 +234,6 @@ test('a deposit record that cannot be shown to be queue-only remains blocked (de
   assert.equal(result.error, 'cleanup_denied');
   assert.equal(result.blocker, 'deposit_items');
   assert.deepEqual(result.reached, ['unreadable']);
+  assert.equal(result.message, 'Refusing to delete a check with dependent financial/provider records (deposit_items): '
+    + 'its deposit record went beyond the deposit queue (the deposit record could not be read)');
 });
