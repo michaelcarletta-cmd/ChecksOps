@@ -83,7 +83,7 @@ import { VoidStampedCheckImage } from "@/components/mortgage-ops/VoidStampedChec
 import { DeskSendHomeownerLinkButton } from "@/components/mortgage-ops/DeskSendHomeownerLinkButton";
 import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
-import { isFirstPanelLoad, showPanelSpinner } from "@/lib/mortgageDeskPanelLoad";
+import { isFirstPanelLoad, showPanelSpinner, stablePanelImages, type PanelCheckImages } from "@/lib/mortgageDeskPanelLoad";
 import { displayCase } from "@/lib/displayCase";
 
 
@@ -372,6 +372,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   // reloads on a timer (every 12 s on AWS), on new messages and after every action, and swapping the whole panel
   // for a spinner each time threw away the scroll position and whatever the agent was typing.
   const shownRequestId = useRef<string | null>(null);
+  // Check images that failed to draw: the next refresh gives them a freshly signed URL (a drawn image keeps its own).
+  const failedImages = useRef<{ front?: boolean; back?: boolean }>({});
 
   const load = useCallback(async () => {
     if (!requestId) return;
@@ -399,17 +401,23 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
       const defaultFeeCents = (siblingCount ?? 0) > 0 ? 500 : 1000;
 
-      // Hydrate invoice draft from stored values (or defaults)
-      const rr = r as any;
-      setInvoiceServices(((rr.invoice_services_cents ?? defaultFeeCents) / 100).toFixed(2));
-      setInvoiceShipping(rr.invoice_shipping_cents ? (rr.invoice_shipping_cents / 100).toFixed(2) : "");
-      setInvoiceShippingDesc(rr.invoice_shipping_description || "2-Day shipping label");
-      setInvoiceRecipient(rr.invoice_recipient_email || "");
-      setInvoiceNotes(rr.invoice_notes || "");
-      setMailToName(rr.mail_to_name || rr.mortgage_company || "");
-      setMailToAddress(rr.mail_to_address || "");
-      setShipCarrier(rr.shipping_label_carrier || "");
-      setShipTracking(rr.shipping_label_tracking || "");
+      // Hydrate the invoice and shipping fields from stored values (or defaults) when the request is first shown only:
+      // a refresh must not overwrite what the agent is typing in them.
+      if (firstLoad) {
+        const rr = r as any;
+        setInvoiceServices(((rr.invoice_services_cents ?? defaultFeeCents) / 100).toFixed(2));
+        setInvoiceShipping(rr.invoice_shipping_cents ? (rr.invoice_shipping_cents / 100).toFixed(2) : "");
+        setInvoiceShippingDesc(rr.invoice_shipping_description || "2-Day shipping label");
+        setInvoiceRecipient(rr.invoice_recipient_email || "");
+        setInvoiceNotes(rr.invoice_notes || "");
+        setMailToName(rr.mail_to_name || rr.mortgage_company || "");
+        setMailToAddress(rr.mail_to_address || "");
+        setShipCarrier(rr.shipping_label_carrier || "");
+        setShipTracking(rr.shipping_label_tracking || "");
+        failedImages.current = {};
+      }
+      // The check images this load ends with; set once at the end so they never blink out in between.
+      let freshImages: PanelCheckImages = {};
 
 
 
@@ -435,7 +443,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
       const [tRes, cRes, clRes] = await Promise.all([tenantP, checkP, claimP]);
       setTenant((tRes.data as TenantRow) || null);
-      setCheck((cRes.data as CheckRow) || null);
+      // The check this load ends with; set once below. On AWS the agent cannot read the tenant's check row and the Desk
+      // API returns it a moment later: setting "no check" in between took the whole check card off the screen and put
+      // it back on every refresh.
+      let nextCheck: CheckRow | null = (cRes.data as CheckRow) || null;
       setClaim((clRes.data as ClaimRow) || null);
 
       if (r.check_intake_item_id) {
@@ -445,11 +456,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         });
         const front = img?.frontUrl || img?.front_url;
         const back = img?.backUrl || img?.back_url;
-        if (front || back) {
-          setImages({ front, back });
-        } else {
-          setImages({});
-        }
+        if (front || back) freshImages = { front, back };
 
         if (!mortgageUsesAwsBackend) {
         const { data: fRows } = await supabase
@@ -469,18 +476,23 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         setLibraryDocs((libRows as any[]) || []);
 
         // AWS: the library documents of every tenant on the check (the requesting tenant first, then partners).
-        // On any refusal or error the single-tenant list above stays.
-        setSharedLibrary(null);
+        // On any refusal or error the single-tenant list above stays. Set once (never emptied first), so the section
+        // does not blink out on a refresh; a refresh that fails keeps the list already shown.
         if (mortgageUsesAwsBackend && canReadMortgageDeskSharedLibrary(r, user?.id, isPlatformOwner(user?.email, user?.id))) {
           const { data: shared } = await loadMortgageDeskSharedLibraryDocuments(deskEsignClient, r.id);
           if (shared) setSharedLibrary(groupSharedLibraryDocuments(shared));
+          else if (firstLoad) setSharedLibrary(null);
+        } else {
+          setSharedLibrary(null);
         }
 
         // AWS: Tenant Management's notes to the agent this request is assigned to (SQL 158; nobody else may read them).
-        setAgentNotes([]);
         if (mortgageUsesAwsBackend && canReadMortgageDeskAgentNotes(r, user?.id, isPlatformOwner(user?.email, user?.id))) {
           const { data: notes } = await loadDeskAgentNotes(deskEsignClient, r.id);
           if (notes) setAgentNotes(notes);
+          else if (firstLoad) setAgentNotes([]);
+        } else {
+          setAgentNotes([]);
         }
 
 
@@ -521,7 +533,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         // (or the platform owner) while the request is in progress or completed.
         if (r.check_intake_item_id && canReadMortgageDeskRequest(r, user?.id, isPlatformOwner(user?.email, user?.id))) {
           const { data: ws, error: wsErr } = await loadMortgageDeskWorkspace(deskEsignClient, r.id);
-          if (wsErr) toast.error(wsErr);
+          if (wsErr && firstLoad) toast.error(wsErr);
           setFiles(((ws?.check_files || []) as CheckFileRow[]).slice().reverse());
           setMessages((ws?.messages || []).map((m) => ({ ...m, sender_id: m.sender_id || "", is_deleted: false })));
           setSigRequests((ws?.signature_requests || []).slice().reverse().map((sr) => ({
@@ -531,9 +543,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           // SQL 163: the agent cannot read the tenant's check row, so the Desk API returns it (display fields only, never
           // routing or account numbers) with 60-second image URLs (owner 2026-11-12: "The check should be linked").
           if (ws?.check) {
-            if (!cRes.data) setCheck(deskCheckToRow(ws.check, r.tenant_id));
+            if (!cRes.data) nextCheck = deskCheckToRow(ws.check, r.tenant_id);
             if (ws.check.front_url || ws.check.back_url) {
-              setImages({ front: ws.check.front_url || undefined, back: ws.check.back_url || undefined });
+              freshImages = { front: ws.check.front_url || undefined, back: ws.check.back_url || undefined };
             }
           }
           setHomeownerTimeline(ws?.homeowner_timeline || []);
@@ -553,6 +565,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         setSigRequests((sigs as SigRequest[]) || []);
       } else {
         setSigRequests([]);
+      }
+
+      setCheck(nextCheck);
+
+      // A new signature for an image already drawn keeps the one on screen; a refresh that returned no image keeps them too.
+      const failed = failedImages.current;
+      if (firstLoad || freshImages.front || freshImages.back) {
+        setImages((shown) => (firstLoad ? freshImages : stablePanelImages(shown, freshImages, failed)));
+        failedImages.current = {};
       }
 
       // Sibling mortgage requests on the same check (two-mortgagee sequencing)
@@ -1375,8 +1396,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   {(images.front || images.back) && (
                     <div className="grid grid-cols-2 gap-2 pt-2">
                       {/* VOID on every check image on the Desk, no link or download (owner 2026-11-13). */}
-                      {images.front && <VoidStampedCheckImage src={images.front} label="Front" />}
-                      {images.back && <VoidStampedCheckImage src={images.back} label="Back" />}
+                      {images.front && <VoidStampedCheckImage src={images.front} label="Front" onError={() => { failedImages.current.front = true; }} />}
+                      {images.back && <VoidStampedCheckImage src={images.back} label="Back" onError={() => { failedImages.current.back = true; }} />}
                     </div>
                   )}
                 </CardContent>

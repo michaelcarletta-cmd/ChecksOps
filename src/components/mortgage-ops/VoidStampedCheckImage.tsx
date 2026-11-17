@@ -12,7 +12,7 @@ import { drawVoidWatermark } from "@/utils/watermarkCheck";
  * Limit, stated plainly: the browser still fetches the original bytes, so someone watching their own network traffic
  * during those 60 seconds could save them. The stamp prevents casual saving, printing and screenshots without VOID.
  */
-export function VoidStampedCheckImage({ src, label }: { src: string; label: string }) {
+export function VoidStampedCheckImage({ src, label, onError }: { src: string; label: string; onError?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
@@ -35,7 +35,10 @@ export function VoidStampedCheckImage({ src, label }: { src: string; label: stri
       setState("ready");
     };
     img.onerror = () => {
-      if (!cancelled) setState("error");
+      if (cancelled) return;
+      setState("error");
+      // The panel then takes a freshly signed URL for this image on its next refresh.
+      onError?.();
     };
     img.src = src;
     return () => {
@@ -43,6 +46,8 @@ export function VoidStampedCheckImage({ src, label }: { src: string; label: stri
       img.onload = null;
       img.onerror = null;
     };
+    // onError is deliberately not a dependency: a new callback must not redraw the image.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   return (
