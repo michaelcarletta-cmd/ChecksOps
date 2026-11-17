@@ -24,7 +24,7 @@ GuardDuty finding reports.
 | 3 | Cache Secrets Manager reads | "do 3 and 6" | **not done**, with the owner | below |
 | 4 | Merge the two Secrets Manager endpoints | "do 4 and 5" | **not done**, with the owner | below |
 | 10 | Terminate the "SQL53 temporary runner" | "do 7, 9 and 10 and 2" | **not done, and must not be** | below |
-| 2 | Shrink the NAT from two AZs to one | same, then "do it deterministically" | **not done**, with the owner | below |
+| 2 | Shrink the NAT from two AZs to one | same, then "do it deterministically", then "proceed as roof" | done 2026-11-17 17:21–17:32 UTC, us-east-1a kept | `ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md`, "Applied: one zone" |
 
 ## Item 7: Security Hub CIS 1.2.0 disabled
 
@@ -99,4 +99,6 @@ Two facts the owner did not have when choosing this route:
 - **It makes the whole production API single-AZ, not only its egress.** With one subnet, a failure
   of that zone stops the API even though the database fails over.
 
-Nothing was changed for item 2.
+Nothing had been changed for item 2 when this section was written. The owner then chose to proceed;
+see `ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md`, "Applied: one zone (2026-11-17)". The zone kept is
+us-east-1a, not us-east-1f, because the production SQL runner is there.

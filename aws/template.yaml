@@ -15,8 +15,8 @@ Parameters:
     Description: Existing VPC that already hosts the checksops-staging RDS instance.
   SubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
-    Default: subnet-092e4e41821fba6c4,subnet-0df2518070c5b9ff0
-    Description: Existing subnets for the API Lambda ENIs. Includes us-east-1f (RDS AZ) and us-east-1a.
+    Default: subnet-0df2518070c5b9ff0
+    Description: Existing subnet for the API Lambda ENIs. us-east-1a only since 2026-11-17, the one zone the NAT covers (ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md).
   ExistingRdsSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Default: sg-0e9332faa87c1d059
