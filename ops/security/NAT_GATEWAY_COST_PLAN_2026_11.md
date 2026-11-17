@@ -267,6 +267,71 @@ and `active`.
 Not verified: no egress probe (`GET /providers/egress`) was run after the delete. The route did not
 change, so none was expected to be needed. The saving is not yet visible on the bill.
 
+## Applied: one zone (2026-11-17)
+
+This reverses the "single zonal NAT ... not preferred while production shares it" choice under
+Alternatives below. It is the owner's decision, made after being told that it makes the whole
+production API single-AZ, not only its egress.
+
+Owner, 2026-11-17: "do 7, 9 and 10 and 2" (item 2: shrink the NAT from two zones to one), then
+"do it deterministically", then, told that the writes would run as the account root user through
+the AWS connector because no guarded workflow changes a Lambda's VPC configuration and
+`user/claude-code` is not allowed to: "proceed as roof" (read as "root"; it answered the option
+"Proceed as root"). Every write below ran as `arn:aws:iam::806168576068:root` through
+`aws-mcp.amazonaws.com`.
+
+**Why us-east-1a is the zone kept.** The production SQL runner `i-0c35557c4e5385406` is in
+`subnet-0df2518070c5b9ff0` (us-east-1a), has no public address, and reaches SSM through this NAT.
+An instance cannot change subnet. `checksops-production` is Multi-AZ with its primary in
+us-east-1f and standby in us-east-1a, and `checksops-staging` is in us-east-1f, so the Lambdas now
+reach both databases across zones.
+
+**Why the Lambdas moved first.** The regional NAT documentation says what happens to traffic from
+a zone without an address only for automatic mode. For manual mode it does not, so the address was
+removed only after nothing sent traffic from us-east-1f.
+
+| time (UTC) | call | result |
+|---|---|---|
+| 17:21:40–43 | `UpdateFunctionConfiguration` `VpcConfig.SubnetIds=[subnet-0df2518070c5b9ff0]`, security groups unchanged, `RevisionId` checked, on `checksops-staging-rehearsal-oneshot`, `checksops-staging-guarded-sql-executor`, `checksops-staging-api` | all `Successful` by 17:21:51; `CodeSha256` unchanged |
+| 17:23:06 | the same on `checksops-production-prep-api` (from `RevisionId` `ec669170-3bc4-418d-ba9b-c66ab20eb3c4`) | `Successful` by 17:23:13; `RevisionId` `dfef83fc-d69b-497f-a768-61ced5ffbf10`; `CodeSha256` `B9zvTiOU…` unchanged; 50 environment variables before and after; both security groups kept |
+| 17:29:53 | `DisassociateNatGatewayAddress` `eipassoc-07fedb3a4b662e6d8` (23.20.96.103, us-east-1f), `MaxDrainDurationSeconds` 60 | gone from the NAT by 17:32:09 |
+| 17:32:35 | `ReleaseAddress` `eipalloc-0dc609cf225a38c23`, read as unassociated immediately before | released |
+
+Verified:
+- **Staging, after its change:** `GET /staging/authorization/jwks-check` 20 of 20 HTTP 200;
+  `/staging/providers/egress` Moov and CheckAlt UAT reachable; `/staging/db-health` 200.
+- **Production, after its change:** API access log 17:23–17:31: every minute HTTP 200 except
+  2 × 503, 5 × 404 and 2 × 302 at 17:23–17:25, which is the rate seen before the change. Lambda
+  `Errors` 0. Average duration 150–230 ms, as before.
+- **Drain of us-east-1f** (`AWS/NATGateway`, 1-minute sums): `ConnectionEstablishedCount` 37 at
+  17:22, 2 at 17:23, 0 from 17:24; `ActiveConnectionCount` 0 from 17:27; `BytesOutToDestination` 0
+  from 17:26. us-east-1a took the traffic (58 connections at 17:24, 99 at 17:25) with
+  `ErrorPortAllocation` 0 and `PacketsDropCount` 0.
+- **After the address was removed:** staging JWKS 25 of 25, egress reachable, `db-health` 200.
+  Production 103 requests a minute, all 200, through 17:31.
+- **State:** `nat-1f2d1e419482e2737` `available` with one address, 52.4.42.236 in us-east-1a. It is
+  the only Elastic IP in the account. `rtb-057702ecbb292845f` is unchanged.
+
+Cost: one zone is 730 h x $0.045 = $32.85 plus one address $3.65, about **$37/month**, against about
+$73 with two.
+
+What now depends on one zone, and what to remember:
+- A failure of us-east-1a stops the production and staging APIs and their egress until a Lambda
+  subnet and a NAT address exist in another zone. The database fails over by itself; the API does not.
+- **A VPC Lambda placed in us-east-1f (`subnet-092e4e41821fba6c4`) has no tested internet egress.**
+  `aws/samconfig.toml` and the `SubnetIds` default in `aws/template.yaml` now name only the us-east-1a
+  subnet, so a staging stack deploy keeps it that way. That deploy will also shrink the staging
+  Secrets Manager endpoint (`SecretsManagerVpcEndpoint` uses the same parameter) to us-east-1a.
+- `scripts/staging-db-readonly-diagnostic-deploy.mjs` still lists both subnets. That function reads
+  the database and Secrets Manager through the endpoint and needs no internet egress; it was left
+  alone.
+- Rollback: `associate-nat-gateway-address --availability-zone us-east-1f` with a new Elastic IP,
+  then add the subnet back to each function.
+
+Not verified: an invoke of `checksops-production-prep-api`'s own egress probe (production sits behind
+the origin-verify authorizer; the staging function in the same subnet and security group was probed
+instead), and the SQL runner's SSM connection, which was not started.
+
 ## Alternatives considered
 
 - **Leave it as it is** (~$146/month). No risk, no saving.
