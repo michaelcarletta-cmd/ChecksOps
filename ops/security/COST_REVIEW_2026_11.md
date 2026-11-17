@@ -134,3 +134,49 @@ Two facts the owner did not have when choosing this route:
 Nothing had been changed for item 2 when this section was written. The owner then chose to proceed;
 see `ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md`, "Applied: one zone (2026-11-17)". The zone kept is
 us-east-1a, not us-east-1f, because the production SQL runner is there.
+
+## Second round, same day: endpoints to one zone and a database reservation
+
+Owner, 2026-11-17: "what else can we do to cut costs", then "do 1 and 2" of that second list
+(1: shrink both Secrets Manager endpoints to the one zone the Lambdas now use; 2: buy a 1-year
+reserved instance for the databases). Asked which reservation to buy, with the prices below, the
+owner chose "Production only, no upfront". The writes ran as the account root user through the AWS
+connector, like the others of this review.
+
+**Endpoints.** Both interface endpoints had an interface in each Lambda subnet; since the NAT
+change every VPC Lambda runs only in `subnet-0df2518070c5b9ff0` (us-east-1a).
+
+| time (UTC) | call | result |
+|---|---|---|
+| 20:22:02 | `ModifyVpcEndpoint` `vpce-01649ea2cdb21a689` (production, private DNS off) `RemoveSubnetIds=[subnet-092e4e41821fba6c4]` | `available` with one interface, `eni-006d1d9683a31fb3b`, by 20:22:51; its regional DNS name, the one the production SQL runbooks use, is unchanged |
+| 20:23:04 | the same on `vpce-0962386266e90e1c6` (staging stack, private DNS on) | `pending` at 20:23:59, `available` with one interface, `eni-03224d8d3e5c575b1`, when read at 20:25:58; private DNS still on |
+
+Read first: no file in the repository uses a zone-specific endpoint name. Verified:
+`GET /staging/db-health` 30 of 30 HTTP 200 from 20:24 to 20:25:58, while the staging endpoint was
+changing. Production API access log 20:15–20:28: HTTP 200 for every request (2 a minute until
+20:25, then 45 to 63 a minute); Lambda average duration 85–206 ms; no log line matching a timeout,
+a connection error or a secret error. Two endpoint interfaces fewer is 2 x 730 h x $0.01 =
+about $14.60 a month.
+
+The staging endpoint is `SecretsManagerVpcEndpoint` in the `checksops-staging` stack. The stack's
+`SubnetIds` parameter has named only the us-east-1a subnet in `aws/samconfig.toml` since #1978, so
+the next staging stack deploy asks for what is now live. Until then CloudFormation's recorded state
+of that resource differs from the live one.
+
+Not verified: the production SQL one-shot path against the one-interface production endpoint (it
+was not run), and `checksops-p5c-sql-oneshot` and the staging read-only diagnostic from the
+us-east-1f subnet, which now reach an endpoint interface in the other zone.
+
+**Reservation.** `PurchaseReservedDBInstancesOffering`, offering
+`17163f16-0f60-41c4-9f82-5e6416901ace`, read back immediately before the purchase as
+db.t4g.small, Multi-AZ, postgresql, 1 year (31,536,000 s), No Upfront, $0 fixed, $0.047 an hour.
+Reservation id `checksops-production-t4g-small-maz-2026-11`, count 1, start
+2026-11-17T20:30:30Z, state `payment-pending` when last read at 20:31:24 (not yet seen `active`).
+There was no reservation before it. It covers `checksops-production`, which was billed $0.065 an
+hour on demand in October (`Multi-AZUsage:db.t4g.small`, 744 h, $48.36): about $13 a month less,
+against a commitment of 8,760 h x $0.047 = about $412 for the year, which cannot be cancelled.
+`checksops-staging` was left on demand so that it can be stopped on a schedule later.
+
+The other offers at the time, for the record: production Partial Upfront $195 + $0.022 an hour,
+All Upfront $379; staging (db.t4g.micro, single-AZ) No Upfront $0.012 an hour, Partial Upfront
+$49 + $0.006 an hour, All Upfront $95.
