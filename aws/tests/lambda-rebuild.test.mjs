@@ -164,6 +164,12 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // not routed) follows the deployed delete's rule by importing workflow.mjs's helper. A rebuild-only change (see
   // OVERLAY_PLAN_CHANGES), not a member of the current rebuild section; workflow.mjs itself is an overlay REPLACE row.
   'workflow-delete-check.mjs': 'changed',
+  // Secrets Manager reads cached per container for five minutes (2026-11-17 cost review, item 3, planning only):
+  // one GetSecretValue per secret per TTL instead of one per request. sql53-production-readonly-inspect.mjs
+  // changes with it because it pins the bytes of secrets.mjs (SQL53_READONLY_INSPECT_SECRETS_SHA256).
+  // Rebuild-only changes (see OVERLAY_PLAN_CHANGES), not members of the current rebuild section.
+  'secrets.mjs': 'changed',
+  'sql53-production-readonly-inspect.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -370,6 +376,10 @@ const OVERLAY_PLAN_CHANGES = new Set([
   // Delete Check keeps charges (2026-11-16, planning only): workflow-delete-check.mjs is not an overlay member (do_not_overlay):
   // it reaches a function only with a rebuild. workflow.mjs is a REPLACE row of the production plan.
   'workflow-delete-check.mjs',
+  // Secrets Manager read cache (2026-11-17, planning only): neither file is an overlay member. They reach a
+  // function together, only with a rebuild: the inspect refuses when the live secrets.mjs is not the pinned bytes.
+  'secrets.mjs',
+  'sql53-production-readonly-inspect.mjs',
   'providers/production/checkalt-eligibility.mjs',
   'providers/production/checkalt-poll.mjs',
   'providers/production/checkalt-status-read.mjs',

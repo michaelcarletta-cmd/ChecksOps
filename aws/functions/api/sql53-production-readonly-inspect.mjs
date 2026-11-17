@@ -22,7 +22,7 @@ export const SQL53_READONLY_INSPECT_EXPECTED_DATABASE = 'checksops';
 export const SQL53_READONLY_INSPECT_EXPECTED_FUNCTION = 'checksops-production-prep-api';
 export const SQL53_READONLY_INSPECT_ALLOWED_ENVS = Object.freeze(['production', 'production-prep']);
 export const SQL53_READONLY_INSPECT_EXPECTED_RDS_IDENTIFIER = 'checksops-production';
-export const SQL53_READONLY_INSPECT_SECRETS_SHA256 = 'f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3';
+export const SQL53_READONLY_INSPECT_SECRETS_SHA256 = 'a4d589fd37ecc1a5a57aa3bcfd4aedac2df06d55fb88ada10c8e47715318db58';
 export const SQL53_READONLY_INSPECT_EVENT_KEYS = Object.freeze(['diagnostic', 'authorization']);
 
 export const SQL53_FUNCTION_DEF_INSPECT_SQL = `
