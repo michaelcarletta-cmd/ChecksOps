@@ -372,7 +372,7 @@ test('panel: a per-user "Show deductible" switch, remembered in the browser, and
   assert.match(panel, /window\.localStorage\.getItem\(deductibleKey\) !== "0"/);
   assert.match(panel, /window\.localStorage\.setItem\(deductibleKey, next \? "1" : "0"\)/);
   assert.match(panel, /<Switch id="outstanding-show-deductible" checked=\{showDeductible\} onCheckedChange=\{changeShowDeductible\} \/>/);
-  assert.match(panel, /<Label htmlFor="outstanding-show-deductible"[^>]*>Show deductible<\/Label>/);
+  assert.match(panel, /<Label htmlFor="outstanding-show-deductible"[^>]*>Include deductible<\/Label>/);
   // Header, row cell and total all follow the switch; so does the export.
   assert.equal((panel.match(/\{!compact && showDeductible && </g) || []).length, 3);
   assert.match(panel, /showDeductible \? ` · Ded\. \$\{money\(row\.deductible\)\}` : ""/);
@@ -485,9 +485,60 @@ test('panel: a partner filter beside the deductible switch, partners on each row
   assert.match(panel, /<SelectItem value=\{OUTSTANDING_PARTNER_ALL\}[^>]*>All claims<\/SelectItem>/);
   assert.match(panel, /<SelectItem value=\{OUTSTANDING_PARTNER_NONE\}[^>]*>No partner \(\{withoutPartnerCount\}\)<\/SelectItem>/);
   assert.match(panel, /\{partner\.name\} \(\{partner\.count\}\)/);
-  assert.match(panel, /filterOutstandingClaimRows\(filterOutstandingByPartner\(data\?\.rows \?\? \[\], activePartnerFilter\), searchQuery\)/);
+  assert.match(panel, /filterOutstandingClaimRows\(filterOutstandingByPartner\(baseRows, activePartnerFilter\), searchQuery\)/);
   assert.match(panel, /row\.partners\.length > 0 && \(/);
   assert.match(panel, /row\.partners\.map\(\(p\) => p\.name\)\.join\(", "\)/);
   assert.match(panel, /showDeductible,\s+partnerFilterLabel,/);
   assert.match(panel, /data && !data\.partnersLoaded && \(/);
+});
+
+// Owner 2026-11-17, after the switch went live: "When toggling the deductible on and off it should also adjuster the
+// outstanding amount".
+const { applyDeductibleChoice } = await import('../../src/lib/outstandingClaims.ts');
+
+test('with the deductible off, expected and outstanding drop by each claim\'s deductible and a claim left at $0 leaves the list', () => {
+  const rows = buildOutstandingClaimRows({ claims: CLAIMS, settlements: SETTLEMENTS, checks: CHECKS });
+  // On: the ledger's figure, the same array.
+  assert.equal(applyDeductibleChoice(rows, true), rows);
+  const off = applyDeductibleChoice(rows, false);
+  // claim-a: expected 74,000.50 less the 2,750 deductible; received unchanged; outstanding 32,000.25 less 2,750.
+  assert.deepEqual(off.map((r) => [r.claimId, r.expected, r.received, r.deductible, r.outstanding]), [['claim-a', 71250.5, 42000.25, 2750, 29250.25]]);
+  // claim-b had one cent outstanding against a 1,000 deductible: nothing is due without the deductible, so it is not listed.
+  assert.equal(off.some((r) => r.claimId === 'claim-b'), false);
+  // Expected minus received is still the outstanding amount on every row.
+  for (const r of off) assert.equal(Math.round((r.expected - r.received) * 100), Math.round(r.outstanding * 100));
+  // Everything else on the row is untouched, and the input rows are not modified.
+  const { expected: _e, outstanding: _o, ...restOff } = off[0];
+  const { expected: _e2, outstanding: _o2, ...restOn } = rows[0];
+  assert.deepEqual(restOff, restOn);
+  assert.equal(rows[0].outstanding, 32000.25);
+  // Totals follow.
+  assert.deepEqual(outstandingTotals(off), { count: 1, expected: 71250.5, received: 42000.25, outstanding: 29250.25, recoverableDepreciation: 10000, deductible: 2750 });
+  // Order is by the adjusted balance: a large deductible can move a claim down.
+  const two = buildOutstandingClaimRows({
+    claims: [{ id: 'x', claim_number: 'X' }, { id: 'y', claim_number: 'Y' }],
+    settlements: [{ claim_id: 'x', replacement_cost_value: 10000, deductible: 6000 }, { claim_id: 'y', replacement_cost_value: 8000, deductible: 500 }],
+    checks: [{ id: 'kx', claim_id: 'x', amount: 1000, created_at: '2026-01-01' }, { id: 'ky', claim_id: 'y', amount: 1000, created_at: '2026-01-01' }],
+  });
+  assert.deepEqual(two.map((r) => [r.claimId, r.outstanding]), [['x', 9000], ['y', 7000]]);
+  assert.deepEqual(applyDeductibleChoice(two, false).map((r) => [r.claimId, r.outstanding]), [['y', 6500], ['x', 3000]]);
+  // A deductible larger than what is expected never produces a negative amount.
+  const over = buildOutstandingClaimRows({ claims: [{ id: 'z' }], settlements: [{ claim_id: 'z', replacement_cost_value: 500, deductible: 2000 }], checks: [{ id: 'kz', claim_id: 'z', amount: 100, created_at: '2026-01-01' }] });
+  assert.equal(over.length, 1);
+  assert.deepEqual(applyDeductibleChoice(over, false), []);
+  // The export says the deductible is not included and explains the figure.
+  const table = outstandingClaimsTable({ rows: off, asOfLabel: 'As of today', showDeductible: false });
+  assert.equal(table.subtitle, 'Claims with a balance above $0 – deductible not included – As of today');
+  assert.match(table.note, /plus any expected supplement, less the deductible\) minus the checks received/);
+  assert.deepEqual(table.rows[0], ['CLM-100', 'THERESA JOHNSON', '', 2, 71250.5, 42000.25, 10000, 29250.25]);
+  assert.doesNotMatch(outstandingClaimsTable({ rows, asOfLabel: 'As of today' }).note, /less the deductible/);
+});
+
+test('panel: the switch feeds the amounts, the partner counts and the export, and is labelled "Include deductible"', () => {
+  const panel = read('src/components/checks/OutstandingClaimsPanel.tsx');
+  assert.match(panel, /const baseRows = useMemo\(\(\) => applyDeductibleChoice\(data\?\.rows \?\? \[\], showDeductible\), \[data, showDeductible\]\);/);
+  assert.match(panel, /outstandingPartnerOptions\(baseRows\)/);
+  assert.match(panel, /baseRows\.filter\(\(row\) => row\.partners\.length === 0\)\.length/);
+  assert.match(panel, /\{showDeductible \? "" : ", less the deductible"\}/);
+  assert.ok(!panel.includes('>Show deductible<'));
 });

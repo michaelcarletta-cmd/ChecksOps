@@ -10,7 +10,11 @@
  * claim has no policyholder name, the name comes from the claim's checks, as the Checks lanes do: an
  * insured payee of a check, then the insured read from a check's payee line. And the deductible can be
  * hidden (public adjusters and attorneys do not collect deductibles, only contractors do): the list and
- * its Excel and PDF then leave the deductible out; the outstanding amount itself is unchanged.
+ * its Excel and PDF then leave the deductible out. Owner 2026-11-17, after using it: "When toggling the
+ * deductible on and off it should also adjust the outstanding amount". With the deductible off, each claim's
+ * expected and outstanding amounts are reduced by its deductible (applyDeductibleChoice): what is still due
+ * when nobody collects the deductible. A claim whose balance is then $0 leaves the list. The Claim Ledger
+ * card in the check file keeps the ledger's figure.
  *
  * Owner 2026-11-17: "filter outstanding by partners to show which partners, if any, are involved with the
  * outstanding claim check files". A row lists the partner companies any of the claim's checks is actively
@@ -205,6 +209,27 @@ export function buildOutstandingClaimRows(input: {
     || a.claimId.localeCompare(b.claimId));
 }
 
+/**
+ * The rows with or without the deductible counted. Included (the ledger's figure): unchanged. Not included:
+ * expected and outstanding are each reduced by the claim's deductible, never below $0; claims left with no
+ * balance (in whole cents) are dropped, and the rest are ordered largest balance first again. The deductible
+ * figure itself stays on the row.
+ */
+export function applyDeductibleChoice(rows: OutstandingClaimRow[], includeDeductible: boolean): OutstandingClaimRow[] {
+  if (includeDeductible) return rows;
+  return rows
+    .map((row) => {
+      const expected = Math.max(0, (centsOf(row.expected) - centsOf(row.deductible)) / 100);
+      const outstanding = Math.max(0, (centsOf(expected) - centsOf(row.received)) / 100);
+      return { ...row, expected, outstanding };
+    })
+    .filter((row) => centsOf(row.outstanding) > 0)
+    .sort((a, b) =>
+      centsOf(b.outstanding) - centsOf(a.outstanding)
+      || String(a.claimNumber || "").localeCompare(String(b.claimNumber || ""))
+      || a.claimId.localeCompare(b.claimId));
+}
+
 /** The partners involved in the rows, by name, each with the number of claims it is on. */
 export function outstandingPartnerOptions(rows: OutstandingClaimRow[]): Array<OutstandingPartner & { count: number }> {
   const byId = new Map<string, OutstandingPartner & { count: number }>();
@@ -278,7 +303,7 @@ export function outstandingClaimsTable(input: {
   asOfLabel: string;
   /** Formats a stored name for display (displayCase in the app). */
   displayName?: (value: string) => string;
-  /** false leaves the Deductible column out (the viewer hid deductibles). Default true. */
+  /** false leaves the Deductible column out and says so (pass rows from applyDeductibleChoice(rows, false)). Default true. */
   showDeductible?: boolean;
   /** The partner filter as shown, e.g. "Partner: Condition One" or "No partner"; omitted for all partners. */
   partnerFilterLabel?: string | null;
@@ -303,13 +328,16 @@ export function outstandingClaimsTable(input: {
   return {
     sheetName: "Outstanding",
     title: join(input.companyName, "Outstanding Claims"),
-    subtitle: join("Claims with a balance above $0", input.partnerFilterLabel, search ? `matching "${search}"` : null, input.asOfLabel),
+    subtitle: join("Claims with a balance above $0", input.showDeductible === false ? "deductible not included" : null,
+      input.partnerFilterLabel, search ? `matching "${search}"` : null, input.asOfLabel),
     columns: keep(OUTSTANDING_CLAIMS_COLUMNS),
     rows,
     totals: [keep<ReportCell>([
       `Total (${totals.count} claim${totals.count === 1 ? "" : "s"})`, "", "", "",
       totals.expected, totals.received, totals.recoverableDepreciation, totals.deductible, totals.outstanding,
     ])],
-    note: "Outstanding = expected (full RCV across all categories plus any expected supplement) minus the checks received on the claim.",
+    note: input.showDeductible === false
+      ? "Outstanding = expected (full RCV across all categories plus any expected supplement, less the deductible) minus the checks received on the claim."
+      : "Outstanding = expected (full RCV across all categories plus any expected supplement) minus the checks received on the claim.",
   };
 }
