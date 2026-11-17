@@ -49,7 +49,7 @@ Applied as `checksops_admin` via temporary Lambda `checksops-staging-rls-remedia
 | Probe table | `public._aws_rls_probe_items` — **only** public table with RLS on |
 | Restored tables | RLS remains **off** (transactional ENABLE on 16 representative tables was rolled back) |
 | 47 FKs | Not applied (`aws/rls/FK_RETARGET_PLAN.md`) |
-| JWKS | Cognito IdP interface VPCE `vpce-01e64f35c26956533`; Lambda fetches JWKS in-VPC |
+| JWKS | Lambda fetches JWKS from `cognito-idp.us-east-1.amazonaws.com` through the NAT gateway. The interface VPCE `vpce-01e64f35c26956533` was removed on 2026-11-17 (`aws/rls/COGNITO_IDP_VPCE.md`) |
 
 SELECT model (policies exist; RLS off on restored tables):
 
@@ -63,7 +63,7 @@ SELECT model (policies exist; RLS off on restored tables):
 
 ## API
 
-`GET`/`POST` `/authorization/probe` and `/authorization/isolation` (HTTP API JWT authorizer `5kyjfy`). `GET /authorization/jwks-check` has no authorizer so the Lambda must fetch Cognito JWKS over PrivateLink.
+`GET`/`POST` `/authorization/probe` and `/authorization/isolation` (HTTP API JWT authorizer `5kyjfy`). `GET /authorization/jwks-check` has no authorizer so the Lambda must fetch Cognito JWKS itself, through the NAT gateway since 2026-11-17 (over PrivateLink before that).
 
 Looks up `identity_accounts` by Cognito `sub` only, sets `request.app_user_id` to the mapped UUID, `SELECT`s the probe table. Query params, `X-User-Id` / `X-Tenant-Id` / `X-Cognito-Sub`, and JSON body ids are ignored.
 

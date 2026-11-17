@@ -171,6 +171,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Rebuild-only changes (see OVERLAY_PLAN_CHANGES), not members of the current rebuild section.
   'secrets.mjs': 'changed',
   'sql53-production-readonly-inspect.mjs': 'changed',
+  // JWKS check text (2026-11-17, planning only): the `networking` string of /authorization/jwks-check said PrivateLink
+  // after the Cognito interface endpoint was removed. A rebuild-only change (see OVERLAY_PLAN_CHANGES), not a member of
+  // the current rebuild section: live still returns the old text until the next rebuild.
+  'authorization.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -381,6 +385,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   // function together, only with a rebuild: the inspect refuses when the live secrets.mjs is not the pinned bytes.
   'secrets.mjs',
   'sql53-production-readonly-inspect.mjs',
+  // JWKS check text (2026-11-17, planning only): not an overlay member; it reaches a function only with a rebuild.
+  'authorization.mjs',
   'providers/production/checkalt-eligibility.mjs',
   'providers/production/checkalt-poll.mjs',
   'providers/production/checkalt-status-read.mjs',
