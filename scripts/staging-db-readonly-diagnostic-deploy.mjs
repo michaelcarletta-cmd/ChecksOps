@@ -20,7 +20,9 @@ export const DEPLOYMENT = Object.freeze({
   stackName: 'checksops-staging-db-readonly-diagnostic',
   functionName: 'checksops-staging-db-readonly-diagnostic',
   databaseSecretArn: 'arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops/1788286468693-b4U0Rn',
-  subnetIds: ['subnet-0df2518070c5b9ff0', 'subnet-092e4e41821fba6c4'],
+  // us-east-1a only since 2026-11-17: the NAT gateway covers that zone alone, and the function reaches Secrets Manager
+  // through it now that the staging interface endpoint is gone (ops/security/COST_REVIEW_2026_11.md).
+  subnetIds: ['subnet-0df2518070c5b9ff0'],
   securityGroupId: 'sg-0fe2698f236959353',
 });
 
