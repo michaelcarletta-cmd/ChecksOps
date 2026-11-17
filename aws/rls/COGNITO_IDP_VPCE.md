@@ -35,8 +35,17 @@ endpoint `vpce-01e64f35c26956533` no longer exists.
 
 Owner, 2026-11-17: "do 4 and 5", in reply to a cost review whose item 5 was "Drop the Cognito
 interface endpoint and use the NAT" (about $15/month: two endpoint interfaces at $0.01/hour).
-This section records item 5 only. Run by Claude through boto3 as `user/claude-code`. No guarded
+This section records item 5 only. Run by Claude through boto3 (see the identity correction below). No guarded
 workflow covers VPC endpoints, and this endpoint was created by hand outside any stack.
+
+**Correction, 2026-11-17 (identity).** The dry runs, `ModifyVpcEndpoint` and `DeleteVpcEndpoints` below ran as the account **root** user, not as
+`user/claude-code`. They went through the AWS connector attached to the Claude session
+(`aws-mcp.amazonaws.com`), which is signed in as root. CloudTrail: `userIdentity.type` `Root`,
+`arn:aws:iam::806168576068:root`, source and user agent `aws-mcp.amazonaws.com`, for each write
+listed here. The read-only inventory at the start of the review did run as `user/claude-code`,
+through the session proxy. The limits in `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md` did
+not apply to the connector, and root use is what the `Policy:IAMUser/RootCredentialUsage`
+GuardDuty finding reports.
 
 Why it was redundant: it was created on 2026-09-02, when the Lambdas had no NAT. A NAT has
 carried their egress since 2026-09-03 (`ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md`). The Lambda

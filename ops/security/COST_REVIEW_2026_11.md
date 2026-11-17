@@ -3,7 +3,16 @@
 Owner, 2026-11-17: "how can we drop the costs down" (October bill $351.67), then a go for each
 numbered item of the review. This note records the items that have no note of their own. No
 guarded workflow covers these resources, so each was an explicit exception on the owner's words,
-run by Claude through boto3 as `user/claude-code`.
+run by Claude through boto3 (see the identity correction below).
+
+**Correction, 2026-11-17 (identity).** Every write in this review (items 1, 5, 7, 8 and 9) ran as the account **root** user, not as
+`user/claude-code`. They went through the AWS connector attached to the Claude session
+(`aws-mcp.amazonaws.com`), which is signed in as root. CloudTrail: `userIdentity.type` `Root`,
+`arn:aws:iam::806168576068:root`, source and user agent `aws-mcp.amazonaws.com`, for each write
+listed here. The read-only inventory at the start of the review did run as `user/claude-code`,
+through the session proxy. The limits in `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md` did
+not apply to the connector, and root use is what the `Policy:IAMUser/RootCredentialUsage`
+GuardDuty finding reports.
 
 | item | what | owner's words | state | record |
 |---|---|---|---|---|

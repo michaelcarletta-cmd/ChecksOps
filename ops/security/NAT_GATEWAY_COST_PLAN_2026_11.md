@@ -227,7 +227,16 @@ than 2026-11-05 20:44 UTC, and only after us-east-1a traffic on the new NAT is c
 
 Owner, 2026-11-17: "do 1 and 8", in reply to a cost review whose item 1 was "Delete
 `checksops-staging-nat` and its four IPs" and item 8 "Release the idle Elastic IP `100.50.171.44`".
-Run by Claude through boto3 as `user/claude-code`.
+Run by Claude through boto3 (see the identity correction below).
+
+**Correction, 2026-11-17 (identity).** The `DeleteNatGateway` and `ReleaseAddress` calls below ran as the account **root** user, not as
+`user/claude-code`. They went through the AWS connector attached to the Claude session
+(`aws-mcp.amazonaws.com`), which is signed in as root. CloudTrail: `userIdentity.type` `Root`,
+`arn:aws:iam::806168576068:root`, source and user agent `aws-mcp.amazonaws.com`, for each write
+listed here. The read-only inventory at the start of the review did run as `user/claude-code`,
+through the session proxy. The limits in `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md` did
+not apply to the connector, and root use is what the `Policy:IAMUser/RootCredentialUsage`
+GuardDuty finding reports.
 
 Read first (all read-only, 2026-11-17):
 - **Route.** `rtb-057702ecbb292845f` 0.0.0.0/0 → `nat-1f2d1e419482e2737`, `active`. No route table
