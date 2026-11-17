@@ -282,3 +282,61 @@ Left alone, with the reason:
 - `events!connection/checksops-staging-scheduled/...`: owned by the EventBridge connection of the
   staging billing job, whose API destination is `INACTIVE`. It goes only if that connection does.
 - `checksops/staging/storage-migration-token`: already scheduled for deletion since 2026-10-21.
+
+## Second round, continued: the staging Secrets Manager endpoint is removed
+
+Owner, 2026-11-17: "do 4" of the second list (remove the staging Secrets Manager endpoint
+entirely). The writes ran as the account root user through the AWS connector.
+
+**A correction first.** Two earlier statements in this note were wrong about which endpoint the
+production API uses. Item 4 above says the staging endpoint's private DNS name is one "the
+production API resolves on every request", and the endpoints section says the production endpoint
+is the one "the production SQL runbooks use" as if nothing else did. In fact
+`checksops-production-prep-api` has `AWS_ENDPOINT_URL_SECRETS_MANAGER` set to the production
+endpoint's own DNS name (`vpce-01649ea2cdb21a689-tp7fo1qj.secretsmanager.us-east-1.vpce.amazonaws.com`),
+and CloudTrail shows its `GetSecretValue` calls arriving through `vpce-01649ea2cdb21a689` from
+172.31.5.161, before and after every change in this section. So:
+
+- the production API never depended on the staging endpoint, and nothing below could affect it;
+- the 20:22:02 shrink of the **production** endpoint to one zone was a change to the path the live
+  production API uses, not only the SQL path. It was described to the owner as carrying no live
+  risk; that was wrong. The production access log for 20:15–20:28, already recorded above, shows
+  HTTP 200 throughout and no error lines, so it did no harm.
+
+**What was done.** In two steps, so that anything still holding the endpoint's address kept working:
+
+| time (UTC) | call | result |
+|---|---|---|
+| 20:58:34 | `ModifyVpcEndpoint` `vpce-0962386266e90e1c6` `PrivateDnsEnabled=false` | `available`, private DNS off, by 20:58:53. From then `secretsmanager.us-east-1.amazonaws.com` resolves to the public address inside the VPC |
+| 21:11:37 | `DeleteVpcEndpoints` `vpce-0962386266e90e1c6` | `Unsuccessful` empty; `deleting` 25 seconds later |
+
+Read first: every VPC Lambda runs in `subnet-0df2518070c5b9ff0` and carries `sg-0fe2698f236959353`,
+whose egress allows TCP 443 to `0.0.0.0/0`; `checksops-staging-api` has no endpoint override, so it
+used the private DNS name.
+
+Verified:
+- `GET /staging/db-health` 40 of 40 HTTP 200 from 20:59 to 21:02:18 (after the DNS switch) and 20
+  of 20 to 21:13:23 (after the delete); `/staging/authorization/jwks-check` 200.
+- CloudTrail: `GetSecretValue` by `checksops-staging-ApiFunctionRole-…` in the 21:00 window came
+  from 52.4.42.236, the NAT gateway's address, with no `vpcEndpointId`: staging reads its secrets
+  through the NAT.
+- Production API access log 20:58–21:07: HTTP 200 (plus 5 × 204 and 1 × 302), no 5xx; no log line
+  matching a timeout, a DNS or connection error in the production or staging function.
+
+One interface endpoint fewer is 730 h × $0.01 = about $7.30 a month. The only interface endpoint
+left is the production one, `vpce-01649ea2cdb21a689`, with one interface in us-east-1a.
+
+**What changes in principle.** Staging's Secrets Manager calls now leave through the NAT gateway to
+the public Secrets Manager endpoint (TLS, signed with the function's role) instead of staying on a
+private link. Production's do not: they still use the production interface endpoint.
+
+**Repository.** `aws/template.yaml` no longer declares `SecretsManagerVpcEndpoint`, its
+`DependsOn` entry or its output, so a later staging stack deploy does not recreate it (the stack's
+recorded state still lists the resource until then; CloudFormation finds it already gone). The
+endpoint security group and its rules stay: the optional KMS endpoint uses them.
+`scripts/staging-db-readonly-diagnostic-deploy.mjs` now places the staging read-only diagnostic in
+the us-east-1a subnet only, because from us-east-1f it would have had neither the endpoint nor a
+NAT address in its zone.
+
+Not verified: a deploy of the staging stack from this template, and a deploy of the staging
+read-only diagnostic with one subnet.

@@ -257,16 +257,9 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref StagingNatGateway
 
-  SecretsManagerVpcEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VpcId
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds: !Ref SubnetIds
-      SecurityGroupIds:
-        - !Ref VpcEndpointSecurityGroup
+  # No Secrets Manager interface endpoint since 2026-11-17: the staging Lambdas reach Secrets Manager
+  # through the NAT gateway (ops/security/COST_REVIEW_2026_11.md). The live endpoint
+  # vpce-0962386266e90e1c6 was deleted that day; this stack no longer declares it.
 
   S3VpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -296,7 +289,6 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     DependsOn:
-      - SecretsManagerVpcEndpoint
       - S3VpcEndpoint
       - RdsFromLambdaIngress
       - LambdaToSecretsEndpointEgress
@@ -709,7 +701,5 @@ Outputs:
   DatabaseSecretArnOutput:
     Description: Application database secret ARN referenced by Lambda. Not a password.
     Value: !Ref DatabaseSecretArn
-  SecretsManagerVpcEndpointId:
-    Value: !Ref SecretsManagerVpcEndpoint
   S3VpcEndpointId:
     Value: !Ref S3VpcEndpoint
