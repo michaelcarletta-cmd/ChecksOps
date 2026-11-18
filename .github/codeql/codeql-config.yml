@@ -1,0 +1,7 @@
+name: ChecksOps CodeQL configuration
+
+# Retired Lovable/Supabase edge-function source. Kept because release locks,
+# tests and recorded fixtures still refer to it; nothing in it is deployed
+# from this repository.
+paths-ignore:
+  - supabase/functions
