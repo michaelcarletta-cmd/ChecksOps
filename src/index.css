@@ -268,11 +268,13 @@ All colors MUST be HSL.
     @apply font-code;
   }
 
-  /* Respect users who prefer reduced motion */
+  /* Reduced motion (the device's "animation effects" setting) is respected in the iOS/Android app
+     only. On the website the owner chose to always animate (2026-11-18: with Windows animation
+     effects off, every transition was switched off and the Checks page "still is not smooth"). */
   @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
+    html.native-app *,
+    html.native-app *::before,
+    html.native-app *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -726,15 +728,8 @@ html:not(.native-app) [role="tablist"][data-tab-indicator-ready] [role="tab"][da
   box-shadow: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html:not(.native-app) *,
-  html:not(.native-app) *::before,
-  html:not(.native-app) *::after {
-    animation-duration: 1ms !important;
-    animation-delay: 0ms !important;
-    transition-duration: 1ms !important;
-  }
-}
+/* No reduced-motion override on the website: the owner chose to always animate (2026-11-18). The
+   app keeps its own reduced-motion rule below. */
 
 /* ── iOS / Android app only (mobile/, Capacitor) ─────────────────────────────────────────────
    applyNativeAppShell() in src/lib/nativeApp.ts sets html.native-app at startup inside the app.
