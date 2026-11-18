@@ -1114,15 +1114,8 @@ export const runAuthenticatedEndorsement = async ({
   }
 
   if (action === 'send_endorsement_request') {
-    if (isContractorPayee(endorsement.payee_type)) {
-      return {
-        ok: false,
-        statusCode: 400,
-        error: 'Contractors cannot sign an endorsement. Their email will be CC\'d when the insured is notified.',
-        code: 'contractor_cc_only',
-        spoofFieldsIgnored: spoof,
-      };
-    }
+    // A contractor payee is sent the request like any other payee (owner 2026-11-18); until then the send was
+    // refused with contractor_cc_only.
     if (endorsementRateLimited(endorsement.request_sent_at)) {
       return { ok: false, statusCode: 429, error: 'Request was sent recently. Please wait before resending.', spoofFieldsIgnored: spoof };
     }

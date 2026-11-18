@@ -65,7 +65,8 @@ test('FIX1 B: loss draft + all non-mortgage endorsements complete stays loss dra
   const evaluation = evaluateEndorsementMath([
     { status: 'signed', payee_type: 'insured' },
     { status: 'waived', payee_type: 'public_adjuster' },
-    { status: 'pending', payee_type: 'contractor' },
+    // A contractor payee is a required signer since 2026-11-18, so it is signed here like the others.
+    { status: 'signed', payee_type: 'contractor' },
   ]);
   assert.equal(evaluation.allRequiredSatisfied, true);
   const decision = decideReadyTransition(
@@ -99,13 +100,32 @@ test('FIX1 D: Mortgage Ops completion by itself does not release Ready', () => {
   assert.equal(stillHeld.action, 'hold_loss_draft');
 });
 
-test('FIX3 contractor CC-only does not stall Ready math', () => {
-  const evaluation = evaluateEndorsementMath([
+// Owner 2026-11-18: "Sometimes contractors are in checks so we need to allow them to endorse checks". Required like the
+// insured, "when a user clicks contractor on drop down for payee"; a partner the check is only shared with has no payee
+// row. Until then (FIX3) a contractor row was CC-only and never stalled Ready math.
+test('a contractor payee is a required signer: pending holds Ready, signed or waived satisfies', () => {
+  const pending = evaluateEndorsementMath([
     { status: 'signed', payee_type: 'insured' },
     { status: 'pending', payee_type: 'contractor' },
   ]);
-  assert.equal(evaluation.allRequiredSatisfied, true);
-  assert.equal(isEndorsementSatisfied({ status: 'pending', payee_type: 'contractor' }), true);
+  assert.equal(pending.allRequiredSatisfied, false);
+  for (const status of ['pending', 'sent', 'manual_required', 'expired', '']) {
+    assert.equal(isEndorsementSatisfied({ status, payee_type: 'contractor' }), false, status);
+    assert.equal(isEndorsementSatisfied({ status, payee_type: 'Contractor' }), false, status);
+  }
+  for (const status of ['signed', 'waived']) {
+    assert.equal(isEndorsementSatisfied({ status, payee_type: 'contractor' }), true, status);
+  }
+  assert.equal(evaluateEndorsementMath([
+    { status: 'signed', payee_type: 'insured' },
+    { status: 'waived', payee_type: 'contractor' },
+  ]).allRequiredSatisfied, true);
+  // A check with no contractor payee row (a partner it is only shared with) is unaffected.
+  assert.equal(evaluateEndorsementMath([{ status: 'signed', payee_type: 'insured' }]).allRequiredSatisfied, true);
+  // The mortgage company's manual_required exception is unchanged, and it is not extended to a contractor.
+  assert.equal(isEndorsementSatisfied({ status: 'manual_required', payee_type: 'mortgage_company' }), true);
+  const decision = decideReadyTransition({ status: 'endorsements_in_progress', check_stage: 'endorsing' }, pending);
+  assert.equal(decision.action, 'none');
 });
 
 test('FIX3 completion is idempotent once already Ready', () => {

@@ -175,6 +175,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // after the Cognito interface endpoint was removed. A rebuild-only change (see OVERLAY_PLAN_CHANGES), not a member of
   // the current rebuild section: live still returns the old text until the next rebuild.
   'authorization.mjs': 'changed',
+  // Contractor payee is a required signer (2026-11-18, planning only; owner: "Required like the insured"): a contractor
+  // row is satisfied only when signed or waived. A REPLACE row of the production overlay plan (see OVERLAY_PLAN_CHANGES),
+  // placed before check-endorsement.mjs, its only importer; not a member of the current rebuild section.
+  'endorsement-completion.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -205,6 +209,10 @@ const CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD = new Set([
   // Second mortgage company fee (2026-11-11, SQL 153, planning only): the 2nd company's accept records the check's
   // normal charge and the flat $5. Not an overlay member: it reaches a function only with a rebuild.
   'mortgage-ops-usage.mjs',
+  // Contractor payee can be sent the endorsement request (2026-11-18, planning only): send_endorsement_request no
+  // longer refuses a contractor payee. The row expects edd20078, the bytes this rebuild put live (the endorsement
+  // link expiry change); before this plan it recorded 7c6ae301, the recording error this section's notes describe.
+  'check-endorsement.mjs',
 ]);
 // Members of the fourth staging section (history[3], inspect 41311016111) that main changed since: the section keeps
 // the accepted hash it recorded as evidence; the new bytes are the fifth staging section's (inspect 43207489743).
@@ -387,6 +395,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'sql53-production-readonly-inspect.mjs',
   // JWKS check text (2026-11-17, planning only): not an overlay member; it reaches a function only with a rebuild.
   'authorization.mjs',
+  // Contractor payee is a required signer (2026-11-18, planning only): a REPLACE row of the production plan.
+  'endorsement-completion.mjs',
   'providers/production/checkalt-eligibility.mjs',
   'providers/production/checkalt-poll.mjs',
   'providers/production/checkalt-status-read.mjs',
@@ -738,8 +748,9 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
   }
   for (const [name, hash] of Object.entries(section.added)) assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), hash, name);
-  // Where the production overlay plan has a row, the live bytes are that row's expected_live, except
-  // check-endorsement.mjs: production runs 85f4bec4 (main's bytes at the third rebuild's commit), the row records 7c6ae301.
+  // Where the production overlay plan has a row, the live bytes are that row's expected_live. (check-endorsement.mjs
+  // was the exception until 2026-11-18: production ran 85f4bec4 before this rebuild, main's bytes at the third rebuild's
+  // commit, while the row recorded 7c6ae301. The contractor payee plan moved the row on: it is listed as changed since.)
   const overlay = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
   for (const [name, entry] of Object.entries(section.members)) {
     // The production record of 2026-11-11 (tenant-billing-engine.mjs, tenant-billing-handlers.mjs and two other members
@@ -873,13 +884,11 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
       continue;
     }
     assert.equal(row.accepted_sha256, entry.accepted_sha256, name);
-    if (name === 'check-endorsement.mjs') {
-      assert.equal(entry.live_sha256, '85f4bec43620e574498a289e6d245ddd02301603fd6698a1d6bacb915e922677');
-      assert.equal(row.expected_live_sha256, '7c6ae30182358a80184b9617188c59356f357e94d2c79fc875d9d74f8e82e3da');
-    } else {
-      assert.equal(row.expected_live_sha256, entry.live_sha256, name);
-    }
+    assert.equal(row.expected_live_sha256, entry.live_sha256, name);
   }
+  // check-endorsement.mjs: production ran 85f4bec4 before this rebuild and edd20078 after it, the link expiry bytes.
+  assert.equal(section.members['check-endorsement.mjs'].live_sha256, '85f4bec43620e574498a289e6d245ddd02301603fd6698a1d6bacb915e922677');
+  assert.equal(section.members['check-endorsement.mjs'].accepted_sha256, 'edd20078ffdfcdb2ae44bf25542ab3068f606e1abdc12fbbc638ddb9a678047d');
   // The three files that are not overlay members start from the bytes the staging fourth section (history[3]) started from.
   for (const name of ['invoice-provider.mjs', 'mortgage-ops-usage.mjs', 'tenant-collection-v2-uat.mjs']) {
     assert.equal(section.members[name].live_sha256, staging.history[3].members[name].live_sha256, name);
