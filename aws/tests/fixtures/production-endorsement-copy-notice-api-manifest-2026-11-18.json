@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-copy-notice-api",
+  "authorization": "Pending owner review (2026-11-18). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Endorsement request emails (owner 2026-11-18: \"contractor copies should not include the link. It should show that the email went out so contractors can notify their clients of the check. Also for the emails they are not including the $ sign in front of the amount. add the $ sign to emails for the endorsement request for checks\"). check-endorsement.mjs: send_endorsement_request sends the request, with its signing link, to the payee alone (no CC); contractor payees on the check and the addresses in the CC box each get a separate notice that the request went out (renderEndorsementCopyNotice: the payee's name, the check number, the carrier and the amount, and no link or button, and not the payee's address); a notice that cannot be delivered never fails the request (counted in copyNoticesSent / copyNoticesFailed and in the request_sent audit event). The amount in both emails is formatted with the dollar sign (formatEmailAmount, $14,636.33). The template file email-templates.mjs is unchanged (the amount arrives formatted); the notice uses renderChecksOpsEmail from email-layout.mjs, a module the live package already carries. No SQL change, no hold. live_sha256 is the bytes production run 44320098887 applied 2026-11-18 (VERIFIED, re-inspect 44320302787), recorded in the contractor payee endorsement applied manifest; a read-only production overlay inspect must confirm them before any apply. Not verified by this plan: a notice received by a real contractor mailbox.",
+  "members": {
+    "check-endorsement.mjs": {
+      "live_sha256": "aea1352f2f405753efc5a164fa4005d2e83e0039c6d86c60722cceb088f1651b",
+      "accepted_sha256": "3bb1ae2b284f2bb9e8533e13077d59d5ca05b02fed6322790ad3b19ec36a4ff5",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-contractor-payee-endorsement-api-applied-manifest-2026-11-18.json"
+    }
+  }
+}

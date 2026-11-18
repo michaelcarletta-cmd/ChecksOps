@@ -13,6 +13,7 @@ import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
+import { renderChecksOpsEmail } from './email-layout.mjs';
 import { resolveEmailBranding } from './email-branding.mjs';
 import {
   allowDepositAdvance,
@@ -950,14 +951,25 @@ export const runPublicEndorsement = async (event, deps = {}) => {
 
 export const handlePublicEndorsement = (event, deps = {}) => runPublicEndorsement(event, deps);
 
-const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, cc, send, fetchImpl }) => {
+/**
+ * A check amount as the emails show it: "$14,636.33" (owner 2026-11-18: the endorsement emails showed the
+ * amount without the dollar sign). Null when there is no usable amount, so the line is left out.
+ */
+export const formatEmailAmount = (amount) => {
+  if (amount == null || amount === '') return null;
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return null;
+  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, send, fetchImpl }) => {
   const useResend = !send && endorsementResendEnabled();
   const mailer = send || (useResend ? sendViaResend : sendViaSesOrSink);
   const rendered = renderTransactionalTemplate('endorsement-request', {
     payeeName: endorsement.payee_name,
     checkNumber: check.check_number || 'N/A',
     carrier: check.carrier_name || 'Unknown',
-    amount: check.amount,
+    amount: formatEmailAmount(check.amount),
     endorseUrl: url,
     companyName: branding.company_name || 'ChecksOps',
     branding,
@@ -968,9 +980,10 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
   const subject = subjectBase.includes(endorsement.payee_name)
     ? subjectBase
     : `${subjectBase} — ${endorsement.payee_name}`;
+  // The request (with its signing link) goes to the payee alone; anyone copied gets a notice without the
+  // link (sendEndorsementCopyNotice).
   const result = await mailer({
-    to: useResend ? email : [email, ...(cc || [])].filter(Boolean),
-    cc: useResend ? (cc || []).filter(Boolean) : undefined,
+    to: email,
     subject,
     html: rendered.html,
     text: rendered.text,
@@ -986,6 +999,68 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
     throw new Error(result?.error || 'Email delivery failed');
   }
   return result;
+};
+
+/**
+ * The copy for a contractor (or anyone in the CC box): that the request went out, with no signing link, so
+ * they can tell their client the check is waiting for the endorsement (owner 2026-11-18: "contractor copies
+ * should not include the link. It should show that the email went out so contractors can notify their
+ * clients of the check"). Sent one address at a time; a failed copy never fails the request itself.
+ */
+export const renderEndorsementCopyNotice = ({ endorsement, check, branding = {} }) => {
+  const payee = endorsement.payee_name || 'the payee';
+  const company = branding.company_name || 'ChecksOps';
+  const checkNumber = check.check_number || 'N/A';
+  const amount = formatEmailAmount(check.amount);
+  const title = 'Endorsement request sent';
+  const layout = renderChecksOpsEmail({
+    title,
+    preview: `${company} sent ${payee} the endorsement request for check #${checkNumber}.`,
+    paragraphs: [
+      `${company} sent an endorsement request to ${payee} for check #${checkNumber} from ${check.carrier_name || 'the carrier'}.`,
+      amount ? `Amount: ${amount}` : null,
+      `You are receiving this copy so you can let ${payee} know the check is waiting for their endorsement. Only ${payee} can endorse, from the link in their own email.`,
+    ],
+    companySubtitle: branding.companySubtitle || branding.company_name || null,
+    primaryColor: branding.primaryColor || undefined,
+    logoUrl: branding.logoUrl || null,
+  });
+  return {
+    subject: `${title} — Check #${checkNumber} — ${payee}`,
+    html: layout.html,
+    text: layout.text,
+  };
+};
+
+const sendEndorsementCopyNotices = async ({ endorsement, check, payeeEmail, cc, branding, send, fetchImpl }) => {
+  const useResend = !send && endorsementResendEnabled();
+  const mailer = send || (useResend ? sendViaResend : sendViaSesOrSink);
+  const notice = renderEndorsementCopyNotice({ endorsement, check, branding });
+  const seen = new Set([String(payeeEmail || '').toLowerCase()]);
+  let sent = 0;
+  let failed = 0;
+  for (const raw of cc || []) {
+    const to = String(raw || '').trim();
+    if (!to || seen.has(to.toLowerCase())) continue;
+    seen.add(to.toLowerCase());
+    try {
+      const result = await mailer({
+        to,
+        subject: notice.subject,
+        html: notice.html,
+        text: notice.text,
+        from: endorsementFromAddress(branding),
+        replyTo: branding.replyTo || branding.company_email || null,
+        headers: { 'X-Entity-Ref-ID': `${endorsement.id}:copy` },
+        fetchImpl,
+      });
+      if (isSuccessfulEndorsementDelivery(result, { injected: Boolean(send) })) sent += 1;
+      else failed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { sent, failed };
 };
 
 export const runAuthenticatedEndorsement = async ({
@@ -1210,7 +1285,6 @@ export const runAuthenticatedEndorsement = async ({
         email,
         url: endorsementUrl,
         branding,
-        cc,
         send,
         fetchImpl,
       });
@@ -1293,6 +1367,10 @@ export const runAuthenticatedEndorsement = async ({
          AND COALESCE(deposit_recommendation, '') IS DISTINCT FROM 'ready_for_deposit'`,
       [endorsement.check_id],
     );
+    // Contractor payees and the CC box get a notice that the request went out, without the signing link.
+    const copies = await sendEndorsementCopyNotices({
+      endorsement, check, payeeEmail: email, cc, branding, send, fetchImpl,
+    });
     await auditEndorsement(client, {
       endorsement_id: endorsement.id,
       check_id: endorsement.check_id,
@@ -1300,7 +1378,7 @@ export const runAuthenticatedEndorsement = async ({
       event_type: 'request_sent',
       check_event_type: 'endorsement_request_sent',
       event_description: `Endorsement request sent to ${endorsement.payee_name} via email`,
-      event_data: { method: 'email' },
+      event_data: { method: 'email', copy_notices_sent: copies.sent, copy_notices_failed: copies.failed },
       actor_id: mapping.application_user_id,
     });
     return {
@@ -1311,6 +1389,8 @@ export const runAuthenticatedEndorsement = async ({
       emailSent: true,
       delivery_status: deliveryStatus,
       emailProvider: sendResult?.provider || sendResult?.mode || (endorsementResendEnabled() ? 'resend' : 'sink'),
+      copyNoticesSent: copies.sent,
+      copyNoticesFailed: copies.failed,
       linkExpiresAt,
       ...denyDepositAdvance(),
       spoofFieldsIgnored: spoof,
