@@ -28,9 +28,17 @@ Parameters:
       Extra email subscription so alarms can be confirmed without
       waiting for a stale security@ pending subscription to expire.
       Does not replace AlertEmail.
+  AlertTopicKmsKeyArn:
+    Type: String
+    Default: ''
+    Description: >
+      ARN of the customer managed key from security-kms.yaml. Empty keeps
+      the topic unencrypted, as deployed before. Do not use alias/aws/sns:
+      CloudWatch alarms cannot publish to a topic encrypted with it.
 
 Conditions:
   ShouldCreateEmailSubscription: !Equals [!Ref CreateEmailSubscription, 'true']
+  HasAlertTopicKmsKey: !Not [!Equals [!Ref AlertTopicKmsKeyArn, '']]
 
 Resources:
   AlertTopic:
@@ -38,6 +46,10 @@ Resources:
     Properties:
       TopicName: checksops-production-security-alerts
       DisplayName: ChecksOps production security alerts
+      KmsMasterKeyId: !If
+        - HasAlertTopicKmsKey
+        - !Ref AlertTopicKmsKeyArn
+        - !Ref AWS::NoValue
 
   AlertSubscription:
     Type: AWS::SNS::Subscription

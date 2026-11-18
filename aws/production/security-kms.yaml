@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Operator-only customer managed KMS key for production security monitoring.
+  Encrypts the SNS topic checksops-production-security-alerts and the log
+  files of the existing trail checksops-production-mgmt-events.
+  Creating this stack changes nothing else: the topic and the trail start
+  using the key only in the later steps of
+  aws/cutover/OPERATOR_SECURITY_KMS_ENCRYPTION.md.
+  Does not create or rename the trail or the topic. Does not create IAM
+  roles. Does not block traffic. Does not enable money/provider flags.
+
+Parameters:
+  TrailName:
+    Type: String
+    Default: checksops-production-mgmt-events
+    Description: Existing management-event trail allowed to encrypt with this key.
+
+Resources:
+  SecurityMonitoringKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: ChecksOps production security monitoring (security alerts SNS topic, CloudTrail log files)
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: checksops-production-security-monitoring
+        Statement:
+          - Sid: AccountAdministersKeyThroughIam
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: kms:*
+            Resource: '*'
+          - Sid: CloudWatchAlarmsPublishToEncryptedTopic
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:*'
+          - Sid: CloudTrailEncryptsLogFilesForExistingTrailOnly
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: kms:GenerateDataKey*
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub 'arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+              StringLike:
+                kms:EncryptionContext:aws:cloudtrail:arn: !Sub 'arn:aws:cloudtrail:*:${AWS::AccountId}:trail/*'
+          - Sid: CloudTrailDescribesKeyForExistingTrailOnly
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: kms:DescribeKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub 'arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}'
+
+  SecurityMonitoringKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/checksops-production-security-monitoring
+      TargetKeyId: !Ref SecurityMonitoringKey
+
+Outputs:
+  SecurityMonitoringKeyArn:
+    Value: !GetAtt SecurityMonitoringKey.Arn
+  SecurityMonitoringKeyAlias:
+    Value: !Ref SecurityMonitoringKeyAlias
+  DetectionOnly:
+    Value: 'true'
+  MoneyFlagsUnchanged:
+    Value: 'true'
