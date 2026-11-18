@@ -1,6 +1,7 @@
 /** Shared endorsement-completion math for Check Command Center / EndorsementChecklist.
  *  Mortgage company + manual_required is satisfied for ENDORSEMENT MATH only.
- *  Contractor rows are CC-only and are not required signers.
+ *  A Contractor payee row is a required signer like the insured (owner 2026-11-18).
+ *  A partner the check is only shared with has no payee row, so nothing is required of them.
  *  Active Loss Draft must never be released to Ready by this math.
  */
 
@@ -26,7 +27,6 @@ export function isContractorPayee(payeeType: string | null | undefined): boolean
 
 export function isEndorsementSatisfied(row: EndorsementRow): boolean {
   const type = payeeTypeOf(row);
-  if (type === "contractor") return true;
   const status = String(row?.status || "");
   if (status === "signed" || status === "waived") return true;
   if (type === "mortgage_company" && status === "manual_required") return true;
