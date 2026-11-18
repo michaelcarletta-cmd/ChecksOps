@@ -9,6 +9,7 @@ import {
   rewriteSupabaseBrandingUrl,
 } from "@/lib/brandingPublicUrl";
 import { toStorageObjectPath } from "@/lib/storagePath";
+import { webViewFetch } from "@/lib/webViewFetch";
 
 const storageError = (message: string, statusCode = 403) => ({
   message,
@@ -129,7 +130,7 @@ export function createAwsStorageAdapter(opts: { getToken?: TokenGetter } = {}) {
           };
         }
         const headers: Record<string, string> = { "content-type": contentType };
-        const put = await fetch(String(body.uploadUrl), { method: "PUT", headers, body: file });
+        const put = await webViewFetch(String(body.uploadUrl), { method: "PUT", headers, body: file });
         if (!put.ok) {
           return { data: null, error: storageError("upload_failed", put.status) };
         }
