@@ -9,6 +9,7 @@ import { Mail, Phone, MapPin, MessageSquare, Loader2, Inbox, FileImage, CheckCir
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { LinkCheckToLeadButton } from "./LinkCheckToLeadButton";
+import { mailtoAddress, telNumber } from "@/lib/contactLinks";
 
 type Lead = {
   id: string;
@@ -199,14 +200,14 @@ export function ContractorLeadsCard() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-muted-foreground">
                   <a
-                    href={`mailto:${l.homeowner_email}`}
+                    href={`mailto:${mailtoAddress(l.homeowner_email)}`}
                     className="flex items-center gap-1.5 hover:text-foreground truncate"
                   >
                     <Mail className="h-3 w-3" /> {l.homeowner_email}
                   </a>
                   {l.homeowner_phone && (
                     <a
-                      href={`tel:${l.homeowner_phone}`}
+                      href={`tel:${telNumber(l.homeowner_phone)}`}
                       className="flex items-center gap-1.5 hover:text-foreground"
                     >
                       <Phone className="h-3 w-3" /> {l.homeowner_phone}
@@ -231,7 +232,7 @@ export function ContractorLeadsCard() {
                     variant="outline"
                     className="h-7 text-xs"
                     onClick={() => {
-                      window.location.href = `mailto:${l.homeowner_email}?subject=${encodeURIComponent(
+                      window.location.href = `mailto:${mailtoAddress(l.homeowner_email)}?subject=${encodeURIComponent(
                         "Following up on your ChecksOps request",
                       )}`;
                       if (l.status === "new") updateStatus.mutate({ id: l.id, status: "contacted" });
@@ -245,7 +246,7 @@ export function ContractorLeadsCard() {
                       variant="outline"
                       className="h-7 text-xs"
                       onClick={() => {
-                        window.location.href = `tel:${l.homeowner_phone}`;
+                        window.location.href = `tel:${telNumber(l.homeowner_phone)}`;
                         if (l.status === "new") updateStatus.mutate({ id: l.id, status: "contacted" });
                       }}
                     >

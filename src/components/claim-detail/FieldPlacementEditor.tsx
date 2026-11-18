@@ -673,7 +673,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                 error={
                   <div className="flex flex-col items-center justify-center h-48 w-full bg-muted/20 border rounded sm:h-96">
                     <p className="text-muted-foreground mb-4">Could not load PDF preview</p>
-                    <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
+                    <Button variant="outline" onClick={() => window.open(documentUrl, '_blank', 'noopener,noreferrer')}>
                       Open PDF in New Tab
                     </Button>
                   </div>

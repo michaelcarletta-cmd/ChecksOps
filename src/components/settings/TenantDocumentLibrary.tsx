@@ -361,7 +361,7 @@ function LibraryItem({ row, onChange }: { row: LibraryRow; onChange: () => void 
       toast({ title: "Could not open", description: error?.message, variant: "destructive" });
       return;
     }
-    window.open(data.signedUrl, "_blank");
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
   const toggleAutoShare = async (next: boolean) => {

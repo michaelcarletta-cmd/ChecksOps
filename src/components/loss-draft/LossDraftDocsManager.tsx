@@ -251,7 +251,7 @@ export function LossDraftDocsManager({
 
       if (!docId && data.signed_url) {
         // Blank/download-only flow — just open the PDF
-        window.open(data.signed_url, "_blank");
+        window.open(data.signed_url, "_blank", "noopener,noreferrer");
       } else if (onSendForSignature && data.signed_url && docId) {
         onSendForSignature({
           docId,
@@ -374,7 +374,7 @@ export function LossDraftDocsManager({
         .from(bucket)
         .createSignedUrl(doc.file_path, 300, { download: doc.file_name || "document.pdf" });
       if (error) throw error;
-      window.open(data.signedUrl, "_blank");
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     } catch (e: any) {
       toast({ title: "Download failed", description: e.message, variant: "destructive" });
     }
