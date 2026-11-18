@@ -1,5 +1,10 @@
 {
   "appId": "com.checksops.app",
   "appName": "ChecksOps",
-  "webDir": "../dist"
+  "webDir": "../dist",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
 }
