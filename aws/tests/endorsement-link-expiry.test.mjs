@@ -200,7 +200,7 @@ test('send stamps 30 days on the endorsement and the payee; resend refreshes the
   assert.equal((await getData(client, 'tok-1', resentAt + 31 * DAY)).statusCode, 410);
 });
 
-test('overlay plan: check-endorsement.mjs REPLACE from the unapplied release bytes\' live value (planning only)', async () => {
+test('overlay plan: the link expiry manifest stays as planned; production got its bytes with the fourth full-package rebuild and the row moved on', async () => {
   const { createHash } = await import('node:crypto');
   const fs = await import('node:fs');
   const read = (rel) => fs.readFileSync(new URL(`../../${rel}`, import.meta.url));
@@ -208,8 +208,13 @@ test('overlay plan: check-endorsement.mjs REPLACE from the unapplied release byt
   const rel = 'aws/tests/fixtures/production-endorsement-link-expiry-manifest-2026-10-31.json';
   const manifest = JSON.parse(read(rel));
   const release = JSON.parse(read('aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json'));
-  const accepted = createHash('sha256').update(read('aws/functions/api/check-endorsement.mjs')).digest('hex');
   const name = 'check-endorsement.mjs';
+  // The link expiry bytes are no longer main's (the contractor payee plan of 2026-11-18 changed the file). They are
+  // the accepted bytes the fourth production rebuild recorded (apply run 41469896446), which put them live.
+  const rebuild = JSON.parse(read('ops/deployment-guard/lambda-rebuild-plan.json')).environments.production.history[3];
+  assert.equal(rebuild.applied.run_id, '41469896446');
+  const accepted = rebuild.members[name].accepted_sha256;
+  const onMain = createHash('sha256').update(read('aws/functions/api/check-endorsement.mjs')).digest('hex');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
   assert.match(manifest.notes, /finding 22/);
@@ -222,11 +227,17 @@ test('overlay plan: check-endorsement.mjs REPLACE from the unapplied release byt
     },
   });
   assert.notEqual(accepted, release.members[name].accepted_sha256);
-  assert.deepEqual(plan.members[name], {
+  // The row now expects those bytes live and accepts main's, naming the plan that moved it on, whose entry names
+  // this manifest as the one it starts from.
+  const row = plan.members[name];
+  assert.deepEqual(row, {
     operation: 'replace',
-    accepted_sha256: accepted,
-    expected_live_sha256: release.members[name].live_sha256,
+    accepted_sha256: onMain,
+    expected_live_sha256: accepted,
     sql_before: null,
-    manifest: rel,
+    manifest: row.manifest,
   });
+  assert.notEqual(row.manifest, rel);
+  const next = JSON.parse(read(row.manifest));
+  assert.deepEqual(next.members[name], { live_sha256: accepted, accepted_sha256: onMain, operation: 'replace', previous_manifest: rel });
 });
