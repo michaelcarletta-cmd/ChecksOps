@@ -69,7 +69,7 @@ test('check panel entrance: smaller and shorter on the website, the app keeps it
   const reduced = fakeAnimatedDocument(1);
   assert.equal(playPanelEntrance('.x', reduced, { matchMedia: () => ({ matches: true }) }), 0);
   assert.equal(playPanelEntrance('.x', undefined, {}), 0);
-  assert.match(read('src/pages/CheckCommandCenter.tsx'), /import \{ playPanelEntrance \} from "@\/lib\/nativeApp";/);
+  assert.match(read('src/pages/CheckCommandCenter.tsx'), /import \{ playPanelEntrance, playSectionEntrance \} from "@\/lib\/nativeApp";/);
 });
 
 function fakeList(tabs) {

@@ -129,7 +129,8 @@ test('the check panel replays its entrance when a check is opened or switched', 
   const src = read('src/pages/CheckCommandCenter.tsx');
   assert.equal((src.match(/className=\{`check-detail-panel /g) || []).length, 2);
   assert.match(src, /<Card ref=\{reviewPanelRef\} className="check-detail-panel /);
-  assert.match(src, /playPanelEntrance\("\.check-detail-panel"\)\);\s*return \(\) => cancelAnimationFrame\(frame\);\s*\}, \[selectedCheck, reviewCheckId\]\);/);
+  // Played before paint (useLayoutEffect, 2026-11-18): the new check is never seen for a frame first.
+  assert.match(src, /playPanelEntrance\("\.check-detail-panel", undefined, undefined, opening\);\s*\}, \[selectedCheck, reviewCheckId\]\);/);
 });
 
 test('dialogs and sheets carry the markers the app animations target', () => {

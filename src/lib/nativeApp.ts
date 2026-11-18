@@ -43,6 +43,14 @@ export const WEB_PANEL_ENTER: Keyframe[] = [
   { opacity: 1, translate: "0 0" },
 ];
 export const WEB_PANEL_TIMING: KeyframeAnimationOptions = { duration: 240, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+/**
+ * Opening the panel on the website: its column widens first (index.css, .split-column), so the
+ * content waits a moment, hidden, and fades in as the column reaches its width instead of being
+ * seen squeezed while it widens.
+ */
+export const WEB_PANEL_OPEN_TIMING: KeyframeAnimationOptions = {
+  duration: 260, delay: 80, fill: "backwards", easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+};
 
 function prefersReducedMotion(win: unknown): boolean {
   const media = (win as { matchMedia?: (q: string) => { matches: boolean } } | undefined)?.matchMedia;
@@ -83,9 +91,38 @@ export function playPanelEntrance(
   selector: string,
   doc: Document | undefined = typeof document === "undefined" ? undefined : document,
   win: unknown = typeof window === "undefined" ? undefined : window,
+  /** True when the panel was closed before (it opens, rather than switching to another check). */
+  opening = false,
+): number {
+  if (!doc || prefersReducedMotion(win)) return 0;
+  if (isNativeApp(win)) return playEntrance(selector, NATIVE_PANEL_ENTER, NATIVE_PANEL_TIMING, doc);
+  return playEntrance(selector, WEB_PANEL_ENTER, opening ? WEB_PANEL_OPEN_TIMING : WEB_PANEL_TIMING, doc);
+}
+
+/** A status tab's section (Review, Endorsing, Ready for Deposit, ...) settles in when the tab is picked. */
+export const WEB_SECTION_ENTER: Keyframe[] = [
+  { opacity: 0, translate: "0 8px" },
+  { opacity: 1, translate: "0 0" },
+];
+export const WEB_SECTION_TIMING: KeyframeAnimationOptions = { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+export const NATIVE_SECTION_ENTER: Keyframe[] = [
+  { opacity: 0, translate: "0 10px" },
+  { opacity: 1, translate: "0 0" },
+];
+export const NATIVE_SECTION_TIMING: KeyframeAnimationOptions = { duration: 240, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+
+/**
+ * The entrance of a status tab's section, each time a tab is picked. Played on the section that
+ * stays mounted (Endorsing, Ready for Deposit and Deposited share one list), so nothing remounts.
+ * Nothing with reduced motion. Returns how many elements it animated.
+ */
+export function playSectionEntrance(
+  selector: string,
+  doc: Document | undefined = typeof document === "undefined" ? undefined : document,
+  win: unknown = typeof window === "undefined" ? undefined : window,
 ): number {
   if (!doc || prefersReducedMotion(win)) return 0;
   return isNativeApp(win)
-    ? playEntrance(selector, NATIVE_PANEL_ENTER, NATIVE_PANEL_TIMING, doc)
-    : playEntrance(selector, WEB_PANEL_ENTER, WEB_PANEL_TIMING, doc);
+    ? playEntrance(selector, NATIVE_SECTION_ENTER, NATIVE_SECTION_TIMING, doc)
+    : playEntrance(selector, WEB_SECTION_ENTER, WEB_SECTION_TIMING, doc);
 }
