@@ -60,7 +60,9 @@ test('check panel entrance: smaller and shorter on the website, the app keeps it
   assert.equal(playPanelEntrance('.check-detail-panel', web, {}), 1);
   assert.equal(web.played[0].k, WEB_PANEL_ENTER);
   assert.equal(web.played[0].t, WEB_PANEL_TIMING);
-  for (const frame of WEB_PANEL_ENTER) assert.equal(frame.transform, undefined);
+  // Since 2026-11-18 the website panel moves with transform (animated on the compositor, smooth while
+  // the page is busy); the panel column has no transform of its own for it to override.
+  for (const frame of WEB_PANEL_ENTER) assert.equal(frame.translate, undefined);
 
   const app = fakeAnimatedDocument(1);
   assert.equal(playPanelEntrance('.check-detail-panel', app, NATIVE), 1);

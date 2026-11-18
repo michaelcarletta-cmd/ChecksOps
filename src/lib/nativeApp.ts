@@ -39,17 +39,23 @@ export const NATIVE_PANEL_TIMING: KeyframeAnimationOptions = { duration: 260, ea
 
 /** On the website the panel moves less and faster: desktop users notice slow motion more. */
 export const WEB_PANEL_ENTER: Keyframe[] = [
-  { opacity: 0, translate: "20px 0" },
-  { opacity: 1, translate: "0 0" },
+  { opacity: 0, transform: "translateX(20px)" },
+  { opacity: 1, transform: "translateX(0)" },
 ];
 export const WEB_PANEL_TIMING: KeyframeAnimationOptions = { duration: 240, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
 /**
- * Opening the panel on the website: its column widens first (index.css, .split-column), so the
- * content waits a moment, hidden, and fades in as the column reaches its width instead of being
- * seen squeezed while it widens.
+ * Opening the panel on the website: the columns take their widths at once and the panel slides in
+ * from the right edge and fades in. Only transform and opacity move, which the browser animates on
+ * its compositor, so the slide stays smooth while the page is busy building the check (a width
+ * animation runs on the page's own thread and stuttered there on slower machines: owner 2026-11-18,
+ * "it still not a smooth animation"). The panel column has no transform of its own to override.
  */
+export const WEB_PANEL_OPEN_ENTER: Keyframe[] = [
+  { opacity: 0, transform: "translateX(28%)" },
+  { opacity: 1, transform: "translateX(0)" },
+];
 export const WEB_PANEL_OPEN_TIMING: KeyframeAnimationOptions = {
-  duration: 260, delay: 80, fill: "backwards", easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+  duration: 340, easing: "cubic-bezier(0.22, 1, 0.36, 1)",
 };
 
 function prefersReducedMotion(win: unknown): boolean {
@@ -96,13 +102,15 @@ export function playPanelEntrance(
 ): number {
   if (!doc || prefersReducedMotion(win)) return 0;
   if (isNativeApp(win)) return playEntrance(selector, NATIVE_PANEL_ENTER, NATIVE_PANEL_TIMING, doc);
-  return playEntrance(selector, WEB_PANEL_ENTER, opening ? WEB_PANEL_OPEN_TIMING : WEB_PANEL_TIMING, doc);
+  return opening
+    ? playEntrance(selector, WEB_PANEL_OPEN_ENTER, WEB_PANEL_OPEN_TIMING, doc)
+    : playEntrance(selector, WEB_PANEL_ENTER, WEB_PANEL_TIMING, doc);
 }
 
 /** A status tab's section (Review, Endorsing, Ready for Deposit, ...) settles in when the tab is picked. */
 export const WEB_SECTION_ENTER: Keyframe[] = [
-  { opacity: 0, translate: "0 8px" },
-  { opacity: 1, translate: "0 0" },
+  { opacity: 0, transform: "translateY(8px)" },
+  { opacity: 1, transform: "translateY(0)" },
 ];
 export const WEB_SECTION_TIMING: KeyframeAnimationOptions = { duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
 export const NATIVE_SECTION_ENTER: Keyframe[] = [

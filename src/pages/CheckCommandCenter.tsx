@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useStepUp } from "@/hooks/useStepUp";
 import {
   DEPOSIT_PHASE_LABEL,
@@ -203,13 +203,12 @@ const SECTION_LOADERS: Array<() => Promise<unknown>> = [
   loadSharedCheckThread,
 ];
 /**
- * How long the check panel's column takes to widen when it opens (index.css .split-column). Building
- * a check's full panel is heavy; done in the same moment as the column starts to widen, it blocks
- * the page and the widening lands in a few jumps (measured 2026-11-18 with the processor slowed 4x:
- * a 229ms freeze, then 4 frames from 278px to 585px). So the panel opens with its light loading
- * shape and builds the check once the column is wide.
+ * How long the check panel's slide-in lasts when it opens (WEB_PANEL_OPEN_TIMING, nativeApp.ts).
+ * Building a check's full panel is heavy; done in the same moment as the panel opens, it blocks the
+ * page (measured 2026-11-18 with the processor slowed 4x: a 229ms freeze). So the panel opens with
+ * its light loading shape and builds the check once the slide has finished.
  */
-const PANEL_OPEN_MS = 320;
+const PANEL_OPEN_MS = 340;
 
 /**
  * Mounted when the panel opens: shows the loading shape while the column widens, then builds its
@@ -443,6 +442,10 @@ export default function CheckCommandCenter() {
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
+  // Opening a check on Review: the panel opens first; the queue's highlight follows a moment later
+  // (deferred), so the click does not wait for the whole queue to redraw.
+  const reviewQueueHighlight = useDeferredValue(reviewCheckId);
+  const toggleReviewCheck = useCallback((id: string) => setReviewCheckId((curr) => (curr === id ? null : id)), []);
   // On mobile the Review & Decision bar and tabs are sticky. Opening a check or
   // switching tabs keeps the queue's scroll offset, which leaves the panel's
   // first rows (Edit Fields, Claim Ledger title) hidden under those bars.
@@ -1839,7 +1842,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className={`check-detail-panel split-column split-panel-grow transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                className={`check-detail-panel split-column transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -1888,7 +1891,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className="check-detail-panel split-column split-panel-grow transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full"
+                className="check-detail-panel split-column transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full"
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -2035,7 +2038,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className={`check-detail-panel split-column split-panel-grow transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                className={`check-detail-panel split-column transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -2087,8 +2090,8 @@ export default function CheckCommandCenter() {
               </CardHeader>
               <CardContent className="p-0">
                 <CheckReviewQueue
-                  onSelectCheck={(id) => setReviewCheckId((curr) => (curr === id ? null : id))}
-                  selectedCheckId={reviewCheckId}
+                  onSelectCheck={toggleReviewCheck}
+                  selectedCheckId={reviewQueueHighlight}
                   searchQuery={searchQuery}
                 />
               </CardContent>
@@ -2105,7 +2108,7 @@ export default function CheckCommandCenter() {
               style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}
             >
               {reviewCheckId ? (
-                <Card ref={reviewPanelRef} className="check-detail-panel animate-fade-in scroll-mt-14">
+                <Card ref={reviewPanelRef} className="check-detail-panel scroll-mt-14">
                   {isMobile && (
                     <div className="sticky top-14 z-20 bg-card/95 backdrop-blur border-b px-3 py-2 flex items-center gap-2 rounded-t-lg">
                       <Button
