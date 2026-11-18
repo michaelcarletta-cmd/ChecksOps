@@ -230,17 +230,26 @@ test('overlay plan: the link expiry manifest stays as planned; production got it
   // The contractor payee plan moved the row on from those bytes (its entry names this manifest as the one it starts
   // from); production run 44320098887 applied it (2026-11-18), so the row now expects main's bytes and names the
   // applied record, which chains to that plan.
-  const row = plan.members[name];
+  // (Since the endorsement copy notice plan of 2026-11-18 the row moves on again, from the contractor payee applied
+  // bytes: it is read here as it stood before that plan.)
+  let row = plan.members[name];
+  let contractorBytes = onMain;
+  if (row.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-manifest-2026-11-18.json') {
+    const copyNotice = JSON.parse(read(row.manifest)).members[name];
+    assert.deepEqual([copyNotice.accepted_sha256, row.accepted_sha256, row.expected_live_sha256], [onMain, onMain, copyNotice.live_sha256]);
+    contractorBytes = copyNotice.live_sha256;
+    row = { ...row, accepted_sha256: contractorBytes, expected_live_sha256: contractorBytes, manifest: copyNotice.previous_manifest };
+  }
   assert.deepEqual(row, {
     operation: 'replace',
-    accepted_sha256: onMain,
-    expected_live_sha256: onMain,
+    accepted_sha256: contractorBytes,
+    expected_live_sha256: contractorBytes,
     sql_before: null,
     manifest: row.manifest,
   });
   assert.notEqual(row.manifest, rel);
   const applied = JSON.parse(read(row.manifest)).members[name];
-  assert.deepEqual([applied.live_sha256, applied.accepted_sha256], [onMain, onMain]);
+  assert.deepEqual([applied.live_sha256, applied.accepted_sha256], [contractorBytes, contractorBytes]);
   const next = JSON.parse(read(applied.previous_manifest));
-  assert.deepEqual(next.members[name], { live_sha256: accepted, accepted_sha256: onMain, operation: 'replace', previous_manifest: rel });
+  assert.deepEqual(next.members[name], { live_sha256: accepted, accepted_sha256: contractorBytes, operation: 'replace', previous_manifest: rel });
 });

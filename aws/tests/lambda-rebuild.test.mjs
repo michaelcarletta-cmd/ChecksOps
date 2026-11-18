@@ -770,6 +770,15 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     // from its external disbursement applied bytes: the checks below read the row as it stood before that plan, and those
     // applied bytes stand for main's.
     let mainBytes = sha256(fs.readFileSync(path.join(apiRoot, name)));
+    // (And the endorsement copy notice plan, 2026-11-18, planning only: the contractor payee applied bytes it moves on
+    // from stand for main's, and the row is read as it stood before that plan.)
+    if (overlay.members[name]?.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-manifest-2026-11-18.json') {
+      assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
+      const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, overlay.members[name].manifest), 'utf8')).members[name];
+      assert.equal(planned.live_sha256, overlay.members[name].expected_live_sha256, name);
+      row = { ...row, accepted_sha256: planned.live_sha256, expected_live_sha256: planned.live_sha256, manifest: planned.previous_manifest };
+      mainBytes = planned.live_sha256;
+    }
     // (And the desk set monitoring plan, applied 2026-11-14 and recorded: the row it moved on from stands for main's.)
     if (deskRecordPre(overlay.members[name])?.manifest === DESK_MONITORING_MANIFEST) {
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
