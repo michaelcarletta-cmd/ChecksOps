@@ -20,6 +20,7 @@ import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import homeownerOpsLogo from "@/assets/homeowner-ops-logo.png";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 import { portalSignPath, rememberPortalLedgerToken } from "@/lib/portalSigning";
+import { webViewFetch } from "@/lib/webViewFetch";
 
 type LedgerEvent = {
   id: string;
@@ -876,7 +877,7 @@ async function putHomeownerFile(token: string, file: File, side: "front" | "back
   if (code) throw new Error(homeownerUploadErrorText(code));
   if (error) throw new Error(error.message);
   const target = data as { upload_url: string; path: string; headers?: Record<string, string> };
-  const put = await fetch(target.upload_url, {
+  const put = await webViewFetch(target.upload_url, {
     method: "PUT",
     headers: target.headers ?? { "Content-Type": contentType },
     body: file,
