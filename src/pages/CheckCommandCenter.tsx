@@ -260,6 +260,10 @@ const LANE_TITLES: Record<string, { title: string; icon: typeof Send; accent: st
 };
 
 
+// Hidden for now (owner 2026-11-18): the large "Deposit Blocked" box at the top of the Endorsements tab, together with its
+// "Skip Endorsements — Already Signed" button. The box and its handler stay in the code so it can be switched back on.
+const SHOW_DEPOSIT_BLOCKED_BOX = false;
+
 /* ------------------------------------------------------------------ */
 /*  Class filter + total bar (shared)                                  */
 /* ------------------------------------------------------------------ */
@@ -4419,13 +4423,12 @@ function CheckDetailPanel({
                   )}
                 </Button>
               )}
-              {check.claim_id && (
-                <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />
-              )}
             </TabsContent>
 
             <TabsContent value="endorsements" className="p-4 mt-0 space-y-4">
-              {isDepositBlocked && (
+              {/* Hidden for now (owner 2026-11-18): the "Deposit Blocked" box, with its reasons and its "Skip Endorsements —
+                  Already Signed" button. The checklist below keeps its one-line notice and the per-payee "Endorsed on Check". */}
+              {SHOW_DEPOSIT_BLOCKED_BOX && isDepositBlocked && (
                 <div className="border border-amber-500/30 bg-amber-500/10 rounded-lg p-3 space-y-2">
                   <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
                     <AlertTriangle className="h-4 w-4 shrink-0" />

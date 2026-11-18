@@ -40,6 +40,10 @@ import { format } from "date-fns";
 import { CheckStatusTimeline } from "./CheckStatusTimeline";
 import { evaluateEndorsementMath } from "@/lib/endorsementCompletion";
 
+// Hidden for now (owner 2026-11-18): "Mark All Endorsements Received" gives an error. The tenant marks each payee with
+// "Endorsed on Check", which works. The button and its handler stay in the code so it can be switched back on once fixed.
+const SHOW_MARK_ALL_ENDORSEMENTS = false;
+
 interface CheckEndorsement {
   id: string;
   check_id: string;
@@ -557,6 +561,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
             Deposit blocked until all required endorsements are completed
           </div>
 
+          {SHOW_MARK_ALL_ENDORSEMENTS && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
@@ -588,6 +593,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          )}
         </div>
       )}
 
