@@ -1,0 +1,21 @@
+{
+  "workstream_id": "contractor-payee-endorsement-api-applied",
+  "authorization": "Record only (2026-11-18): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Contractor payee endorsement API (#1994, merged as c83a4e385; main dee497f4ec5d76d76a4513de01a08b1d0616f64c after #1995) applied. Owner 2026-11-18: \"run the API staging overlay\", then \"DEPLOY endorsement-completion.mjs TO PRODUCTION\", then \"DEPLOY check-endorsement.mjs TO PRODUCTION\". Staging (checksops-staging-api), all on main dee497f4ec5d76d76a4513de01a08b1d0616f64c: inspect run 44315858736 read endorsement-completion.mjs e0a162ce live and inspect run 44315865681 read check-endorsement.mjs edd20078 live (both CodeSha256 j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA=, RevisionId a8a0d167-4398-42c7-bb85-9c9655380ee8); apply run 44316345194 replaced endorsement-completion.mjs (expected live e0a162ce -> CodeSha256 m+8t3P6jxbbiknBdL57mIJlVNcljnVe+77zMmdrTTGw=, RevisionId 2fa5d449-176f-4dc9-8a52-9b09621565cf), errors []; apply run 44316731775 replaced check-endorsement.mjs (expected live edd20078 -> CodeSha256 zi9Rq9nnbMupVkDzOJWrjvh9RbvJqJykZtinpoWUGgY=, RevisionId c4bcec96-8df7-4c91-b4b5-fc5ad74b9287), errors []; each with the public staging smoke /health, /db-health and /db-readonly-validate 200; staging re-inspect runs 44316925585 (endorsement-completion.mjs 3b5bb06c) and 44316932630 (check-endorsement.mjs aea1352f), CodeSha256 zi9Rq9nn, RevisionId c4bcec96-8df7-4c91-b4b5-fc5ad74b9287. Production (checksops-production-prep-api): preflight inspect run 44317931221 read endorsement-completion.mjs e0a162ce live, READY (CodeSha256 j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA=, RevisionId 825bfc82-e261-42b2-be7c-5077ab496b9f), the value the planning manifest inferred from the rebuild records; apply run 44318086359 (staging acceptance run 44316925585) replaced it, errors [], VERIFIED by its verify step (3b5bb06c, CodeSha256 m+8t3P6jxbbiknBdL57mIJlVNcljnVe+77zMmdrTTGw=, RevisionId fcd7b4b6-e174-4232-b09a-954da620ec46) and by re-inspect run 44318286948, ALREADY_ACCEPTED. Preflight inspect run 44319891664 read check-endorsement.mjs edd20078 live, READY (CodeSha256 m+8t3P6j, RevisionId fcd7b4b6-e174-4232-b09a-954da620ec46), the value the planning manifest inferred from the fourth production rebuild; apply run 44320098887 (staging acceptance run 44316932630) replaced it, errors [], VERIFIED by its verify step (aea1352f, CodeSha256 zi9Rq9nnbMupVkDzOJWrjvh9RbvJqJykZtinpoWUGgY=, RevisionId 0bffc437-338c-4bb9-b16d-1724ef966632) and by re-inspect run 44320302787, ALREADY_ACCEPTED; /health and /db-health 200 after each apply. Only these two members changed; index.mjs is untouched. No SQL, no hold. Not verified by this record: a contractor payee signing through a sent link, or a contractor endorsement request sent, in staging or production; the website copy of the rule (#1995) is not deployed by these runs.",
+  "members": {
+    "endorsement-completion.mjs": {
+      "live_sha256": "3b5bb06c7d4a94e7a4aadb5932c2a651f74e23ca38e9d6759e83132c8d39f6f1",
+      "accepted_sha256": "3b5bb06c7d4a94e7a4aadb5932c2a651f74e23ca38e9d6759e83132c8d39f6f1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-contractor-payee-endorsement-api-manifest-2026-11-18.json"
+    },
+    "check-endorsement.mjs": {
+      "live_sha256": "aea1352f2f405753efc5a164fa4005d2e83e0039c6d86c60722cceb088f1651b",
+      "accepted_sha256": "aea1352f2f405753efc5a164fa4005d2e83e0039c6d86c60722cceb088f1651b",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-contractor-payee-endorsement-api-manifest-2026-11-18.json"
+    }
+  }
+}

@@ -228,6 +228,8 @@ const APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD = {
   'app-services.mjs': 'aws/tests/fixtures/production-public-demo-request-applied-manifest-2026-11-05.json',
   'tenant-billing-engine.mjs': 'aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json',
   'tenant-collection-v2.mjs': 'aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json',
+  // Contractor payee endorsement (2026-11-18): production run 44320098887 applied it, VERIFIED (re-inspect run 44320302787).
+  'check-endorsement.mjs': 'aws/tests/fixtures/production-contractor-payee-endorsement-api-applied-manifest-2026-11-18.json',
 };
 // Transfer to bank (2026-11-13, owner "Start the transfer to bank API"): app-services.mjs, providers.mjs, providers/catalog.mjs
 // and providers/moov-status-catch-up.mjs change and wallet-withdraw-limits.mjs, fed-holidays.mjs and
