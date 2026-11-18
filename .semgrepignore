@@ -1,0 +1,31 @@
+# A .semgrepignore replaces Semgrep's built-in defaults, so the defaults are
+# repeated first and the one project entry follows.
+
+# --- Semgrep defaults ---
+.gitignore
+.git/
+:include .gitignore
+
+node_modules/
+build/
+dist/
+vendor/
+.env/
+.venv/
+.tox/
+*.min.js
+.npm/
+.yarn/
+
+test/
+tests/
+*_test.go
+
+.semgrep
+.semgrep_logs/
+
+# --- ChecksOps ---
+# Retired Lovable/Supabase edge-function source. Kept because release locks,
+# tests and recorded fixtures still refer to it; nothing in it is deployed
+# from this repository.
+supabase/functions/

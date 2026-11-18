@@ -1,0 +1,7 @@
+# Aikido scan configuration (read from the repository root on every scan).
+# supabase/functions is the retired Lovable/Supabase edge-function source. It is
+# kept because release locks, tests and recorded fixtures still refer to it, but
+# nothing in it is deployed from this repository, so its findings are noise.
+exclude:
+  paths:
+    - supabase/functions
