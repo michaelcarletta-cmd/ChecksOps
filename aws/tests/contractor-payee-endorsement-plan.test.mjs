@@ -31,7 +31,19 @@ const recordPre = (plan) => {
 // The endorsement copy notice plan (2026-11-18, planning only) moved check-endorsement.mjs on from the applied bytes.
 // copyNoticePre reads its row as it stood before that plan; HANDLER_APPLIED is the bytes this work put live.
 const COPY_NOTICE_REL = 'aws/tests/fixtures/production-endorsement-copy-notice-api-manifest-2026-11-18.json';
-const copyNoticePre = (plan) => {
+const COPY_NOTICE_APPLIED_REL = 'aws/tests/fixtures/production-endorsement-copy-notice-api-applied-manifest-2026-11-18.json';
+// copyNoticeRecordPre reads the row as it stood before the copy notice apply (production run 44386297099).
+const copyNoticeRecordPre = (plan) => {
+  const row = plan.members[HANDLER];
+  if (row?.manifest !== COPY_NOTICE_APPLIED_REL) return plan;
+  const applied = JSON.parse(read(COPY_NOTICE_APPLIED_REL)).members[HANDLER];
+  assert.equal(applied.previous_manifest, COPY_NOTICE_REL);
+  const planned = JSON.parse(read(COPY_NOTICE_REL)).members[HANDLER];
+  plan.members[HANDLER] = { ...row, expected_live_sha256: planned.live_sha256, manifest: COPY_NOTICE_REL };
+  return plan;
+};
+const copyNoticePre = (plan0) => {
+  const plan = copyNoticeRecordPre(plan0);
   const row = plan.members[HANDLER];
   if (row?.manifest !== COPY_NOTICE_REL) return plan;
   const entry = JSON.parse(read(COPY_NOTICE_REL)).members[HANDLER];
@@ -138,11 +150,30 @@ test('endorsement copy notice plan (2026-11-18, planning only): check-endorsemen
   const onMain = sha256(read(`${API}/${HANDLER}`));
   assert.deepEqual(plan.members, { [HANDLER]: { live_sha256: RECORD.members[HANDLER].accepted_sha256, accepted_sha256: onMain, operation: 'replace', previous_manifest: APPLIED_REL } });
   assert.notEqual(onMain, RECORD.members[HANDLER].accepted_sha256);
-  assert.deepEqual(PLAN.members[HANDLER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: RECORD.members[HANDLER].accepted_sha256, sql_before: null, manifest: COPY_NOTICE_REL });
+  const beforeApply = copyNoticeRecordPre(structuredClone(PLAN));
+  assert.deepEqual(beforeApply.members[HANDLER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: RECORD.members[HANDLER].accepted_sha256, sql_before: null, manifest: COPY_NOTICE_REL });
   assert.equal(resolvePlannedMember(HANDLER, { root: ROOT, plan: PLAN }).ok, true);
   // The rule file is unchanged: still the applied bytes.
   assert.equal(PLAN.members[RULE].manifest, APPLIED_REL);
   assert.ok(PLAN.notes.includes(`Manifest ${COPY_NOTICE_REL}. Nothing deployed.`));
+  // Applied 2026-11-18 (owner "DEPLOY check-endorsement.mjs TO PRODUCTION"): the row expects main's bytes and names the
+  // applied record, which chains to the planning manifest.
+  const record = JSON.parse(read(COPY_NOTICE_APPLIED_REL));
+  assert.equal(record.workstream_id, 'endorsement-copy-notice-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-18\)/);
+  assert.deepEqual(record.members, { [HANDLER]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: COPY_NOTICE_REL } });
+  assert.deepEqual(PLAN.members[HANDLER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: COPY_NOTICE_APPLIED_REL });
+  for (const runId of ['44385524455', '44385683342', '44385877535', '44386145749', '44386297099', '44386464914']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['8c207d4075d17d0d65427e4341a50b3864193eae', '"run the API staging overlay"', '"DEPLOY check-endorsement.mjs TO PRODUCTION"',
+    'RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=', '7879cc8a-b71d-4c57-9841-fe4c184a9246', 'VERIFIED', 'ALREADY_ACCEPTED', 'errors []',
+    'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${COPY_NOTICE_APPLIED_REL}. The row expects the applied bytes and names the endorsement copy notice applied record.`));
   // The new import is a module the live package already carries.
   assert.match(read(`${API}/${HANDLER}`).toString('utf8'), /import \{ renderChecksOpsEmail \} from '\.\/email-layout\.mjs';/);
   assert.ok(fs.existsSync(path.join(ROOT, API, 'email-layout.mjs')));
