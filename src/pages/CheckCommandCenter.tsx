@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useStepUp } from "@/hooks/useStepUp";
 import {
   DEPOSIT_PHASE_LABEL,
@@ -202,10 +202,38 @@ const SECTION_LOADERS: Array<() => Promise<unknown>> = [
   loadCheckMessageThread,
   loadSharedCheckThread,
 ];
+/**
+ * How long the check panel's column takes to widen when it opens (index.css .split-column). Building
+ * a check's full panel is heavy; done in the same moment as the column starts to widen, it blocks
+ * the page and the widening lands in a few jumps (measured 2026-11-18 with the processor slowed 4x:
+ * a 229ms freeze, then 4 frames from 278px to 585px). So the panel opens with its light loading
+ * shape and builds the check once the column is wide.
+ */
+const PANEL_OPEN_MS = 320;
+
+/**
+ * Mounted when the panel opens: shows the loading shape while the column widens, then builds its
+ * children and lets them fade in. Already shown (switching to another check), it builds at once.
+ * With reduced motion nothing widens, so it builds at once too.
+ */
+function BuildAfterOpening({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
+  const [built, setBuilt] = useState(() =>
+    typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+  );
+  useEffect(() => {
+    if (built) return;
+    const timer = window.setTimeout(() => setBuilt(true), PANEL_OPEN_MS);
+    return () => window.clearTimeout(timer);
+  }, [built]);
+  if (!built) return <CheckDetailPanelSkeleton bare={bare} />;
+  return <div data-check-arrive="">{children}</div>;
+}
+
 /** The check panel's shape while its check loads: header, image and detail rows. */
-function CheckDetailPanelSkeleton() {
+function CheckDetailPanelSkeleton({ bare = false }: { bare?: boolean }) {
+  // bare: inside a card that is already drawn (the Review panel), without a second border.
   return (
-    <Card className="check-panel-skeleton" aria-busy="true" aria-label="Loading check">
+    <Card className={`check-panel-skeleton${bare ? " border-0 shadow-none" : ""}`} aria-busy="true" aria-label="Loading check">
       <CardHeader className="pb-3 space-y-2">
         <Skeleton className="h-5 w-2/5" />
         <Skeleton className="h-3.5 w-1/4" />
@@ -1827,11 +1855,13 @@ export default function CheckCommandCenter() {
                       </Button>
                     </div>
                   )}
-                  <CheckDetailPanel
-                    checkId={selectedCheck}
-                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-                    onDeleted={() => setSelectedCheck(null)}
-                  />
+                  <BuildAfterOpening>
+                    <CheckDetailPanel
+                      checkId={selectedCheck}
+                      onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                      onDeleted={() => setSelectedCheck(null)}
+                    />
+                  </BuildAfterOpening>
                 </div>
               </div>
             )}
@@ -1875,19 +1905,21 @@ export default function CheckCommandCenter() {
                     </div>
                   )}
                   {/* The check file, opened on its claim ledger (Funds). */}
-                  <CheckDetailPanel
-                    key={selectedCheck}
-                    checkId={selectedCheck}
-                    initialTab="funds"
-                    onRefresh={() => {
-                      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-                      qc.invalidateQueries({ queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY] });
-                    }}
-                    onDeleted={() => {
-                      setSelectedCheck(null);
-                      qc.invalidateQueries({ queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY] });
-                    }}
-                  />
+                  <BuildAfterOpening>
+                    <CheckDetailPanel
+                      key={selectedCheck}
+                      checkId={selectedCheck}
+                      initialTab="funds"
+                      onRefresh={() => {
+                        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                        qc.invalidateQueries({ queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY] });
+                      }}
+                      onDeleted={() => {
+                        setSelectedCheck(null);
+                        qc.invalidateQueries({ queryKey: [OUTSTANDING_CLAIMS_QUERY_KEY] });
+                      }}
+                    />
+                  </BuildAfterOpening>
                 </div>
               </div>
             )}
@@ -2019,11 +2051,13 @@ export default function CheckCommandCenter() {
                       </Button>
                     </div>
                   )}
-                  <CheckDetailPanel
-                    checkId={selectedCheck}
-                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-                    onDeleted={() => setSelectedCheck(null)}
-                  />
+                  <BuildAfterOpening>
+                    <CheckDetailPanel
+                      checkId={selectedCheck}
+                      onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                      onDeleted={() => setSelectedCheck(null)}
+                    />
+                  </BuildAfterOpening>
                 </div>
               </div>
             )}
@@ -2091,6 +2125,7 @@ export default function CheckCommandCenter() {
                     </CardHeader>
                   )}
                   <CardContent className="p-0">
+                    <BuildAfterOpening bare>
                     <Tabs defaultValue="review" onValueChange={scrollReviewPanelToTop}>
                        <div className="sticky top-[104px] md:top-0 z-10 bg-muted w-full overflow-x-auto scrollbar-hide border-b">
                          <TabsList className="w-max min-w-full rounded-none flex-nowrap justify-start">
@@ -2119,6 +2154,7 @@ export default function CheckCommandCenter() {
                         </Suspense>
                       </TabsContent>
                     </Tabs>
+                    </BuildAfterOpening>
                   </CardContent>
                 </Card>
               ) : (
@@ -2495,11 +2531,13 @@ export default function CheckCommandCenter() {
                       </Button>
                     </div>
                   )}
-                  <CheckDetailPanel
-                    checkId={selectedCheck}
-                    onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-                    onDeleted={() => setSelectedCheck(null)}
-                  />
+                  <BuildAfterOpening>
+                    <CheckDetailPanel
+                      checkId={selectedCheck}
+                      onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                      onDeleted={() => setSelectedCheck(null)}
+                    />
+                  </BuildAfterOpening>
                 </div>
               ) : (
                 <Card className="flex flex-col items-center justify-center h-full">

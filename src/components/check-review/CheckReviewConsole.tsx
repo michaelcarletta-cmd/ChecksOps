@@ -565,6 +565,7 @@ export function CheckReviewQueue({
                 checkNumber={check.check_number}
                 amount={check.amount}
                 selected={selectedCheckId === check.id}
+                className="review-queue-row"
                 onClick={() => onSelectCheck(check.id)}
                 subtitle={displayCase(check.carrier_name) || "Unknown carrier"}
                 pills={
