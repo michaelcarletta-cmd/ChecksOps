@@ -19,6 +19,10 @@ on:
   schedule:
     - cron: '22 13 * * 5'
 
+# Default for every job; the analyze job widens only what it needs below.
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
