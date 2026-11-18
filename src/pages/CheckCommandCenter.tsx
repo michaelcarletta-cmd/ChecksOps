@@ -51,7 +51,7 @@ import {
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useListViewState } from "@/hooks/useListViewState";
-import { playPanelEntrance, playSectionEntrance } from "@/lib/nativeApp";
+import { isNativeApp, playPanelEntrance, playSectionEntrance } from "@/lib/nativeApp";
 import { preloadWhenIdle } from "@/lib/preloadWhenIdle";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
@@ -213,11 +213,13 @@ const PANEL_OPEN_MS = 340;
 /**
  * Mounted when the panel opens: shows the loading shape while the column widens, then builds its
  * children and lets them fade in. Already shown (switching to another check), it builds at once.
- * With reduced motion nothing widens, so it builds at once too.
+ * In the app with reduced motion nothing slides, so it builds at once too.
  */
 function BuildAfterOpening({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
   const [built, setBuilt] = useState(() =>
-    typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+    // In the app with reduced motion nothing slides, so the check builds at once; the website always
+    // slides (owner 2026-11-18).
+    typeof window === "undefined" || (isNativeApp() && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true),
   );
   useEffect(() => {
     if (built) return;

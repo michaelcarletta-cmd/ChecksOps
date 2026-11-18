@@ -91,7 +91,8 @@ export function playNativeAppEntrance(
 
 /**
  * The check panel's entrance, each time a check is opened or switched: the app's push-style slide
- * in the iOS/Android app, a shorter and smaller one on the website. Nothing with reduced motion.
+ * in the iOS/Android app, a shorter and smaller one on the website. Reduced motion stops it in the app
+ * only: the website always animates (owner 2026-11-18).
  */
 export function playPanelEntrance(
   selector: string,
@@ -100,8 +101,11 @@ export function playPanelEntrance(
   /** True when the panel was closed before (it opens, rather than switching to another check). */
   opening = false,
 ): number {
-  if (!doc || prefersReducedMotion(win)) return 0;
-  if (isNativeApp(win)) return playEntrance(selector, NATIVE_PANEL_ENTER, NATIVE_PANEL_TIMING, doc);
+  if (!doc) return 0;
+  // Reduced motion is respected in the app only; the website always animates (owner 2026-11-18).
+  if (isNativeApp(win)) {
+    return prefersReducedMotion(win) ? 0 : playEntrance(selector, NATIVE_PANEL_ENTER, NATIVE_PANEL_TIMING, doc);
+  }
   return opening
     ? playEntrance(selector, WEB_PANEL_OPEN_ENTER, WEB_PANEL_OPEN_TIMING, doc)
     : playEntrance(selector, WEB_PANEL_ENTER, WEB_PANEL_TIMING, doc);
@@ -122,15 +126,17 @@ export const NATIVE_SECTION_TIMING: KeyframeAnimationOptions = { duration: 240, 
 /**
  * The entrance of a status tab's section, each time a tab is picked. Played on the section that
  * stays mounted (Endorsing, Ready for Deposit and Deposited share one list), so nothing remounts.
- * Nothing with reduced motion. Returns how many elements it animated.
+ * Reduced motion stops it in the app only (the website always animates). Returns how many elements it animated.
  */
 export function playSectionEntrance(
   selector: string,
   doc: Document | undefined = typeof document === "undefined" ? undefined : document,
   win: unknown = typeof window === "undefined" ? undefined : window,
 ): number {
-  if (!doc || prefersReducedMotion(win)) return 0;
-  return isNativeApp(win)
-    ? playEntrance(selector, NATIVE_SECTION_ENTER, NATIVE_SECTION_TIMING, doc)
-    : playEntrance(selector, WEB_SECTION_ENTER, WEB_SECTION_TIMING, doc);
+  if (!doc) return 0;
+  // Reduced motion is respected in the app only; the website always animates (owner 2026-11-18).
+  if (isNativeApp(win)) {
+    return prefersReducedMotion(win) ? 0 : playEntrance(selector, NATIVE_SECTION_ENTER, NATIVE_SECTION_TIMING, doc);
+  }
+  return playEntrance(selector, WEB_SECTION_ENTER, WEB_SECTION_TIMING, doc);
 }

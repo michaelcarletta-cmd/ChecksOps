@@ -25,7 +25,7 @@ function fakeDoc(count) {
   return { played, querySelectorAll: () => els };
 }
 
-test('a status tab\'s section settles in on the website and in the app; nothing with reduced motion', () => {
+test('a status tab\'s section settles in on the website and in the app; the app alone respects reduced motion', () => {
   const web = fakeDoc(1);
   assert.equal(playSectionEntrance('[data-lane-section]', web, {}), 1);
   assert.equal(web.played[0].k, WEB_SECTION_ENTER);
@@ -37,7 +37,8 @@ test('a status tab\'s section settles in on the website and in the app; nothing 
   const app = fakeDoc(1);
   assert.equal(playSectionEntrance('[data-lane-section]', app, { Capacitor: { isNativePlatform: () => true } }), 1);
   assert.equal(app.played[0].k, NATIVE_SECTION_ENTER);
-  assert.equal(playSectionEntrance('[data-lane-section]', fakeDoc(1), { matchMedia: () => ({ matches: true }) }), 0);
+  assert.equal(playSectionEntrance('[data-lane-section]', fakeDoc(1), { matchMedia: () => ({ matches: true }) }), 1, 'website: always (owner 2026-11-18)');
+  assert.equal(playSectionEntrance('[data-lane-section]', fakeDoc(1), { Capacitor: { isNativePlatform: () => true }, matchMedia: () => ({ matches: true }) }), 0);
   assert.equal(playSectionEntrance('[data-lane-section]', undefined, {}), 0);
 });
 
@@ -151,7 +152,7 @@ test('the check panel opens with its loading shape and builds the check once the
   assert.equal(WEB_PANEL_OPEN_TIMING.duration, 340, 'the wait matches the slide');
   assert.match(PAGE, /function BuildAfterOpening\(\{ children, bare = false \}/);
   assert.match(PAGE, /if \(!built\) return <CheckDetailPanelSkeleton bare=\{bare\} \/>;\s*return <div data-check-arrive="">\{children\}<\/div>;/);
-  assert.match(PAGE, /prefers-reduced-motion: reduce\)"\)\.matches === true/, 'reduced motion builds at once');
+  assert.match(PAGE, /\(isNativeApp\(\) && window\.matchMedia\?\.\("\(prefers-reduced-motion: reduce\)"\)\.matches === true\)/, 'only the app with reduced motion builds at once');
   // Every place a check panel opens: four CheckDetailPanels and the Review & Decision panel.
   assert.equal(PAGE.match(/<BuildAfterOpening>\s*<CheckDetailPanel\n/g).length, 4);
   assert.equal(PAGE.match(/<CheckDetailPanel\n/g).length, 4);
@@ -172,4 +173,14 @@ test('opening a check on Review does not wait for the queue to redraw', () => {
 test('the Review queue skips laying out rows off screen', () => {
   assert.match(read('src/components/check-review/CheckReviewConsole.tsx'), /selected=\{selectedCheckId === check\.id\}\s*className="review-queue-row"/);
   assert.match(webBlock(), /@media \(min-width: 768px\) \{[\s\S]*?html:not\(\.native-app\) \.review-queue-row \{\s*content-visibility: auto;\s*contain-intrinsic-size: auto 129px;/);
+});
+
+test('the website always animates; the device\'s reduced-motion setting applies to the app only (owner 2026-11-18)', () => {
+  // The owner's recording (Windows, animation effects off) showed every change in a single frame.
+  const css = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\s*\}\s*\}/g)].map((m) => m[1]);
+  assert.ok(blocks.length >= 2);
+  for (const block of blocks) {
+    for (const sel of block.split('{')[0].split(',')) assert.match(sel.trim(), /^html\.native-app\b/, sel.trim());
+  }
 });

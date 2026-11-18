@@ -36,11 +36,12 @@ test('every website motion rule is scoped to html:not(.native-app)', () => {
   }
 });
 
-test('website motion: entrances never leave a translate behind, hover is mouse-only, reduced motion off', () => {
+test('website motion: entrances never leave a translate behind, hover is mouse-only, always on (owner 2026-11-18)', () => {
   const block = webBlock();
   assert.doesNotMatch(block, /animation:[^;]*\bboth;/);
   assert.match(block, /@media \(hover: hover\) and \(pointer: fine\) \{\s*html:not\(\.native-app\) \.cursor-pointer\.rounded-lg\.border/);
-  assert.match(block, /prefers-reduced-motion: reduce\)[^]*animation-delay: 0ms !important;/);
+  // The owner chose to always animate the website, whatever the device's animation setting.
+  assert.doesNotMatch(block.replace(/\/\*[\s\S]*?\*\//g, ''), /prefers-reduced-motion/);
   for (const sel of [
     'html:not(.native-app) [data-app-dialog][data-state="open"] {',
     'html:not(.native-app) [data-app-sheet="right"][data-state="open"]',
@@ -69,9 +70,10 @@ test('check panel entrance: smaller and shorter on the website, the app keeps it
   assert.equal(app.played[0].k, NATIVE_PANEL_ENTER);
 
   const reduced = fakeAnimatedDocument(1);
-  assert.equal(playPanelEntrance('.x', reduced, { matchMedia: () => ({ matches: true }) }), 0);
+  assert.equal(playPanelEntrance('.x', reduced, { matchMedia: () => ({ matches: true }) }), 1, 'the website animates with reduced motion too');
+  assert.equal(playPanelEntrance('.x', fakeAnimatedDocument(1), { Capacitor: { isNativePlatform: () => true }, matchMedia: () => ({ matches: true }) }), 0, 'the app respects reduced motion');
   assert.equal(playPanelEntrance('.x', undefined, {}), 0);
-  assert.match(read('src/pages/CheckCommandCenter.tsx'), /import \{ playPanelEntrance, playSectionEntrance \} from "@\/lib\/nativeApp";/);
+  assert.match(read('src/pages/CheckCommandCenter.tsx'), /import \{ isNativeApp, playPanelEntrance, playSectionEntrance \} from "@\/lib\/nativeApp";/);
 });
 
 function fakeList(tabs) {
