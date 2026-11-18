@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
+import { fetchAllowedRemoteAsset, remoteAssetPolicyFromEnv } from "../_shared/safeRemoteAsset.ts";
 
 /**
  * Keep the generated SVG viewport small without decoding the source image.
@@ -883,7 +884,7 @@ async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promis
   let blob: Blob | null = null;
 
   if (isHttpUrl(signatureRef)) {
-    const response = await fetch(signatureRef);
+    const response = await fetchAllowedRemoteAsset(signatureRef, remoteAssetPolicyFromEnv(Deno.env));
     if (!response.ok) throw new Error(`Failed to fetch signature asset: HTTP ${response.status}`);
     blob = await response.blob();
   } else {
