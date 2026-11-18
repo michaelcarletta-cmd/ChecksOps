@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-copy-notice-api-applied",
+  "authorization": "Record only (2026-11-18): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Endorsement copy notice API (#2004, merged as 8c207d407) applied. Owner 2026-11-18: \"run the API staging overlay\", then \"DEPLOY check-endorsement.mjs TO PRODUCTION\". Applied 2026-11-18 from main 8c207d4075d17d0d65427e4341a50b3864193eae. Staging (checksops-staging-api): inspect run 44385524455 read aea1352f live (CodeSha256 zi9Rq9nnbMupVkDzOJWrjvh9RbvJqJykZtinpoWUGgY=, RevisionId c4bcec96-8df7-4c91-b4b5-fc5ad74b9287); apply run 44385683342 (expected live aea1352f -> CodeSha256 RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=, RevisionId 643128a9-0046-41fe-ab44-9c3221de1f80), errors [], with the public staging smoke /health, /db-health and /db-readonly-validate 200; staging re-inspect run 44385877535 read 3bb1ae2b live. Production (checksops-production-prep-api): preflight inspect run 44386145749 read aea1352f live, READY (CodeSha256 zi9Rq9nnbMupVkDzOJWrjvh9RbvJqJykZtinpoWUGgY=, RevisionId 0bffc437-338c-4bb9-b16d-1724ef966632, the contractor payee endorsement applied bytes); apply run 44386297099 (staging acceptance run 44385877535) replaced it, errors [], VERIFIED by its verify step (3bb1ae2b, CodeSha256 RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=, RevisionId 7879cc8a-b71d-4c57-9841-fe4c184a9246) and by re-inspect run 44386464914, ALREADY_ACCEPTED; /health and /db-health 200. Only this member changed; index.mjs is untouched. No SQL, no hold. Not verified by this record: an endorsement request sent from production after the apply, or a copy notice received in a real contractor mailbox.",
+  "members": {
+    "check-endorsement.mjs": {
+      "live_sha256": "3bb1ae2b284f2bb9e8533e13077d59d5ca05b02fed6322790ad3b19ec36a4ff5",
+      "accepted_sha256": "3bb1ae2b284f2bb9e8533e13077d59d5ca05b02fed6322790ad3b19ec36a4ff5",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-endorsement-copy-notice-api-manifest-2026-11-18.json"
+    }
+  }
+}

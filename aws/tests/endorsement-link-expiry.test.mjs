@@ -234,6 +234,12 @@ test('overlay plan: the link expiry manifest stays as planned; production got it
   // bytes: it is read here as it stood before that plan.)
   let row = plan.members[name];
   let contractorBytes = onMain;
+  // (Applied 2026-11-18, production run 44386297099: the applied record is read back to the plan it applied.)
+  if (row.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-applied-manifest-2026-11-18.json') {
+    const appliedCopy = JSON.parse(read(row.manifest)).members[name];
+    assert.deepEqual([appliedCopy.live_sha256, row.expected_live_sha256], [onMain, onMain]);
+    row = { ...row, expected_live_sha256: JSON.parse(read(appliedCopy.previous_manifest)).members[name].live_sha256, manifest: appliedCopy.previous_manifest };
+  }
   if (row.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-manifest-2026-11-18.json') {
     const copyNotice = JSON.parse(read(row.manifest)).members[name];
     assert.deepEqual([copyNotice.accepted_sha256, row.accepted_sha256, row.expected_live_sha256], [onMain, onMain, copyNotice.live_sha256]);

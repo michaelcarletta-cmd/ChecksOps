@@ -772,10 +772,18 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     let mainBytes = sha256(fs.readFileSync(path.join(apiRoot, name)));
     // (And the endorsement copy notice plan, 2026-11-18, planning only: the contractor payee applied bytes it moves on
     // from stand for main's, and the row is read as it stood before that plan.)
-    if (overlay.members[name]?.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-manifest-2026-11-18.json') {
-      assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
-      const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, overlay.members[name].manifest), 'utf8')).members[name];
-      assert.equal(planned.live_sha256, overlay.members[name].expected_live_sha256, name);
+    // (Applied 2026-11-18, production run 44386297099: its applied record is read back to the plan it applied.)
+    let copyNoticeRow = overlay.members[name];
+    if (copyNoticeRow?.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-applied-manifest-2026-11-18.json') {
+      const applied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, copyNoticeRow.manifest), 'utf8')).members[name];
+      assert.deepEqual([applied.live_sha256, applied.accepted_sha256], [copyNoticeRow.accepted_sha256, copyNoticeRow.expected_live_sha256], name);
+      const planned0 = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, applied.previous_manifest), 'utf8')).members[name];
+      copyNoticeRow = { ...copyNoticeRow, expected_live_sha256: planned0.live_sha256, manifest: applied.previous_manifest };
+    }
+    if (copyNoticeRow?.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-manifest-2026-11-18.json') {
+      assert.equal(copyNoticeRow.accepted_sha256, mainBytes, name);
+      const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, copyNoticeRow.manifest), 'utf8')).members[name];
+      assert.equal(planned.live_sha256, copyNoticeRow.expected_live_sha256, name);
       row = { ...row, accepted_sha256: planned.live_sha256, expected_live_sha256: planned.live_sha256, manifest: planned.previous_manifest };
       mainBytes = planned.live_sha256;
     }
