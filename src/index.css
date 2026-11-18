@@ -621,7 +621,40 @@ html:not(.native-app) .message-thread-screen {
 /* Pages and tab sections fade up when they open (no one-by-one sections: dense pages stay fast). */
 html:not(.native-app) .page-shell,
 html:not(.native-app) [role="tabpanel"][data-state="active"] {
-  animation: web-enter 150ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  animation: web-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Pages: each page of a workspace (keyed by path in WhiteLabelApp) slides in a little from the
+   right, like the app's pushed screen but shorter; a page-shell inside it does not move twice. clip
+   keeps the incoming page from adding a sideways scroll while it slides. */
+html:not(.native-app) .route-page {
+  overflow-x: clip;
+  animation: web-page-in 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+html:not(.native-app) .route-page .page-shell {
+  animation: none;
+}
+
+/* Checks page: the picked status tile lifts a little (its section settles in from
+   playSectionEntrance). On wider screens the list and the check panel share the row: their widths
+   ease when a check opens or closes, a panel that opens from nothing grows from the right edge, and
+   a check that arrives after its loading shape fades in over it. */
+@keyframes web-panel-grow {
+  from { width: 0; }
+}
+html:not(.native-app) [data-status-tile][data-active="true"] {
+  box-shadow: 0 6px 16px -10px hsl(var(--primary) / 0.55);
+}
+@media (min-width: 768px) {
+  html:not(.native-app) .split-column {
+    transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  html:not(.native-app) .split-panel-grow {
+    animation: web-panel-grow 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+html:not(.native-app) [data-check-settle] {
+  animation: web-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* Dialogs (send payment, deposit, settings, confirmations) fade up quickly, with no overshoot. */

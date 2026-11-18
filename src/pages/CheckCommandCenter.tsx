@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { Fragment, lazy, Suspense, useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useStepUp } from "@/hooks/useStepUp";
 import {
   DEPOSIT_PHASE_LABEL,
@@ -41,6 +41,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
@@ -50,7 +51,8 @@ import {
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useListViewState } from "@/hooks/useListViewState";
-import { playPanelEntrance } from "@/lib/nativeApp";
+import { playPanelEntrance, playSectionEntrance } from "@/lib/nativeApp";
+import { preloadWhenIdle } from "@/lib/preloadWhenIdle";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
@@ -108,14 +110,16 @@ import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 
 
 // Lazy-loaded: heavy tab-only / dialog-only modules (each becomes its own JS chunk)
-const ReturnedChecksPanel = lazy(() =>
-  import("@/components/checks/ReturnedChecksPanel").then(m => ({ default: m.ReturnedChecksPanel }))
-);
+const loadReturnedChecksPanel = () =>
+  import("@/components/checks/ReturnedChecksPanel").then(m => ({ default: m.ReturnedChecksPanel }));
+const ReturnedChecksPanel = lazy(loadReturnedChecksPanel);
 // Checks → Outstanding (owner 2026-11-17): claims with a balance above $0 by the claim ledger's figure.
-const OutstandingClaimsPanel = lazy(() => import("@/components/checks/OutstandingClaimsPanel"));
-const LossDraftDashboard = lazy(() =>
-  import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }))
-);
+const loadOutstandingClaimsPanel = () =>
+  import("@/components/checks/OutstandingClaimsPanel");
+const OutstandingClaimsPanel = lazy(loadOutstandingClaimsPanel);
+const loadLossDraftDashboard = () =>
+  import("@/components/loss-draft/LossDraftDashboard").then(m => ({ default: m.LossDraftDashboard }));
+const LossDraftDashboard = lazy(loadLossDraftDashboard);
 // Endorsement adjuster is a core operational action — load eagerly so the
 // button responds instantly. Keeping it out of a lazy chunk avoids the
 // intermittent "click does nothing" behavior when the chunk was slow to fetch.
@@ -130,53 +134,101 @@ const preloadEndorsementAdjuster = () => Promise.resolve();
  */
 const CHECK_DETAIL_SELECT =
   "*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload), tenants(name)";
-const EndorsementChecklist = lazy(() =>
-  import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
-);
-const SharedCheckEndorsements = lazy(() =>
-  import("@/components/check-review/SharedCheckEndorsements").then(m => ({ default: m.SharedCheckEndorsements }))
-);
-const CheckFilesSection = lazy(() =>
-  import("@/components/check-review/CheckFilesSection").then(m => ({ default: m.CheckFilesSection }))
-);
+const loadEndorsementChecklist = () =>
+  import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }));
+const EndorsementChecklist = lazy(loadEndorsementChecklist);
+const loadSharedCheckEndorsements = () =>
+  import("@/components/check-review/SharedCheckEndorsements").then(m => ({ default: m.SharedCheckEndorsements }));
+const SharedCheckEndorsements = lazy(loadSharedCheckEndorsements);
+const loadCheckFilesSection = () =>
+  import("@/components/check-review/CheckFilesSection").then(m => ({ default: m.CheckFilesSection }));
+const CheckFilesSection = lazy(loadCheckFilesSection);
 // DTP status/badge moved into the Files tab — signed DTP PDFs live in check_files.
-const DepositPacketGenerator = lazy(() =>
-  import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }))
-);
-const DepositReports = lazy(() =>
-  import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }))
-);
-const TenantPartnerManager = lazy(() =>
-  import("@/components/white-label/TenantPartnerManager").then(m => ({ default: m.TenantPartnerManager }))
-);
-const HomeownerSubmittedChecksInbox = lazy(() =>
-  import("@/components/homeowner-ledger/HomeownerSubmittedChecksInbox").then(m => ({ default: m.HomeownerSubmittedChecksInbox }))
-);
-const SendHomeownerUploadLink = lazy(() =>
-  import("@/components/homeowner-ledger/SendHomeownerUploadLink").then(m => ({ default: m.SendHomeownerUploadLink }))
+const loadDepositPacketGenerator = () =>
+  import("@/components/check-review/DepositPacketGenerator").then(m => ({ default: m.DepositPacketGenerator }));
+const DepositPacketGenerator = lazy(loadDepositPacketGenerator);
+const loadDepositReports = () =>
+  import("@/components/deposit-ops/DepositReports").then(m => ({ default: m.DepositReports }));
+const DepositReports = lazy(loadDepositReports);
+const loadTenantPartnerManager = () =>
+  import("@/components/white-label/TenantPartnerManager").then(m => ({ default: m.TenantPartnerManager }));
+const TenantPartnerManager = lazy(loadTenantPartnerManager);
+const loadHomeownerSubmittedChecksInbox = () =>
+  import("@/components/homeowner-ledger/HomeownerSubmittedChecksInbox").then(m => ({ default: m.HomeownerSubmittedChecksInbox }));
+const HomeownerSubmittedChecksInbox = lazy(loadHomeownerSubmittedChecksInbox);
+const loadSendHomeownerUploadLink = () =>
+  import("@/components/homeowner-ledger/SendHomeownerUploadLink").then(m => ({ default: m.SendHomeownerUploadLink }));
+const SendHomeownerUploadLink = lazy(loadSendHomeownerUploadLink);
+const loadMortgageCompaniesDirectory = () =>
+  import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }));
+const MortgageCompaniesDirectory = lazy(loadMortgageCompaniesDirectory);
+const loadPendingApprovalDeposits = () =>
+  import("@/components/settings/CheckAltSettings").then(m => ({ default: m.PendingApprovalDeposits }));
+const PendingApprovalDeposits = lazy(loadPendingApprovalDeposits);
+const loadBankDepositReconciliation = () =>
+  import("@/components/deposit-ops/BankDepositReconciliation");
+const BankDepositReconciliation = lazy(loadBankDepositReconciliation);
+const loadLossPreventionPanel = () =>
+  import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }));
+const LossPreventionPanel = lazy(loadLossPreventionPanel);
+const loadCheckMessagesPanel = () =>
+  import("@/components/check-messages/CheckMessagesPanel").then(m => ({ default: m.CheckMessagesPanel }));
+const CheckMessagesPanel = lazy(loadCheckMessagesPanel);
+const loadCheckMessageThread = () =>
+  import("@/components/check-messages/CheckMessageThread").then(m => ({ default: m.CheckMessageThread }));
+const CheckMessageThread = lazy(loadCheckMessageThread);
+const loadSharedCheckThread = () =>
+  import("@/components/check-review/SharedCheckThread").then(m => ({ default: m.SharedCheckThread }));
+const SharedCheckThread = lazy(loadSharedCheckThread);
 
-);
-const MortgageCompaniesDirectory = lazy(() =>
-  import("@/components/checks/MortgageCompaniesDirectory").then(m => ({ default: m.MortgageCompaniesDirectory }))
-);
-const PendingApprovalDeposits = lazy(() =>
-  import("@/components/settings/CheckAltSettings").then(m => ({ default: m.PendingApprovalDeposits }))
-);
-const BankDepositReconciliation = lazy(() =>
-  import("@/components/deposit-ops/BankDepositReconciliation")
-);
-const LossPreventionPanel = lazy(() =>
-  import("@/components/check-review/LossPreventionPanel").then(m => ({ default: m.LossPreventionPanel }))
-);
-const CheckMessagesPanel = lazy(() =>
-  import("@/components/check-messages/CheckMessagesPanel").then(m => ({ default: m.CheckMessagesPanel }))
-);
-const CheckMessageThread = lazy(() =>
-  import("@/components/check-messages/CheckMessageThread").then(m => ({ default: m.CheckMessageThread }))
-);
-const SharedCheckThread = lazy(() =>
-  import("@/components/check-review/SharedCheckThread").then(m => ({ default: m.SharedCheckThread }))
-);
+/** The tab sections and the check panel's parts, fetched in the background once the page is idle. */
+const SECTION_LOADERS: Array<() => Promise<unknown>> = [
+  loadReturnedChecksPanel,
+  loadOutstandingClaimsPanel,
+  loadLossDraftDashboard,
+  loadEndorsementChecklist,
+  loadSharedCheckEndorsements,
+  loadCheckFilesSection,
+  loadDepositPacketGenerator,
+  loadDepositReports,
+  loadTenantPartnerManager,
+  loadHomeownerSubmittedChecksInbox,
+  loadSendHomeownerUploadLink,
+  loadMortgageCompaniesDirectory,
+  loadPendingApprovalDeposits,
+  loadBankDepositReconciliation,
+  loadLossPreventionPanel,
+  loadCheckMessagesPanel,
+  loadCheckMessageThread,
+  loadSharedCheckThread,
+];
+/** The check panel's shape while its check loads: header, image and detail rows. */
+function CheckDetailPanelSkeleton() {
+  return (
+    <Card className="check-panel-skeleton" aria-busy="true" aria-label="Loading check">
+      <CardHeader className="pb-3 space-y-2">
+        <Skeleton className="h-5 w-2/5" />
+        <Skeleton className="h-3.5 w-1/4" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Skeleton className="h-40 w-full" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+        <div className="space-y-2.5">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-4">
+              <Skeleton className="h-3.5 w-1/4" />
+              <Skeleton className="h-3.5 w-1/3" />
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 /** Skeleton shown while a lazy tab/section loads — keeps layout stable vs. a spinner. */
 const TabLoader = () => (
@@ -367,12 +419,28 @@ export default function CheckCommandCenter() {
   // switching tabs keeps the queue's scroll offset, which leaves the panel's
   // first rows (Edit Fields, Claim Ledger title) hidden under those bars.
   const reviewPanelRef = useRef<HTMLDivElement>(null);
-  // The check panel slides in each time a check is opened or switched (app and website).
-  useEffect(() => {
-    if (!selectedCheck && !reviewCheckId) return;
-    const frame = requestAnimationFrame(() => playPanelEntrance(".check-detail-panel"));
-    return () => cancelAnimationFrame(frame);
+  // The check panel slides in each time a check is opened or switched (app and website). Played
+  // before the browser paints, so the new check is never seen for a frame before it moves; opening
+  // (the panel was closed) waits for the column to widen, switching checks does not.
+  const shownPanelRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const current = selectedCheck ?? reviewCheckId;
+    const opening = shownPanelRef.current === null;
+    shownPanelRef.current = current;
+    if (!current) return;
+    playPanelEntrance(".check-detail-panel", undefined, undefined, opening);
   }, [selectedCheck, reviewCheckId]);
+  // Picking a status tab: its section settles in (the wrapper stays mounted, so no list remounts).
+  // Played before the browser paints, so the new tab's content is never seen for a frame first.
+  const shownTabRef = useRef(activeTab);
+  useLayoutEffect(() => {
+    if (shownTabRef.current === activeTab) return;
+    shownTabRef.current = activeTab;
+    playSectionEntrance("[data-lane-section]");
+  }, [activeTab]);
+  // Once the page is idle, fetch the code of every tab section and of the check panel's parts, so
+  // the first click on a tab or a check does not wait for a download.
+  useEffect(() => preloadWhenIdle(SECTION_LOADERS), []);
   const scrollReviewPanelToTop = useCallback(() => {
     if (!isMobile) return;
     requestAnimationFrame(() => reviewPanelRef.current?.scrollIntoView({ block: "start" }));
@@ -1442,6 +1510,9 @@ export default function CheckCommandCenter() {
             return (
               <button
                 key={tab.key}
+                data-status-tile=""
+                data-active={isActive ? "true" : "false"}
+                aria-pressed={isActive}
                 onClick={() => handleTabChange(tab.key)}
                 className={`relative flex flex-col items-center gap-0.5 sm:gap-1.5 rounded-lg px-1 py-2 sm:p-4 transition-colors duration-100 border cursor-pointer ${
                   isLast ? lastTileMobileSpan : ""
@@ -1465,6 +1536,8 @@ export default function CheckCommandCenter() {
         </div>
 
         {/* Returned checks now live in Manager → Returned sub-tab. */}
+        {/* Every status tab's content: settles in each time a tab is picked (playSectionEntrance). */}
+        <div data-lane-section="">
 
 
         {/* Loss Draft Tab */}
@@ -1637,7 +1710,7 @@ export default function CheckCommandCenter() {
         {activeTab === "fundsreleased" && (
           <div className="mt-3 flex flex-col lg:flex-row gap-4 min-w-0" style={{ minHeight: "calc(100vh - 400px)" }}>
             <Card
-              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
+              className={`split-column overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
               style={!isMobile ? { width: selectedCheck ? "40%" : "100%" } : undefined}
             >
               <CardHeader className="pb-2">
@@ -1738,7 +1811,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className={`check-detail-panel transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                className={`check-detail-panel split-column split-panel-grow transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -1768,7 +1841,7 @@ export default function CheckCommandCenter() {
         {activeTab === "outstanding" && (
           <div className="mt-3 flex flex-col lg:flex-row gap-4 min-w-0" style={{ minHeight: "calc(100vh - 400px)" }}>
             <div
-              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 w-full min-w-0 ${isMobile && selectedCheck ? "hidden" : ""}`}
+              className={`split-column transition-all duration-300 ease-in-out md:flex-shrink-0 w-full min-w-0 ${isMobile && selectedCheck ? "hidden" : ""}`}
               style={!isMobile ? { width: selectedCheck ? "40%" : "100%" } : undefined}
             >
               <Suspense fallback={<TabLoader />}>
@@ -1785,7 +1858,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className="check-detail-panel transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full"
+                className="check-detail-panel split-column split-panel-grow transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full"
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -1824,7 +1897,7 @@ export default function CheckCommandCenter() {
         {activeTab === "fundsreceived" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             <Card
-              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
+              className={`split-column overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${isMobile && selectedCheck ? "hidden" : ""}`}
               style={!isMobile ? { width: selectedCheck ? "40%" : "100%" } : undefined}
             >
               <CardHeader className="pb-2">
@@ -1930,7 +2003,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className={`check-detail-panel transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                className={`check-detail-panel split-column split-panel-grow transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -1967,7 +2040,7 @@ export default function CheckCommandCenter() {
         {activeTab === "review" && (
           <div className="mt-3 flex flex-col md:flex-row gap-4">
             <Card
-              className={`overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${
+              className={`split-column overflow-hidden transition-all duration-300 ease-in-out md:flex-shrink-0 w-full ${
                 isMobile && reviewCheckId ? "hidden" : ""
               }`}
               style={!isMobile ? { width: reviewCheckId ? "40%" : "80%" } : undefined}
@@ -1992,7 +2065,7 @@ export default function CheckCommandCenter() {
                 the panel content. Ancestors use overflow-x-clip (not hidden) for the same
                 reason, so the bars pin under the app header. */}
             <div
-              className={`transition-all duration-300 ease-in-out md:flex-shrink-0 md:overflow-hidden w-full ${
+              className={`split-column transition-all duration-300 ease-in-out md:flex-shrink-0 md:overflow-hidden w-full ${
                 isMobile && !reviewCheckId ? "hidden" : ""
               }`}
               style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}
@@ -2077,7 +2150,7 @@ export default function CheckCommandCenter() {
           <div className="mt-3 flex flex-col md:flex-row gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
             {/* Check list — hidden on mobile when a check is selected */}
             <Card
-              className={`overflow-hidden transition-all duration-300 ease-in-out lg:flex-shrink-0 w-full min-w-0 ${isMobile && selectedCheck ? "hidden" : ""}`}
+              className={`split-column overflow-hidden transition-all duration-300 ease-in-out lg:flex-shrink-0 w-full min-w-0 ${isMobile && selectedCheck ? "hidden" : ""}`}
               style={!isMobile ? { width: selectedCheck ? "58%" : "80%" } : undefined}
             >
               {(() => {
@@ -2405,7 +2478,7 @@ export default function CheckCommandCenter() {
 
             {/* Detail panel — hidden on mobile when no check selected */}
             <div
-              className={`transition-all duration-300 ease-in-out lg:flex-shrink-0 overflow-hidden w-full min-w-0 ${isMobile && !selectedCheck ? "hidden" : ""}`}
+              className={`split-column ${selectedCheck ? "check-detail-panel " : ""}transition-all duration-300 ease-in-out lg:flex-shrink-0 overflow-hidden w-full min-w-0 ${isMobile && !selectedCheck ? "hidden" : ""}`}
               style={!isMobile ? { width: selectedCheck ? "42%" : "20%" } : undefined}
             >
               {selectedCheck ? (
@@ -2439,6 +2512,7 @@ export default function CheckCommandCenter() {
             </div>
           </div>
         )}
+        </div>
       </Tabs>
 
       {/* Bank return capture — deposited checks that came back */}
@@ -3819,7 +3893,14 @@ function CheckDetailPanel({
     }
   };
 
-  if (!check) return null;
+  // Set once the skeleton has shown: the arriving content then fades in over it (index.css).
+  const loadedAfterSkeletonRef = useRef(false);
+  // While the check loads, the panel keeps its shape (header, image, rows) instead of staying empty,
+  // so it opens as one smooth movement and the content settles in when it arrives.
+  if (!check) {
+    loadedAfterSkeletonRef.current = true;
+    return <CheckDetailPanelSkeleton />;
+  }
 
   // Suppress redundant "Ready for Deposit" recommendation when status already shows it.
   const suppressDetailRec =
@@ -3880,7 +3961,7 @@ function CheckDetailPanel({
 
   return (
     <>
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden" data-check-settle={loadedAfterSkeletonRef.current ? "" : undefined}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">Check #{check.check_number ?? "Pending"}</CardTitle>

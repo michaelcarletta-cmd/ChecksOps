@@ -268,7 +268,8 @@ test('the loader pages past 500 checks, chunks the claim ids, and reports an inc
 
 test('Checks page: an Outstanding tile, its own panel beside the check file opened on the ledger, and the recipient report\'s export menu', () => {
   const page = read('src/pages/CheckCommandCenter.tsx');
-  assert.match(page, /const OutstandingClaimsPanel = lazy\(\(\) => import\("@\/components\/checks\/OutstandingClaimsPanel"\)\);/);
+  // A named loader since 2026-11-18, so the page can also fetch it in the background (preloadWhenIdle).
+  assert.match(page, /const loadOutstandingClaimsPanel = \(\) =>\s*import\("@\/components\/checks\/OutstandingClaimsPanel"\);\s*const OutstandingClaimsPanel = lazy\(loadOutstandingClaimsPanel\);/);
   assert.match(page, /\{ key: "outstanding",\s+label: "Outstanding",\s+count: null as number \| null, icon: Scale \}/);
   // The tile sits with the money lanes, before Manager and Messages.
   assert.ok(page.indexOf('key: "fundsreceived", label: "Funds Received"') < page.indexOf('key: "outstanding"'));
