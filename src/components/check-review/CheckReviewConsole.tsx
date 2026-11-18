@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Fragment, memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -255,7 +255,7 @@ const payeeTypeIcons: Record<string, typeof Users> = {
 /*  Review Queue                                                       */
 /* ------------------------------------------------------------------ */
 
-export function CheckReviewQueue({
+function CheckReviewQueueInner({
   onSelectCheck,
   selectedCheckId,
   searchQuery = "",
@@ -683,6 +683,10 @@ export function CheckReviewQueue({
     </>
   );
 }
+
+/** Re-renders only when its props change: opening a check in the panel beside it does not redraw
+ *  every row (the page passes the highlighted check a moment later, as a deferred value). */
+export const CheckReviewQueue = memo(CheckReviewQueueInner);
 
 /* ------------------------------------------------------------------ */
 /*  Review Decision Panel — uses transactional RPC                     */

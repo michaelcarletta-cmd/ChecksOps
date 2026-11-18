@@ -8,8 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
-  NATIVE_PANEL_TIMING, NATIVE_SECTION_ENTER, playPanelEntrance, playSectionEntrance, WEB_PANEL_OPEN_TIMING, WEB_PANEL_TIMING,
-  WEB_SECTION_ENTER, WEB_SECTION_TIMING,
+  NATIVE_PANEL_TIMING, NATIVE_SECTION_ENTER, playPanelEntrance, playSectionEntrance, WEB_PANEL_ENTER, WEB_PANEL_OPEN_ENTER,
+  WEB_PANEL_OPEN_TIMING, WEB_PANEL_TIMING, WEB_SECTION_ENTER, WEB_SECTION_TIMING,
 } from '../../src/lib/nativeApp.ts';
 import { preloadWhenIdle } from '../../src/lib/preloadWhenIdle.ts';
 
@@ -31,7 +31,9 @@ test('a status tab\'s section settles in on the website and in the app; nothing 
   assert.equal(web.played[0].k, WEB_SECTION_ENTER);
   assert.equal(web.played[0].t, WEB_SECTION_TIMING);
   assert.ok(WEB_SECTION_TIMING.duration >= 180 && WEB_SECTION_TIMING.duration <= 260);
-  for (const frame of WEB_SECTION_ENTER) assert.equal(frame.transform, undefined, 'translate, never transform');
+  // transform, which the browser animates on its compositor; the wrapper has no transform of its own.
+  assert.deepEqual(WEB_SECTION_ENTER.map((f) => f.transform), ['translateY(8px)', 'translateY(0)']);
+  for (const frame of WEB_SECTION_ENTER) assert.equal(frame.translate, undefined);
   const app = fakeDoc(1);
   assert.equal(playSectionEntrance('[data-lane-section]', app, { Capacitor: { isNativePlatform: () => true } }), 1);
   assert.equal(app.played[0].k, NATIVE_SECTION_ENTER);
@@ -47,30 +49,44 @@ test('the Checks page plays the section entrance on a tab change, on one wrapper
   assert.doesNotMatch(PAGE, /<div key=\{activeTab\}/);
 });
 
-test('the check panel entrance plays before paint; opening waits for the column, switching does not', () => {
+test('opening a check: the panel slides in from the right on the compositor; switching moves it a little', () => {
+  // Owner 2026-11-18, after #2000 on staging: "it still not a smooth animation". A width animation
+  // runs on the page's own thread and stutters while the page is busy; transform and opacity are
+  // animated by the browser's compositor and keep going (measured on displayed frames, processor
+  // slowed 4x: no gap over ~40ms while the panel slides).
   assert.match(PAGE, /useLayoutEffect\(\(\) => \{\s*const current = selectedCheck \?\? reviewCheckId;\s*const opening = shownPanelRef\.current === null;[\s\S]{0,120}playPanelEntrance\("\.check-detail-panel", undefined, undefined, opening\);/);
   assert.doesNotMatch(PAGE, /requestAnimationFrame\(\(\) => play(Panel|Section)Entrance/);
   const opened = fakeDoc(1);
   assert.equal(playPanelEntrance('.check-detail-panel', opened, {}, true), 1);
+  assert.equal(opened.played[0].k, WEB_PANEL_OPEN_ENTER);
   assert.equal(opened.played[0].t, WEB_PANEL_OPEN_TIMING);
-  assert.equal(WEB_PANEL_OPEN_TIMING.fill, 'backwards', 'hidden during the delay, nothing left behind after');
-  assert.ok(WEB_PANEL_OPEN_TIMING.delay > 0 && WEB_PANEL_OPEN_TIMING.delay <= 120);
+  assert.deepEqual(WEB_PANEL_OPEN_ENTER, [
+    { opacity: 0, transform: 'translateX(28%)' },
+    { opacity: 1, transform: 'translateX(0)' },
+  ]);
+  assert.equal(WEB_PANEL_OPEN_TIMING.delay, undefined, 'the slide starts with the click');
+  for (const frame of [...WEB_PANEL_OPEN_ENTER, ...WEB_PANEL_ENTER]) {
+    assert.deepEqual(Object.keys(frame).sort(), ['opacity', 'transform'], 'compositor properties only');
+  }
   const switched = fakeDoc(1);
   playPanelEntrance('.check-detail-panel', switched, {}, false);
+  assert.equal(switched.played[0].k, WEB_PANEL_ENTER);
   assert.equal(switched.played[0].t, WEB_PANEL_TIMING);
   const app = fakeDoc(1);
   playPanelEntrance('.check-detail-panel', app, { Capacitor: { isNativePlatform: () => true } }, true);
   assert.equal(app.played[0].t, NATIVE_PANEL_TIMING, 'the app keeps its own panel timing');
 });
 
-test('every check panel column eases its width; panels that open from nothing grow from the right', () => {
-  assert.equal(PAGE.match(/split-column split-panel-grow/g).length, 3, 'Funds Released, Outstanding, Funds Received');
+test('the list and panel columns take their widths at once; nothing animates a width', () => {
+  assert.doesNotMatch(PAGE, /split-panel-grow/);
+  assert.equal(PAGE.match(/check-detail-panel split-column transition-all/g).length, 3, 'Funds Released, Outstanding, Funds Received');
   // Main lanes: the panel column is the element the check entrance plays on, once a check is open.
   assert.match(PAGE, /className=\{`split-column \$\{selectedCheck \? "check-detail-panel " : ""\}transition-all/);
+  // Review: the Review & Decision card slides; it no longer plays its own fade on top.
+  assert.match(PAGE, /<Card ref=\{reviewPanelRef\} className="check-detail-panel scroll-mt-14">/);
   const block = webBlock();
-  assert.match(block, /@media \(min-width: 768px\) \{\s*html:not\(\.native-app\) \.split-column \{\s*transition: width 320ms/);
-  assert.match(block, /html:not\(\.native-app\) \.split-panel-grow \{\s*animation: web-panel-grow 320ms [^;]*backwards;/);
-  assert.match(block, /@keyframes web-panel-grow \{\s*from \{ width: 0; \}\s*\}/);
+  assert.match(block, /@media \(min-width: 768px\) \{[\s\S]*?html:not\(\.native-app\) \.split-column \{\s*transition: none;/);
+  assert.doesNotMatch(block, /web-panel-grow|transition: width/);
 });
 
 test('the check panel keeps its shape while loading and the check fades in over it', () => {
@@ -128,12 +144,11 @@ test('preloadWhenIdle: one at a time, on idle, failures ignored, stops when clea
   assert.deepEqual(preloadWhenIdle([], undefined)(), undefined);
 });
 
-test('the check panel opens with its loading shape and builds the check once the column is wide', () => {
-  // Owner 2026-11-18, after the first deploy: "once a check is selected the side bar jumps out fast".
-  // With the processor slowed 4x, building the panel during the opening froze the page ~280ms and
-  // the widening landed in 4 jumps; built after it, the column widens in 12-16 even frames.
-  assert.match(PAGE, /const PANEL_OPEN_MS = 320;/);
-  assert.match(CSS, /\.split-column \{\s*transition: width 320ms/, 'the wait matches the widening');
+test('the check panel opens with its loading shape and builds the check once the slide has finished', () => {
+  // Building a check's full panel froze the page ~280ms with the processor slowed 4x; done after
+  // the slide it no longer competes with the opening.
+  assert.match(PAGE, /const PANEL_OPEN_MS = 340;/);
+  assert.equal(WEB_PANEL_OPEN_TIMING.duration, 340, 'the wait matches the slide');
   assert.match(PAGE, /function BuildAfterOpening\(\{ children, bare = false \}/);
   assert.match(PAGE, /if \(!built\) return <CheckDetailPanelSkeleton bare=\{bare\} \/>;\s*return <div data-check-arrive="">\{children\}<\/div>;/);
   assert.match(PAGE, /prefers-reduced-motion: reduce\)"\)\.matches === true/, 'reduced motion builds at once');
@@ -144,7 +159,17 @@ test('the check panel opens with its loading shape and builds the check once the
   assert.match(webBlock(), /html:not\(\.native-app\) \[data-check-settle\],\s*html:not\(\.native-app\) \[data-check-arrive\] \{\s*animation: web-enter/);
 });
 
-test('the Review queue skips laying out rows off screen while its column narrows', () => {
+test('opening a check on Review does not wait for the queue to redraw', () => {
+  // The click ran 168ms of script with the processor slowed 4x, almost all of it the 100-row queue
+  // redrawing for its highlight; memoized, with the highlight deferred, 20ms.
+  const consoleSrc = read('src/components/check-review/CheckReviewConsole.tsx');
+  assert.match(consoleSrc, /export const CheckReviewQueue = memo\(CheckReviewQueueInner\);/);
+  assert.match(PAGE, /const reviewQueueHighlight = useDeferredValue\(reviewCheckId\);/);
+  assert.match(PAGE, /const toggleReviewCheck = useCallback\(\(id: string\) => setReviewCheckId\(\(curr\) => \(curr === id \? null : id\)\), \[\]\);/);
+  assert.match(PAGE, /<CheckReviewQueue\s*onSelectCheck=\{toggleReviewCheck\}\s*selectedCheckId=\{reviewQueueHighlight\}/);
+});
+
+test('the Review queue skips laying out rows off screen', () => {
   assert.match(read('src/components/check-review/CheckReviewConsole.tsx'), /selected=\{selectedCheckId === check\.id\}\s*className="review-queue-row"/);
   assert.match(webBlock(), /@media \(min-width: 768px\) \{[\s\S]*?html:not\(\.native-app\) \.review-queue-row \{\s*content-visibility: auto;\s*contain-intrinsic-size: auto 129px;/);
 });

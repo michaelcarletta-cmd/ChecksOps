@@ -636,18 +636,17 @@ html:not(.native-app) .route-page .page-shell {
 }
 
 /* Checks page: the picked status tile lifts a little (its section settles in from
-   playSectionEntrance). On wider screens the list and the check panel share the row: their widths
-   ease when a check opens or closes, a panel that opens from nothing grows from the right edge, and
-   a check that arrives after its loading shape fades in over it. */
-@keyframes web-panel-grow {
-  from { width: 0; }
-}
+   playSectionEntrance). On wider screens the list and the check panel share the row: the columns
+   take their widths at once and the panel slides in from the right (playPanelEntrance); a check
+   that arrives after its loading shape fades in over it. */
 html:not(.native-app) [data-status-tile][data-active="true"] {
   box-shadow: 0 6px 16px -10px hsl(var(--primary) / 0.55);
 }
 @media (min-width: 768px) {
+  /* The columns take their widths at once (a width animation runs on the page's own thread and
+     stuttered on slower machines); the panel's slide-in (playPanelEntrance) carries the motion. */
   html:not(.native-app) .split-column {
-    transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: none;
   }
   /* The Review queue draws every row (the other lanes draw only the visible ones). While its
      column narrows, the browser would lay out all of them on every frame; rows off screen keep
@@ -656,9 +655,6 @@ html:not(.native-app) [data-status-tile][data-active="true"] {
   html:not(.native-app) .review-queue-row {
     content-visibility: auto;
     contain-intrinsic-size: auto 129px;
-  }
-  html:not(.native-app) .split-panel-grow {
-    animation: web-panel-grow 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
 }
 html:not(.native-app) [data-check-settle],
