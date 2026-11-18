@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { fetchAllowedRemoteAsset, remoteAssetPolicyFromEnv } from "../_shared/safeRemoteAsset.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,7 +62,13 @@ async function repairLegacyUrlIfNeeded(
 
   const ext = getFileExtensionFromPath(originalValue);
   const targetPath = `checks/${checkId}/${side}-legacy-${Date.now()}.${ext}`;
-  const response = await fetch(originalValue);
+  let response: Response;
+  try {
+    response = await fetchAllowedRemoteAsset(originalValue, remoteAssetPolicyFromEnv(Deno.env));
+  } catch (error) {
+    console.warn(`[get-check-image-urls] Warning: Legacy ${side} image was not fetched (${error instanceof Error ? error.message : "fetch failed"}). Skipping repair.`);
+    return null;
+  }
   if (!response.ok) {
     console.warn(`[get-check-image-urls] Warning: Legacy ${side} image could not be fetched from ${originalValue} (status: ${response.status}). Skipping repair.`);
     return null;

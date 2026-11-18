@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from "react";
+import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
 import { Bold, Italic, Underline, Type, Palette } from "lucide-react";
 import {
@@ -13,6 +14,12 @@ interface RichTextEditorProps {
   placeholder?: string;
   rows?: number;
 }
+
+// The value is HTML that may have been stored by someone else (a saved
+// template, a record loaded from the API), so it is sanitised before it is
+// written into the editable element.
+const sanitizeEditorHtml = (html: string) =>
+  DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 
 const COLORS = [
   { name: "Black", value: "#000000" },
@@ -31,7 +38,7 @@ export function RichTextEditor({ value, onChange, placeholder, rows = 4 }: RichT
   // Only set initial content once
   useEffect(() => {
     if (editorRef.current && !isInitialized.current) {
-      editorRef.current.innerHTML = value || '';
+      editorRef.current.innerHTML = sanitizeEditorHtml(value || '');
       isInitialized.current = true;
     }
   }, []);
@@ -42,7 +49,7 @@ export function RichTextEditor({ value, onChange, placeholder, rows = 4 }: RichT
       // Only update if the value is completely different (like loading a template)
       const currentContent = editorRef.current.innerHTML;
       if (value !== currentContent && (value === '' || !currentContent.includes(value.slice(0, 20)))) {
-        editorRef.current.innerHTML = value || '';
+        editorRef.current.innerHTML = sanitizeEditorHtml(value || '');
       }
     }
   }, [value]);
