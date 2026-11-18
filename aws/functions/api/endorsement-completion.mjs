@@ -1,7 +1,10 @@
 /**
  * Shared endorsement-completion math (AWS + tests).
  * Mortgage company + manual_required is satisfied for ENDORSEMENT MATH only.
- * Contractor rows are CC-only and are not required signers.
+ * A contractor payee is a required signer like the insured (owner 2026-11-18: "Sometimes contractors are in checks so
+ * we need to allow them to endorse checks"; required "when a user clicks contractor on drop down for payee"). A partner
+ * the check is only shared with has no payee row, so nothing is required of them. Until 2026-11-18 contractor rows
+ * were CC-only and counted as satisfied whatever their status.
  * Active Loss Draft must never be released to Ready by this math.
  */
 
@@ -11,7 +14,6 @@ export const payeeTypeOf = (row = {}) => String(row.payee_type || '').toLowerCas
 
 export const isEndorsementSatisfied = (row = {}) => {
   const type = payeeTypeOf(row);
-  if (type === 'contractor') return true;
   const status = String(row.status || '');
   if (status === 'signed' || status === 'waived') return true;
   if (type === 'mortgage_company' && status === 'manual_required') return true;

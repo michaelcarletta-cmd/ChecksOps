@@ -1,0 +1,20 @@
+{
+  "workstream_id": "contractor-payee-endorsement-api",
+  "authorization": "Pending owner review (2026-11-18). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "A contractor payee is a required signer (owner 2026-11-18: \"Sometimes contractors are in checks so we need to allow them to endorse checks\"; asked whether the signature is required or only allowed: \"Required like the insured\"; \"It's only if the contractor is a payee if they are just a partner it should be deposited still and not require a signature\"; a contractor is a payee \"When a user clicks contractor on drop down for payee\"). endorsement-completion.mjs: isEndorsementSatisfied no longer returns true for every contractor row; signed or waived satisfies it, as for the insured; the mortgage company's manual_required exception is unchanged. check-endorsement.mjs: send_endorsement_request no longer refuses a contractor payee (400 contractor_cc_only removed); the copy of the insured's request to contractor payees is unchanged. A partner the check is only shared with has no payee row and nothing is required of them. No SQL change, no hold. Known effect: a check with an unsigned Contractor payee row stops counting as fully endorsed until that row is signed or waived; mark_ready_for_deposit and the Check Alt eligibility check already required every payee. check-endorsement.mjs is the only importer of endorsement-completion.mjs, so endorsement-completion.mjs is applied first (between the two applies the rule requires a contractor's signature while the send to a contractor is still refused; Sign in Person and Endorsed on Check are not refused). live_sha256 provenance, both inferred from the rebuild records and to be confirmed by a read-only production overlay inspect before any apply: check-endorsement.mjs edd20078 is the accepted bytes of the fourth production full-package rebuild (ops/deployment-guard/lambda-rebuild-plan.json, inspect run 41463084601, apply run 41469896446, 2026-11-02, VERIFIED), which carried the endorsement link expiry change; no later production section lists the file (the last, inspect run 44152135321, apply run 44155016281, 2026-11-17). The overlay row and the endorsement link expiry manifest recorded 7c6ae301 as live, a recording error the fourth rebuild's notes describe; this manifest's row replaces it. endorsement-completion.mjs e0a162ce is the accepted bytes of the first staging rebuild (inspect run 39585059839, apply run 39587414391, 2026-10-21); the first production rebuild (inspect run 39587583692, apply run 39588578627) took the same candidate and no production section lists the file. It was not an overlay member before this plan. A contractor signing through a sent link, exercised in staging or production, is not verified by this plan.",
+  "members": {
+    "endorsement-completion.mjs": {
+      "live_sha256": "e0a162cea41e1c6a4e86eb77c2d127a968f69f5e918749bfc6deea2559c0827c",
+      "accepted_sha256": "3b5bb06c7d4a94e7a4aadb5932c2a651f74e23ca38e9d6759e83132c8d39f6f1",
+      "operation": "replace"
+    },
+    "check-endorsement.mjs": {
+      "live_sha256": "edd20078ffdfcdb2ae44bf25542ab3068f606e1abdc12fbbc638ddb9a678047d",
+      "accepted_sha256": "aea1352f2f405753efc5a164fa4005d2e83e0039c6d86c60722cceb088f1651b",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-endorsement-link-expiry-manifest-2026-10-31.json"
+    }
+  }
+}

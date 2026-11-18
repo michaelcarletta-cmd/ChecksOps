@@ -59,7 +59,7 @@ test('completion evaluation stays denied while auto-advance is inactive', () => 
   assert.equal(denyDepositAdvance().paymentDirectionTriggered, false);
 });
 
-test('contractor payees are CC-only and send is rate-limited', () => {
+test('a contractor payee is still recognised as one, and send is rate-limited', () => {
   assert.equal(isContractorPayee('contractor'), true);
   assert.equal(endorsementRateLimited(new Date().toISOString()), true);
   assert.equal(endorsementRateLimited(new Date(Date.now() - 6 * 60 * 1000).toISOString()), false);
@@ -147,7 +147,7 @@ test('already-signed public submit is idempotent', async () => {
   assert.equal(result.depositAdvanceDenied, true);
 });
 
-test('authenticated send is tenant-isolated and contractor blocked', async () => {
+test('authenticated send is tenant-isolated; a contractor payee is no longer refused (owner 2026-11-18)', async () => {
   const endorsement = {
     id: ENDORSE_ID,
     check_id: CHECK_ID,
@@ -200,8 +200,12 @@ test('authenticated send is tenant-isolated and contractor blocked', async () =>
     spoof: { ignored: true },
     event: eventOf({}),
   });
-  assert.equal(contractor.statusCode, 400);
-  assert.equal(contractor.code, 'contractor_cc_only');
+  // Until 2026-11-18 this answered 400 contractor_cc_only. A contractor payee now goes down the same path as any
+  // other payee; this fake database answers only the three reads above, so the send stops later, at a step that has
+  // nothing to do with the payee's type.
+  assert.notEqual(contractor.code, 'contractor_cc_only');
+  assert.notEqual(contractor.statusCode, 400);
+  assert.doesNotMatch(JSON.stringify(contractor), /Contractors cannot sign/);
 });
 
 test('in-person sign requires image consent and stays fail-closed on deposit', async () => {

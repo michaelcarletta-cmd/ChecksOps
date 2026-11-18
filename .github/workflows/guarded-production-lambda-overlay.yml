@@ -80,6 +80,7 @@ on:
           - email-branding.mjs
           - esign.mjs
           - endorsement-composite.mjs
+          - endorsement-completion.mjs
           - check-endorsement.mjs
           - documents.mjs
           - wallet-withdraw-limits.mjs
