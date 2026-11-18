@@ -1,4 +1,5 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { timingSafeEqualStrings } from "../_shared/timingSafeEqual.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -16,7 +17,7 @@ Deno.serve(async (req) => {
     }
 
     const token = req.headers.get("authorization")?.replace("Bearer ", "");
-    if (token !== serviceKey) {
+    if (!(await timingSafeEqualStrings(token, serviceKey))) {
       return new Response(JSON.stringify({ error: "Service authorization required" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
