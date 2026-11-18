@@ -15,9 +15,20 @@ const API = 'aws/functions/api';
 const RULE = 'endorsement-completion.mjs';
 const HANDLER = 'check-endorsement.mjs';
 const REL = 'aws/tests/fixtures/production-contractor-payee-endorsement-api-manifest-2026-11-18.json';
+const APPLIED_REL = 'aws/tests/fixtures/production-contractor-payee-endorsement-api-applied-manifest-2026-11-18.json';
 const LINK_EXPIRY = 'aws/tests/fixtures/production-endorsement-link-expiry-manifest-2026-10-31.json';
 const PLAN = JSON.parse(read('ops/deployment-guard/production-api-overlay-plan.json'));
 const MANIFEST = JSON.parse(read(REL));
+const RECORD = JSON.parse(read(APPLIED_REL));
+// Applied 2026-11-18 (production runs 44318086359 and 44320098887, VERIFIED): each row expects main's bytes and names the
+// applied record. recordPre restates the plan as it stood before those applies: the planning manifest's live values.
+const recordPre = (plan) => {
+  for (const [name, entry] of Object.entries(MANIFEST.members)) {
+    plan.members[name] = { ...plan.members[name], expected_live_sha256: entry.live_sha256, manifest: REL };
+  }
+  return plan;
+};
+const PRE = recordPre(structuredClone(PLAN));
 const REBUILD = JSON.parse(read('ops/deployment-guard/lambda-rebuild-plan.json')).environments;
 
 test('the manifest is planning only and quotes the owner', () => {
@@ -42,7 +53,7 @@ test('both rows accept main\'s bytes and expect the bytes the rebuild records sa
   assert.deepEqual(MANIFEST.members, expected);
   for (const name of [RULE, HANDLER]) {
     assert.notEqual(expected[name].live_sha256, expected[name].accepted_sha256, name);
-    assert.deepEqual(PLAN.members[name], {
+    assert.deepEqual(PRE.members[name], {
       operation: 'replace',
       accepted_sha256: expected[name].accepted_sha256,
       expected_live_sha256: expected[name].live_sha256,
@@ -71,9 +82,36 @@ test('the rule file is applied first: it sits directly before its only importer,
 });
 
 test('the plan notes say what changes and that nothing is deployed', () => {
-  const note = PLAN.notes.slice(PLAN.notes.indexOf('Contractor payee endorsement API (2026-11-18'));
+  const start = PLAN.notes.indexOf('Contractor payee endorsement API (2026-11-18');
+  const note = PLAN.notes.slice(start, PLAN.notes.indexOf('Nothing deployed.', start) + 'Nothing deployed.'.length);
   assert.match(note, /endorsement-completion\.mjs REPLACE e0a162ce -> /);
   assert.match(note, /check-endorsement\.mjs REPLACE edd20078 -> /);
   assert.match(note, /read-only production overlay inspect before any apply/);
   assert.match(note, /Nothing deployed\.$/);
+});
+
+test('production record (2026-11-18): both members applied in plan order, VERIFIED; each row expects the applied bytes and names the record', () => {
+  assert.equal(RECORD.workstream_id, 'contractor-payee-endorsement-api-applied');
+  assert.equal(RECORD.deploy_authorized, false);
+  assert.match(RECORD.authorization, /^Record only \(2026-11-18\)/);
+  assert.equal(RECORD.live_lambda, 'checksops-production-prep-api');
+  for (const name of [RULE, HANDLER]) {
+    const onMain = sha256(read(`${API}/${name}`));
+    assert.deepEqual(RECORD.members[name], { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: REL }, name);
+    assert.deepEqual(PLAN.members[name], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: APPLIED_REL }, name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+  }
+  // Staging inspect, apply and re-inspect, then production preflight inspect, apply and re-inspect, rule file first.
+  for (const runId of ['44315858736', '44315865681', '44316345194', '44316731775', '44316925585', '44316932630',
+    '44317931221', '44318086359', '44318286948', '44319891664', '44320098887', '44320302787']) {
+    assert.match(RECORD.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  assert.ok(RECORD.notes.indexOf('44318086359') < RECORD.notes.indexOf('44320098887'));
+  for (const text of ['dee497f4ec5d76d76a4513de01a08b1d0616f64c', '"run the API staging overlay"', '"DEPLOY endorsement-completion.mjs TO PRODUCTION"',
+    '"DEPLOY check-endorsement.mjs TO PRODUCTION"', 'zi9Rq9nnbMupVkDzOJWrjvh9RbvJqJykZtinpoWUGgY=', '0bffc437-338c-4bb9-b16d-1724ef966632',
+    'VERIFIED', 'ALREADY_ACCEPTED', 'errors []', 'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(RECORD.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${APPLIED_REL}. The rows expect the applied bytes and name the contractor payee endorsement applied record.`));
 });

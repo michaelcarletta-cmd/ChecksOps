@@ -227,17 +227,20 @@ test('overlay plan: the link expiry manifest stays as planned; production got it
     },
   });
   assert.notEqual(accepted, release.members[name].accepted_sha256);
-  // The row now expects those bytes live and accepts main's, naming the plan that moved it on, whose entry names
-  // this manifest as the one it starts from.
+  // The contractor payee plan moved the row on from those bytes (its entry names this manifest as the one it starts
+  // from); production run 44320098887 applied it (2026-11-18), so the row now expects main's bytes and names the
+  // applied record, which chains to that plan.
   const row = plan.members[name];
   assert.deepEqual(row, {
     operation: 'replace',
     accepted_sha256: onMain,
-    expected_live_sha256: accepted,
+    expected_live_sha256: onMain,
     sql_before: null,
     manifest: row.manifest,
   });
   assert.notEqual(row.manifest, rel);
-  const next = JSON.parse(read(row.manifest));
+  const applied = JSON.parse(read(row.manifest)).members[name];
+  assert.deepEqual([applied.live_sha256, applied.accepted_sha256], [onMain, onMain]);
+  const next = JSON.parse(read(applied.previous_manifest));
   assert.deepEqual(next.members[name], { live_sha256: accepted, accepted_sha256: onMain, operation: 'replace', previous_manifest: rel });
 });
