@@ -649,11 +649,20 @@ html:not(.native-app) [data-status-tile][data-active="true"] {
   html:not(.native-app) .split-column {
     transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
   }
+  /* The Review queue draws every row (the other lanes draw only the visible ones). While its
+     column narrows, the browser would lay out all of them on every frame; rows off screen keep
+     their last size and are skipped (measured 2026-11-18, processor slowed 4x: a frame every
+     ~25ms instead of every ~50ms). */
+  html:not(.native-app) .review-queue-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 129px;
+  }
   html:not(.native-app) .split-panel-grow {
     animation: web-panel-grow 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
 }
-html:not(.native-app) [data-check-settle] {
+html:not(.native-app) [data-check-settle],
+html:not(.native-app) [data-check-arrive] {
   animation: web-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 

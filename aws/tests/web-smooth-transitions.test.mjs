@@ -76,9 +76,9 @@ test('every check panel column eases its width; panels that open from nothing gr
 test('the check panel keeps its shape while loading and the check fades in over it', () => {
   assert.doesNotMatch(PAGE, /if \(!check\) return null;/);
   assert.match(PAGE, /if \(!check\) \{\s*loadedAfterSkeletonRef\.current = true;\s*return <CheckDetailPanelSkeleton \/>;/);
-  assert.match(PAGE, /<Card className="check-panel-skeleton" aria-busy="true" aria-label="Loading check">/);
+  assert.match(PAGE, /<Card className=\{`check-panel-skeleton\$\{bare \? " border-0 shadow-none" : ""\}`\} aria-busy="true" aria-label="Loading check">/);
   assert.match(PAGE, /data-check-settle=\{loadedAfterSkeletonRef\.current \? "" : undefined\}/);
-  assert.match(webBlock(), /html:not\(\.native-app\) \[data-check-settle\] \{\s*animation: web-enter 200ms [^;]*backwards;/);
+  assert.match(webBlock(), /html:not\(\.native-app\) \[data-check-settle\],\s*html:not\(\.native-app\) \[data-check-arrive\] \{\s*animation: web-enter 200ms [^;]*backwards;/);
 });
 
 test('workspace pages slide in on the website too, and a page-shell inside one does not move twice', () => {
@@ -126,4 +126,25 @@ test('preloadWhenIdle: one at a time, on idle, failures ignored, stops when clea
   assert.equal(timed, 1500);
   assert.equal(typeof stop, 'function');
   assert.deepEqual(preloadWhenIdle([], undefined)(), undefined);
+});
+
+test('the check panel opens with its loading shape and builds the check once the column is wide', () => {
+  // Owner 2026-11-18, after the first deploy: "once a check is selected the side bar jumps out fast".
+  // With the processor slowed 4x, building the panel during the opening froze the page ~280ms and
+  // the widening landed in 4 jumps; built after it, the column widens in 12-16 even frames.
+  assert.match(PAGE, /const PANEL_OPEN_MS = 320;/);
+  assert.match(CSS, /\.split-column \{\s*transition: width 320ms/, 'the wait matches the widening');
+  assert.match(PAGE, /function BuildAfterOpening\(\{ children, bare = false \}/);
+  assert.match(PAGE, /if \(!built\) return <CheckDetailPanelSkeleton bare=\{bare\} \/>;\s*return <div data-check-arrive="">\{children\}<\/div>;/);
+  assert.match(PAGE, /prefers-reduced-motion: reduce\)"\)\.matches === true/, 'reduced motion builds at once');
+  // Every place a check panel opens: four CheckDetailPanels and the Review & Decision panel.
+  assert.equal(PAGE.match(/<BuildAfterOpening>\s*<CheckDetailPanel\n/g).length, 4);
+  assert.equal(PAGE.match(/<CheckDetailPanel\n/g).length, 4);
+  assert.match(PAGE, /<BuildAfterOpening bare>\s*<Tabs defaultValue="review" onValueChange=\{scrollReviewPanelToTop\}>/);
+  assert.match(webBlock(), /html:not\(\.native-app\) \[data-check-settle\],\s*html:not\(\.native-app\) \[data-check-arrive\] \{\s*animation: web-enter/);
+});
+
+test('the Review queue skips laying out rows off screen while its column narrows', () => {
+  assert.match(read('src/components/check-review/CheckReviewConsole.tsx'), /selected=\{selectedCheckId === check\.id\}\s*className="review-queue-row"/);
+  assert.match(webBlock(), /@media \(min-width: 768px\) \{[\s\S]*?html:not\(\.native-app\) \.review-queue-row \{\s*content-visibility: auto;\s*contain-intrinsic-size: auto 129px;/);
 });
