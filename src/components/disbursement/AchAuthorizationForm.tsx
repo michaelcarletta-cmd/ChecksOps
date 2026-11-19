@@ -2,8 +2,8 @@ import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
-import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,24 @@ interface AchAuthorizationFormProps {
   custname: string;
 }
 
+type AchAuthorizationRow = {
+  id: string;
+  authorized_name: string;
+  created_at: string;
+  is_active: boolean;
+};
+
+type AchAuthorizationReply = {
+  authorization?: AchAuthorizationRow | null;
+  account_last4?: string | null;
+  form_text?: string;
+};
+
+/**
+ * The ACH debit authorization for one funding account. The API writes it (save-ach-authorization,
+ * ach_authorizations is a server-only money table): the browser never inserts or updates the row,
+ * and the signed text is the server's, built from the stored account.
+ */
 export function AchAuthorizationForm({
   stakeholderAccountId,
   accountNickname,
@@ -24,68 +42,47 @@ export function AchAuthorizationForm({
   custname,
 }: AchAuthorizationFormProps) {
   const { tenant } = useTenant();
-  const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const tenantId = tenant?.id;
 
-  const { data: auth, isLoading } = useQuery({
-    queryKey: ["ach-authorization", stakeholderAccountId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("ach_authorizations")
-        .select("*")
-        .eq("stakeholder_account_id", stakeholderAccountId)
-        .eq("is_active", true)
-        .maybeSingle();
+  const call = async (action: "get" | "authorize" | "revoke"): Promise<AchAuthorizationReply> => {
+    const { data, error } = await supabase.functions.invoke("save-ach-authorization", {
+      body: { tenant_id: tenantId, stakeholder_account_id: stakeholderAccountId, action },
+    });
+    if (error) throw new Error(await getFunctionErrorMessage(error, "The ACH authorization could not be saved."));
+    return (data ?? {}) as AchAuthorizationReply;
+  };
 
-      if (error) throw error;
-      return data;
-    },
+  const { data: reply, isLoading } = useQuery({
+    queryKey: ["ach-authorization", tenantId, stakeholderAccountId],
+    enabled: !!tenantId && !!stakeholderAccountId,
+    queryFn: () => call("get"),
   });
+  const auth = reply?.authorization ?? null;
+  const last4 = reply?.account_last4 || accountLast4 || null;
+  const formText = reply?.form_text
+    ?? `I, ${custname}, authorize this platform to initiate ACH debit entries from my account ${last4 ? `ending in ${last4}` : "on file"} for the purpose of funding disbursements. I understand that this authorization will remain in effect until I revoke it.`;
 
   const authorize = useMutation({
-    mutationFn: async () => {
-      const agreementText = `I, ${custname}, authorize this platform to initiate ACH debit entries from my account ending in ${accountLast4} for the purpose of funding disbursements. I understand that this authorization will remain in effect until I revoke it.`;
-      
-      const { error } = await supabase.from("ach_authorizations").insert({
-        tenant_id: tenant!.id,
-        stakeholder_account_id: stakeholderAccountId,
-        authorized_name: custname,
-        authorized_by: user!.id,
-        ip_address: "Client-side",
-        user_agent: navigator.userAgent,
-        form_text: agreementText,
-        is_active: true
-      });
-
-      if (error) throw error;
-    },
+    mutationFn: () => call("authorize"),
     onSuccess: () => {
       toast({ title: "ACH Debit Authorized", description: "Your funding account is now ready." });
-      qc.invalidateQueries({ queryKey: ["ach-authorization", stakeholderAccountId] });
+      qc.invalidateQueries({ queryKey: ["ach-authorization", tenantId, stakeholderAccountId] });
     },
-    onError: (err: any) => {
-      toast({
-        title: "Authorization failed",
-        description: err.message,
-        variant: "destructive",
-      });
+    onError: (err: Error) => {
+      toast({ title: "Authorization failed", description: err.message, variant: "destructive" });
     },
   });
 
   const revoke = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from("ach_authorizations")
-        .update({ is_active: false, revoked_at: new Date().toISOString(), revoked_by: user!.id })
-        .eq("stakeholder_account_id", stakeholderAccountId)
-        .eq("is_active", true);
-
-      if (error) throw error;
-    },
+    mutationFn: () => call("revoke"),
     onSuccess: () => {
       toast({ title: "Authorization revoked" });
-      qc.invalidateQueries({ queryKey: ["ach-authorization", stakeholderAccountId] });
+      qc.invalidateQueries({ queryKey: ["ach-authorization", tenantId, stakeholderAccountId] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Revoke failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -149,12 +146,12 @@ export function AchAuthorizationForm({
                 ACH Debit Authorization Required
               </p>
               <p className="text-xs text-amber-700/70 leading-relaxed">
-                To use {accountNickname} (••••{accountLast4}) as your primary funding account, you must authorize this platform to debit funds for disbursement.
+                To use {accountNickname}{last4 ? ` (••••${last4})` : ""} as your primary funding account, you must authorize this platform to debit funds for disbursement.
               </p>
             </div>
 
             <div className="rounded border border-amber-200 bg-amber-50/50 p-2.5 text-[11px] text-amber-800 italic leading-snug">
-              "I, {custname}, authorize this platform to initiate ACH debit entries from my account ending in {accountLast4} for the purpose of funding disbursements. I understand that this authorization will remain in effect until I revoke it."
+              "{formText}"
             </div>
 
             <div className="flex items-center justify-end gap-2">
@@ -162,7 +159,7 @@ export function AchAuthorizationForm({
                 size="sm"
                 className="h-8 bg-amber-600 text-xs hover:bg-amber-700"
                 onClick={() => authorize.mutate()}
-                disabled={authorize.isPending}
+                disabled={authorize.isPending || !tenantId}
               >
                 {authorize.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <FileCheck className="h-3 w-3 mr-1" />}
                 Sign & Authorize ACH
