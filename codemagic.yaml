@@ -71,7 +71,7 @@ workflows:
       - name: Build the signed APK and Android App Bundle
         script: |
           cd mobile/android
-          ./gradlew assembleRelease bundleRelease -PversionCode="$BUILD_NUMBER"
+          ./gradlew assembleRelease bundleRelease -PversionCode="$PROJECT_BUILD_NUMBER"
     artifacts:
       - mobile/android/app/build/outputs/**/*.apk
       - mobile/android/app/build/outputs/**/*.aab
@@ -96,7 +96,7 @@ workflows:
       - name: Build the signed Android App Bundle
         script: |
           cd mobile/android
-          ./gradlew bundleRelease -PversionCode="$BUILD_NUMBER"
+          ./gradlew bundleRelease -PversionCode="$PROJECT_BUILD_NUMBER"
     artifacts:
       - mobile/android/app/build/outputs/**/*.aab
     publishing:
@@ -126,12 +126,14 @@ workflows:
       - name: Apply the signing profile
         script: xcode-project use-profiles
       - name: Build the signed IPA
-        # CURRENT_PROJECT_VERSION feeds CFBundleVersion, so every upload gets a new build number.
+        # CURRENT_PROJECT_VERSION feeds CFBundleVersion. PROJECT_BUILD_NUMBER counts builds across
+        # every workflow of this Codemagic app, so staging and production uploads of
+        # com.checksops.app never reuse a number (the per-workflow BUILD_NUMBER did).
         script: |
           xcode-project build-ipa \
             --project mobile/ios/App/App.xcodeproj \
             --scheme App \
-            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER"
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
@@ -162,7 +164,7 @@ workflows:
       - name: Build the signed Android App Bundle
         script: |
           cd mobile/android
-          ./gradlew bundleRelease -PversionCode="$BUILD_NUMBER"
+          ./gradlew bundleRelease -PversionCode="$PROJECT_BUILD_NUMBER"
     artifacts:
       - mobile/android/app/build/outputs/**/*.aab
     publishing:
@@ -196,7 +198,7 @@ workflows:
           xcode-project build-ipa \
             --project mobile/ios/App/App.xcodeproj \
             --scheme App \
-            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER"
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:

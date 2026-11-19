@@ -59,6 +59,19 @@ test('the production app bundle uses the production pool and the full production
   assert.match(upload, /VITE_COGNITO_USER_POOL_CLIENT_ID: 3ja9fqaq2fjkv3i6up2varcqpe/);
 });
 
+test('every app build number is the project-wide counter, so workflows never reuse one', () => {
+  // Apple and Google Play refuse an upload whose build number was already used for
+  // com.checksops.app; the per-workflow $BUILD_NUMBER restarted at 1 for the production workflows.
+  const yaml = read('codemagic.yaml');
+  assert.doesNotMatch(yaml, /\$BUILD_NUMBER\b/);
+  for (const id of ['ios-staging', 'ios-production']) {
+    assert.match(workflowBlock(yaml, id), /CURRENT_PROJECT_VERSION=\$PROJECT_BUILD_NUMBER"/, id);
+  }
+  for (const id of ['android-staging-build', 'android-staging', 'android-production']) {
+    assert.match(workflowBlock(yaml, id), /-PversionCode="\$PROJECT_BUILD_NUMBER"/, id);
+  }
+});
+
 function viteConfig(env) {
   // Load vite.config.ts's guard through Vite itself, in aws mode, with only the given variables.
   // It runs from an empty folder so no local .env file (loadEnv reads the cwd) changes the result.
