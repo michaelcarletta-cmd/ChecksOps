@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-email-status-api",
+  "authorization": "Pending owner review (2026-11-19). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Endorsement email status (owner 2026-11-19: \"Is there anyway for tenants to see if an email has been delivered and opened? For this to show up near the payee signature request\", then \"Yeah build 1 and 2\": 1 the payee opening the endorsement link, 2 delivered or bounced from Resend). check-endorsement.mjs: send_endorsement_request keeps the Resend email id of the payee's request (public.aws_endorsement_email_sent, SQL 170; only a real Resend send, never sink or SES; contractor copy notices are not tracked; emailStatusTracking in the response and email_status_tracking in the request_sent audit event); the payee's page load of a valid, unexpired link records an open on its own short write connection (public.aws_endorsement_link_opened); signing, declining and staff views record nothing; and a request carrying Svix headers is Resend's signed delivery report (handleEndorsementEmailWebhook: HMAC-SHA256 over svix-id.svix-timestamp.body with the whsec_ secret, five-minute tolerance, nothing read before the signature checks out; email.delivered, email.bounced with its reason and email.complained go to public.aws_endorsement_email_event; other types are acknowledged; a database failure answers 500 so Resend retries; no signing secret answers 503). The webhook URL is /functions/v1/check-endorsement, so app-services.mjs, email-queue.mjs and index.mjs are unchanged. Every status call is best effort, under a savepoint inside the request's transaction: a missing SQL 170 function or any other error never fails or changes a request, a page load or a signature. The signing secret is RESEND_WEBHOOK_SECRET in the provider secrets JSON or the environment (provider-secrets.mjs, live, returns every key of that JSON). No hold; sql_before stays null because the code works without SQL 170, but the status is only recorded once SQL 170 is applied. live_sha256 is the bytes production run 44386297099 applied 2026-11-18 (VERIFIED, re-inspect 44386464914), recorded in the endorsement copy notice applied manifest; a read-only production overlay inspect must confirm them before any apply. Not verified by this plan: a real Resend report reaching the function, and a real payee open.",
+  "members": {
+    "check-endorsement.mjs": {
+      "live_sha256": "3bb1ae2b284f2bb9e8533e13077d59d5ca05b02fed6322790ad3b19ec36a4ff5",
+      "accepted_sha256": "c3a6e218ccbff647192fc20cc70b9d08fb2aba7f33dc24805fac9869ad65612e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-endorsement-copy-notice-api-applied-manifest-2026-11-18.json"
+    }
+  }
+}
