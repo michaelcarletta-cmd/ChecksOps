@@ -214,7 +214,7 @@ test('overlay plan: the link expiry manifest stays as planned; production got it
   const rebuild = JSON.parse(read('ops/deployment-guard/lambda-rebuild-plan.json')).environments.production.history[3];
   assert.equal(rebuild.applied.run_id, '41469896446');
   const accepted = rebuild.members[name].accepted_sha256;
-  const onMain = createHash('sha256').update(read('aws/functions/api/check-endorsement.mjs')).digest('hex');
+  let onMain = createHash('sha256').update(read('aws/functions/api/check-endorsement.mjs')).digest('hex');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
   assert.match(manifest.notes, /finding 22/);
@@ -233,6 +233,14 @@ test('overlay plan: the link expiry manifest stays as planned; production got it
   // (Since the endorsement copy notice plan of 2026-11-18 the row moves on again, from the contractor payee applied
   // bytes: it is read here as it stood before that plan.)
   let row = plan.members[name];
+  // (The endorsement email status plan of 2026-11-19, planning only, moved the row on from the copy notice applied
+  // bytes: the row is read as it stood before that plan, and those applied bytes stand for main's.)
+  if (row.manifest === 'aws/tests/fixtures/production-endorsement-email-status-api-manifest-2026-11-19.json') {
+    const emailStatus = JSON.parse(read(row.manifest)).members[name];
+    assert.deepEqual([emailStatus.accepted_sha256, row.accepted_sha256, row.expected_live_sha256], [onMain, onMain, emailStatus.live_sha256]);
+    onMain = emailStatus.live_sha256;
+    row = { ...row, accepted_sha256: onMain, expected_live_sha256: onMain, manifest: emailStatus.previous_manifest };
+  }
   let contractorBytes = onMain;
   // (Applied 2026-11-18, production run 44386297099: the applied record is read back to the plan it applied.)
   if (row.manifest === 'aws/tests/fixtures/production-endorsement-copy-notice-api-applied-manifest-2026-11-18.json') {
