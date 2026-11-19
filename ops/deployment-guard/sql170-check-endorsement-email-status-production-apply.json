@@ -1,7 +1,7 @@
 {
   "id": "sql170-check-endorsement-email-status-production-apply",
   "migration": "sql170",
-  "authorization": "pending",
+  "authorization": "Applied to production on 2026-11-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 170 production pin change on 2026-11-19 in the words \"Yeah build 1 and 2\", \"Merge 2019 once green\", \"run the staging SQL executor deploy, then the SQL 170 read-live\", \"approve the SQL 170 staging apply\", \"Merge 2021 when green\", \"run the SQL 170 staging apply\", \"run the SQL 170 production inspect\", \"open the SQL 170 production pin PR\" and \"Merge 2022\" (on the staging apply run 44576208345; 747d10df -> e53dd2fe, #2022, merged to main as 7d5278074) and the one apply run recorded in applied (workstream prod-sql170-endorsement-email-status-20261119) in the words \"apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS\", passed to it verbatim. That approval covered that one run only.",
   "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
@@ -15,7 +15,7 @@
     "public.aws_endorsement_email_sent(uuid, text)",
     "public.aws_endorsement_link_opened(uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4",
   "intended_replacement_sha256": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
   "authorization_phrase": "SHOW_ENDORSEMENT_EMAIL_STATUS",
   "predecessors": [],
@@ -43,24 +43,441 @@
     "note": "Guarded tooling for SQL 170: sql170-check-endorsement-email-status-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql170-check-endorsement-email-status); production-sql-one-shot.mjs --migration sql170. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the three functions' definitions and ACLs, the eight columns' type, NOT NULL, default and grants, and the index definition. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-19",
+    "ssm_command_id": "67613a6c-45ae-4d2e-b1ba-5adb161b80a1",
+    "source_commit": "bc3d16a928330b66a76c59e86792fd734e6e5f5e",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 170 yet. Expected: prerequisites_missing [], check_endorsements owned by checksops_admin without FORCE ROW LEVEL SECURITY (definer_can_write_relations), the three functions, the eight columns and the index absent, already_applied false. Expected release-engine fingerprint of that pre-state under sql170: 747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (a column, function or index already present), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-19 (SSM command 67613a6c-45ae-4d2e-b1ba-5adb161b80a1, AWS-RunShellScript, status Success, 17:28:35Z to 17:28:40Z, node scripts/deployment-guard/sql170-check-endorsement-email-status-production-apply.mjs --inspect (exit 0), under the owner's words \"run the SQL 170 production inspect\", on the SQL53 runner i-0c35557c4e5385406 (started from stopped with no SSM command in progress at 17:28:02Z and stopped again afterwards, stopped at 17:29:27Z, both by user/claude-code) from main bc3d16a92 (tarball source-bc3d16a928330b66a76c59e86792fd734e6e5f5e.tar.gz sha256 e48f8139dae4de7f79e898fad14d3c7049c76366d556cc53faa9491b4239acb1, checked by sha256sum -c on the runner, SOURCE_COMMIT matched, staged by the transfer workflow sql53-temporary-transfer.yml run 44576498107), sha256 of the tool's printed output as computed on the runner f6844c88119c7e1a38ea22f324af5acce4377559c209262892a683328ad4ebe2 (3438 bytes)): ok true, read_only true, source_ok true, current_user, session_user and admin_login checksops_admin, pin_execute false, predecessors_applied true, missing_dependencies [], prerequisites_missing [], predecessors {} (none), successors_applied [], precondition_failures []; the eight check_endorsements columns, check_endorsements_email_message_id_idx and the three functions absent, definer_writes check_endorsements ok. live_definition_sha256 747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4 (not the intended e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81: already_applied false), the derived pre-state the earlier note below names, equal to staging's before its apply (read-live run 44569070362 and the staging apply's before_hash). live_matches_expected false and apply_preconditions_met false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, prerequisites_missing is not [] or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no release-engine production inspect has been run for SQL 170 yet. Expected: prerequisites_missing [], check_endorsements owned by checksops_admin without FORCE ROW LEVEL SECURITY (definer_can_write_relations), the three functions, the eight columns and the index absent, already_applied false. Expected release-engine fingerprint of that pre-state under sql170: 747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (a column, function or index already present), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
     "note": "On public.check_endorsements: the eight columns (email_message_id text, email_delivered_at, email_bounced_at, email_complained_at, link_first_opened_at, link_last_opened_at timestamptz, email_bounce_reason text, all nullable with no default and no column grant; link_open_count integer NOT NULL DEFAULT 0), the index check_endorsements_email_message_id_idx (btree on email_message_id WHERE email_message_id IS NOT NULL), and the three SECURITY DEFINER functions with EXECUTE for checksops and the owner only. No other column, constraint, index, trigger, function, policy or grant change; no row written by the apply beyond link_open_count's default. The fingerprint is releaseIntendedHash('sql170', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 170 (choice sql170-check-endorsement-email-status) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql170-check-endorsement-email-status-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44576208345",
+    "basis": "Guarded staging SQL executor apply of sql170-check-endorsement-email-status, run 44576208345 (2026-11-19, main bc3d16a928330b66a76c59e86792fd734e6e5f5e, wave 62, staging pin PR #2021), under the owner's words \"run the SQL 170 staging apply\", on the executor deployed by deploy run 44575220951 (CodeSha256 50KumbQJ... -> 0MpkBqG5...), from the staging pre-state read by read-live run 44569070362 (747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4; main 17632da1f after executor inspect run 44562828532 and deploy run 44567896532, CodeSha256 8i2ZsahmH... -> 50KumbQJ...): receipt before 747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4, after e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81 == intended. Read-live run 44577378245 then reported already_applied true, precondition_failures []. The owner gave the run approval \"run the SQL 170 staging apply\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-170-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql170-check-endorsement-email-status-pg.test.mjs and through the executor by aws/tests/release-sql170-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so staging accepted exactly the production transition. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-19",
+    "result": "applied",
+    "source_commit": "7d52780747a33f9d00bf66c771940d2db34eb5ac",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-7d52780747a33f9d00bf66c771940d2db34eb5ac.tar.gz",
+      "sha256": "a0ddfc88f66397809f5f6cc5c1bc549e84aa7a8c0c01ff0cd7dc700e219f7025"
+    },
+    "source_staged_by": "sql53-temporary-transfer.yml run 44586789514 (staged main 7d52780747a33f9d00bf66c771940d2db34eb5ac; TARBALL_SHA256 a0ddfc88f66397809f5f6cc5c1bc549e84aa7a8c0c01ff0cd7dc700e219f7025, checked by sha256sum -c on the runner before each command; SOURCE_COMMIT matched)",
+    "migration_source_sha256": "44eb656742cc137bab736fb4ef54630a5c7a27df074428de918a0c7d9b942370",
+    "migration_source_sha256_note": "The one-shot source step checked the pinned migration file in the tarball against source_sha256 (step source ok).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql170-endorsement-email-status-20261119",
+    "one_use_id": "sql170-prod-0c205621-fa88-41f5-9903-b12cd1465b28",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql170; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "inspect_ssm_command_id": "68cc0056-a0a1-4ac6-adec-35b9c4b75249",
+    "apply_ssm_command_id": "d3acdfce-755f-498c-9d88-d35fa645b43e",
+    "one_shot_run_id": "ec7cfd44-a912-49c9-b908-0c4b0269c201",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql170_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. Recorded from the run's own output, of which 17869 of 19452 bytes arrived through SSM (see output_recovery_note): the one-shot's JSON output (29378 bytes as printed, sha256 eab5ef18085e06527449745e1cdb959483681356a017f900d304ed1728c1905c as computed on the runner; compact copy 19452 bytes, sha256 5033bb146e433aee5a1ec7cd28b635f6af7963ce03451386b34affdb2780df1f as computed on the runner). Pre-apply inspect: one-shot --phase inspect SSM 68cc0056-a0a1-4ac6-adec-35b9c4b75249 (Success, 2026-11-19T18:22:45.031Z to 2026-11-19T18:22:57.031Z, EXIT=0, steps pin, source, inspect and contracts ok, nothing written, output 6280 bytes as printed, sha256 35076232e7cdc7d6f6190390998bc19322765564aacbd18286e90c0060271cee; compact copy 4518 bytes, sha256 b54708d8a92476083fa9b34a09641602076bf8021197e31889cb23e53e8334cb, both computed on the runner) read live 747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures []); the apply command (SSM d3acdfce-755f-498c-9d88-d35fa645b43e, Success, 2026-11-19T18:23:06.704Z to 2026-11-19T18:23:18.704Z, EXIT=0) was sent only after that output showed this pre-state. Source staged by transfer run 44586789514 (main 7d52780747a33f9d00bf66c771940d2db34eb5ac; TARBALL_SHA256 equal to the S3 sidecar; the tarball passed sha256sum -c on the runner before each command and SOURCE_COMMIT matched). The runner was started from stopped at 18:22:02Z (Online 18:22:38Z) by user/claude-code; one AWS-managed SSM command, 029078bf AmazonInspector2-ConfigureInspectorSsmPlugin, was listed InProgress throughout (left from the stop after the read-only production inspect SSM 67613a6c-45ae-4d2e-b1ba-5adb161b80a1); it is not a ChecksOps run and no SQL ran in it, as for the AWS-managed commands in SQL 166's, 167's and 169's runs. Root volume 39% used. A process check (pgrep) after the apply found no one-shot running, and the runner was stopped at 18:24:40Z (stopped 18:25:11Z) by user/claude-code. Production acceptance: not yet reported by the owner when this was recorded.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 7d52780747a33f9d00bf66c771940d2db34eb5ac (production-sql-one-shot ec7cfd44-a912-49c9-b908-0c4b0269c201, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 7d52780747a33f9d00bf66c771940d2db34eb5ac (production-sql-one-shot ec7cfd44-a912-49c9-b908-0c4b0269c201, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 7d52780747a33f9d00bf66c771940d2db34eb5ac (production-sql-one-shot ec7cfd44-a912-49c9-b908-0c4b0269c201, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_endorsement_email_sent(uuid, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_endorsement_link_opened(uuid)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "check_endorsements.email_message_id",
+            "state": "absent"
+          },
+          {
+            "name": "check_endorsements.email_delivered_at",
+            "state": "absent"
+          },
+          {
+            "name": "check_endorsements.email_bounced_at",
+            "state": "absent"
+          },
+          {
+            "name": "check_endorsements.email_bounce_reason",
+            "state": "absent"
+          },
+          {
+            "name": "check_endorsements.email_complained_at",
+            "state": "absent"
+          },
+          {
+            "name": "check_endorsements.link_first_opened_at",
+            "state": "absent"
+          },
+          {
+            "name": "check_endorsements.link_last_opened_at",
+            "state": "absent"
+          },
+          {
+            "name": "check_endorsements.link_open_count",
+            "state": "absent"
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_endorsement_email_sent(uuid, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_endorsement_link_opened(uuid)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_endorsements check_endorsements_email_message_id_idx",
+            "state": "absent"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_endorsements",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "bf5b34c7816cac067d33d472717d75901d9978eea877b75e2dae04c205a28909",
+    "receipt": {
+      "migration": "sql170",
+      "workstream": "prod-sql170-endorsement-email-status-20261119",
+      "commit": "7d52780747a33f9d00bf66c771940d2db34eb5ac",
+      "sql_file": "aws/workflows/sql/170_check_endorsement_email_status.sql",
+      "before_hash": "747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4",
+      "after_hash": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
+      "release_sql_inspect": {
+        "live_definition_sha256": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_endorsement_email_sent(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_endorsement_link_opened(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "check_endorsements.email_message_id",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_delivered_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_bounced_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_bounce_reason",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_complained_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.link_first_opened_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.link_last_opened_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.link_open_count",
+            "state": "intended"
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_endorsement_email_sent(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_endorsement_link_opened(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_endorsements check_endorsements_email_message_id_idx",
+            "state": "intended"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_endorsements",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "0e17d02a0a311f71e14a4ba1c7cb92e9a26c18af4a82c4d830def75ca13f85e2",
+      "unrelated_catalog_counts": {
+        "relations": 906,
+        "columns": 3586,
+        "constraints": 2279,
+        "policies": 481,
+        "functions": 1395,
+        "indexes": 665,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 192,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44576208345",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_endorsement_email_sent(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_endorsement_link_opened(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "check_endorsements.email_message_id",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_delivered_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_bounced_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_bounce_reason",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.email_complained_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.link_first_opened_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.link_last_opened_at",
+            "state": "intended"
+          },
+          {
+            "name": "check_endorsements.link_open_count",
+            "state": "intended"
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_endorsement_email_sent(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_endorsement_link_opened(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_endorsements check_endorsements_email_message_id_idx",
+            "state": "intended"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_endorsements",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "output_recovery_note": "Not the whole output. After the apply, one SSM command (258766ee-b8d4-4365-a35a-cb746f20d23c) printed the sha256 and size of the two compact copies on the runner (inspect b54708d8a92476083fa9b34a09641602076bf8021197e31889cb23e53e8334cb, 4518 bytes; apply 5033bb146e433aee5a1ec7cd28b635f6af7963ce03451386b34affdb2780df1f, 19452 bytes), printed the compact apply copy as base64 and, in the same command, removed both copies from /var/tmp. SSM returns at most 24000 characters of output, so only the first 17869 of the 19452 bytes arrived; the runner's copy was already gone (operator error: the delete ran before the read-back was confirmed complete). Every value in this applied block is taken verbatim from those 17869 bytes. They hold the one-shot's details whole up to and including apply_result, and its applied object whole except its last key, post_apply_inspect, which is cut off after 753 characters; post_apply_inspect here is the one-shot's complete details.post_apply_inspect from the same output (2162 characters compact), and the 753 characters that arrived of the applied copy are identical to its first 753. Re-serialized with that post_apply_inspect, the output is 19270 bytes: the last 182 bytes, which follow the applied object, did not arrive and are unknown, so the runner-computed sha256 of the whole compact output (5033bb14...) cannot be reproduced from what was kept. steps, inspect_ssm_command_id, apply_ssm_command_id, source_staged_by, migration_source_sha256 and their notes are operator-added, as for SQL 169."
+  },
+  "production_evidence": {
+    "2026-11-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql170-endorsement-email-status-20261119, main 7d5278074 (tarball a0ddfc88…, transfer run 44586789514, migration source 44eb6567… == pin), owner-approved run (\"apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS\"), pre-apply --phase inspect SSM 68cc0056-a0a1-4ac6-adec-35b9c4b75249 (live 747d10df…, live_matches_expected true, precondition_failures []), apply SSM d3acdfce-755f-498c-9d88-d35fa645b43e, run_id ec7cfd44-a912-49c9-b908-0c4b0269c201, one_use_id sql170-prod-0c205621-fa88-41f5-9903-b12cd1465b28: every step ok; contracts claim-ledger, tenant-isolation and financial-write-protections ok (see applied.contract_results); manifest bf5b34c7…; 747d10df… -> e53dd2fe…, result applied; post-apply inspect already_applied true, precondition_failures [], the eight check_endorsements columns, check_endorsements_email_message_id_idx and the three functions intended. Only 17869 of the 19452 bytes of the compact output were read back before the runner's copy was removed (see applied.output_recovery_note); the values above are from those bytes. The AWS-managed SSM command 029078bf was in progress on the runner throughout; no SQL ran in it. The runner was stopped after a check that no one-shot process remained. Production acceptance was not yet reported by the owner when this was recorded. Nothing a user sees changes until the API overlay (check-endorsement.mjs c3a6e218, #2018) is deployed; execute is false so the pin is no longer a standing authorization."
   }
 }

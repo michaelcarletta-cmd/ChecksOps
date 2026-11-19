@@ -40,8 +40,71 @@ as before until the API calls the functions: its own later step (a Lambda overla
 Resend webhook, with the webhook signing secret through the guarded configuration path), then the website, each after
 this pin is applied in production. No API, Lambda or SPA change is part of this pin.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 62 when approved (wave 61 is SQL 169, the highest on main).
+**Status:** applied in staging (wave 62, 2026-11-19, apply run 44576208345); staging acceptance: the staging apply under the owner's run approval ("run the SQL 170 staging apply"; no separate acceptance statement); applied to production (2026-11-19); the production pin is retired (`execute: false`). Nothing a user sees changes until the API overlay (`check-endorsement.mjs`, #2018) is deployed.
+
+**Staging read-live (2026-11-19).** Run 44569070362 (main `17632da1f`, after executor inspect run 44562828532 and executor deploy
+run 44567896532 (executor CodeSha256 `8i2ZsahmH…` -> `50KumbQJ…`)), under the owner's words "run the staging SQL executor
+deploy, then the SQL 170 read-live": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`;
+the eight columns, the index and the three functions absent. Live
+`747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4`, equal to the derived pre-state; intended `e53dd2fe…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 62) on the owner's "approve the SQL 170 staging apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words
+for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-19).** The staging pin for SQL 170 (wave 62, PR #2021, owner's words
+"Merge 2021 when green") merged as `bc3d16a928330b66a76c59e86792fd734e6e5f5e`. Deploy run 44575220951 updated the staging guarded SQL
+executor (CodeSha256 `50KumbQJ…` -> `0MpkBqG5…`, `EXECUTOR_CURRENT` true). Apply run 44576208345 (main `bc3d16a92`) under the owner's
+words "run the SQL 170 staging apply": `before_hash` `747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4`, `after_hash` `e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81` (the intended hash), `result` applied; the eight
+columns, the index and the three functions `intended`, EXECUTE `checksops` and the owner. Read-live run 44577378245: `already_applied`
+true, `precondition_failures` `[]`. The owner gave the run approval "run the SQL 170 staging apply"; no separate staging acceptance
+statement was given. There is no separate staging record PR for SQL 170: these staging runs are recorded here and in the production
+pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-19).** Read-only `--inspect` through SSM `67613a6c-45ae-4d2e-b1ba-5adb161b80a1` on
+`i-0c35557c4e5385406` (under the owner's words "run the SQL 170 production inspect"; runner started from stopped with no SSM
+command in progress at 17:28:02Z, command 17:28:35Z to 17:28:40Z, AWS-RunShellScript, Success, runner stopped again at 17:29:27Z,
+all by `user/claude-code`; an AWS-managed AmazonInspector2-ConfigureInspectorSsmPlugin command `029078bf` was in progress at the
+stop, as during earlier inspects, and no SQL ran in it), main `bc3d16a92` (tarball sha256
+`e48f8139dae4de7f79e898fad14d3c7049c76366d556cc53faa9491b4239acb1`, checked by `sha256sum -c` on the runner, `SOURCE_COMMIT` matched,
+staged by `sql53-temporary-transfer.yml` run 44576498107; sha256 of the printed sql170 output, computed on the runner,
+`f6844c88119c7e1a38ea22f324af5acce4377559c209262892a683328ad4ebe2`, 3438 bytes), exit 0, `ok` true, `read_only` true, `source_ok` true,
+`current_user` `checksops_admin`, `predecessors_applied` true: live `747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4` (the eight columns, the index and the three functions
+absent: the derived pre-state, equal to staging's before its apply), no predecessor, `prerequisites_missing` `[]`, `successors_applied`
+`[]`, `definer_writes` `check_endorsements` ok, `already_applied` false, `precondition_failures` `[]`, `apply_preconditions_met` false (no
+pre-state recorded yet). Production's pre-state equals staging's (read-live run 44569070362 and the staging apply's `before_hash`), so
+the staging apply took the path production will. Recorded in the production pin with the staging apply (run 44576208345) as its
+staging acceptance and `execute: true` under the owner's words "open the SQL 170 production pin PR". The owner merges the pin change;
+the apply runs only after that merge is on main and staged, under the owner's words for that run (phrase
+`SHOW_ENDORSEMENT_EMAIL_STATUS`).
+
+**Production apply (2026-11-19).** After the pin change (#2022, merged to main as `7d5278074` on the owner's words "Merge 2022"),
+transfer run 44586789514 (`sql53-temporary-transfer.yml`) staged main `7d5278074` (tarball sha256
+`a0ddfc88f66397809f5f6cc5c1bc549e84aa7a8c0c01ff0cd7dc700e219f7025`, equal to the S3 sidecar, checked by `sha256sum -c` on the runner;
+`SOURCE_COMMIT` matched). The runner `i-0c35557c4e5385406` was started from stopped at 18:22:02Z (Online 18:22:38Z) by `user/claude-code`;
+one AWS-managed SSM command, `029078bf` AmazonInspector2-ConfigureInspectorSsmPlugin (left from the stop after the read-only inspect
+`67613a6c`), was listed InProgress throughout; it is not a ChecksOps run and no SQL ran in it. Under the owner's words "apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS"
+(passed verbatim to this run; root volume 39% used): one-shot `--phase inspect` (SSM `68cc0056-a0a1-4ac6-adec-35b9c4b75249`, Success, exit 0, steps pin,
+source, inspect and contracts ok, nothing written) read live `747d10df…` (`live_matches_expected` true, `already_applied` false,
+`apply_preconditions_met` true, `precondition_failures` `[]`); the apply command was sent only after that. Then `--phase apply` (SSM
+`d3acdfce-755f-498c-9d88-d35fa645b43e`, Success, exit 0, run `ec7cfd44-a912-49c9-b908-0c4b0269c201`, workstream `prod-sql170-endorsement-email-status-20261119`, one_use_id `sql170-prod-0c205621-fa88-41f5-9903-b12cd1465b28`): contracts claim-ledger, tenant-isolation and
+financial-write-protections ok; all 11 steps ok; manifest `bf5b34c7…`; receipt `747d10df…` → `e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81` (intended), result `applied`;
+post-apply inspect `already_applied` true, `precondition_failures` `[]`, the eight `check_endorsements` columns,
+`check_endorsements_email_message_id_idx` and the three functions `intended`, EXECUTE `checksops` and the owner. A process check after the
+apply found no one-shot running; the runner was stopped at 18:24:40Z (stopped 18:25:11Z) by `user/claude-code`. Recorded in the pin's
+`applied` and `production_evidence`; `execute` is false again. Production acceptance had not been reported by the owner when this record
+was written; this record does not claim it. Nothing a user sees changes until the API overlay of `check-endorsement.mjs` (#2018) is
+deployed.
+
+**Not all of the run's output was kept.** One SSM command after the apply (`258766ee-b8d4-4365-a35a-cb746f20d23c`) printed the sha256
+and size of the two compact output copies on the runner (inspect `b54708d8…`, 4518 bytes; apply
+`5033bb146e433aee5a1ec7cd28b635f6af7963ce03451386b34affdb2780df1f`, 19452 bytes), printed the compact apply copy as base64 and, in the same
+command, removed both copies. SSM returns at most 24000 characters, so only the first 17869 of the 19452 bytes arrived, and the runner's copy
+was already gone: an operator error (the delete ran before the read-back was confirmed complete). Every value in `applied` comes verbatim
+from those bytes, which hold the run's details whole through `apply_result` and its `applied` object whole except the end of its last key,
+`post_apply_inspect` (cut off after 753 characters). `applied.post_apply_inspect` is the run's complete `details.post_apply_inspect` from the
+same output; the 753 characters that arrived of the applied copy match its first 753. The last 182 bytes of the output, after the `applied`
+object, are unknown, so the runner-computed sha256 of the whole output cannot be reproduced. `applied.output_recovery_note` states this in
+the pin. Next time the read-back is confirmed complete before any copy is removed.
 
 ## Fingerprint
 

@@ -150,7 +150,10 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 169's pin is `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 170's pin is `execute: false`
+   again since its 2026-11-19 apply (owner statement "apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS"; see
+   `ops/production-sql-170-apply.md`).
+   SQL 169's pin is `execute: false`
    again since its 2026-11-16 apply (owner statement "apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED"; see
    `ops/production-sql-169-apply.md`).
    SQL 168's pin is `execute: false`

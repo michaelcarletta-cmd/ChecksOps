@@ -227,6 +227,9 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // SQL 169's production pin was execute-authorized (owner-approved pin change of 2026-11-16, "open the SQL 169 production pin PR",
 // #1949: the read-only production inspect SSM 29ddf3f2 recorded as its pre-state, the guarded staging apply run 43923431127 from the
 // same pre-state) until its record-and-retire change after its 2026-11-16 apply.
+// SQL 170's production pin was execute-authorized (owner-approved pin change of 2026-11-19, "open the SQL 170 production pin PR",
+// #2022: the read-only production inspect SSM 67613a6c recorded as its pre-state, the guarded staging apply run 44576208345 from the
+// same pre-state) until its record-and-retire change after its 2026-11-19 apply.
 const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 97's recorded production pre-states (read-only inspect of 2026-10-21, SSM
 // 43cb1d1f, main 69dbe9b01) and their staging references: the guarded staging read-live runs of
@@ -257,7 +260,7 @@ const SQL93_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOp
 // 2026-10-17 from a different pre-state, accepted by the owner as substitute evidence).
 const SQL90_PRODUCTION_PRE = 'b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe';
 const SQL90_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080157856';
-const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql118', 'sql119', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql136', 'sql137', 'sql138', 'sql139', 'sql140', 'sql141', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152', 'sql153', 'sql154', 'sql156', 'sql158', 'sql159', 'sql160', 'sql162', 'sql163', 'sql164', 'sql165', 'sql166', 'sql167', 'sql168', 'sql169', 'sql76']);
+const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql118', 'sql119', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql136', 'sql137', 'sql138', 'sql139', 'sql140', 'sql141', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152', 'sql153', 'sql154', 'sql156', 'sql158', 'sql159', 'sql160', 'sql162', 'sql163', 'sql164', 'sql165', 'sql166', 'sql167', 'sql168', 'sql169', 'sql170', 'sql76']);
 // SQL 90's and SQL 101's production applies of 2026-10-19, recorded in applied.
 const SQL90_SQL101_APPLIED = Object.freeze({
   // SQL 120's production apply of 2026-10-27 (main 3a8a9993a).
@@ -344,6 +347,8 @@ const SQL90_SQL101_APPLIED = Object.freeze({
   sql168: Object.freeze({ ssm: '6781f116-8801-4164-a110-80ccbcb8f437', run: '14532473-eb26-43de-b552-be5def063452', one_use_id: 'sql168-prod-c1d1978f-d118-4880-a015-e43aa0743d52', commit: 'e81328645bbcc9755e5e9693e07a769b92349b9e', approval: 'apply SQL 168 in production ROUTE_NEW_CHECK_TO_SAME_MORTGAGE_AGENT' }),
   // SQL 169's production apply of 2026-11-16 (main 6641007ab).
   sql169: Object.freeze({ ssm: '9c92cb54-fc92-47b0-9fa1-cb7764b2f992', run: 'd64ba504-e0e3-42ea-92d4-57ae4af26008', one_use_id: 'sql169-prod-91223610-db3b-4249-b7b3-59502f378d5d', commit: '6641007ab2bd1e042bda54084fcdcfc1bd9e253c', approval: 'apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED' }),
+  // SQL 170's production apply of 2026-11-19 (main 7d5278074).
+  sql170: Object.freeze({ ssm: 'd3acdfce-755f-498c-9d88-d35fa645b43e', run: 'ec7cfd44-a912-49c9-b908-0c4b0269c201', one_use_id: 'sql170-prod-0c205621-fa88-41f5-9903-b12cd1465b28', commit: '7d52780747a33f9d00bf66c771940d2db34eb5ac', approval: 'apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb).
   sql136: Object.freeze({ ssm: 'd52b099a-56c7-4148-828c-2530b48c40fb', run: 'b47f4c29-c5bf-4288-82ff-870f057489d9', one_use_id: 'sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673', commit: 'a58f492cbfc00e8330671e0b25637b175069e896', approval: 'apply SQL 136 in production' }),
   // SQL 121's production apply of 2026-10-27 (main 42fcad7a8).
@@ -730,7 +735,7 @@ test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 9
       assert.match(pin.staging_acceptance.reference, /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/actions\/runs\/\d+$/, key);
       assert.equal(pin.production_inspect.status, 'recorded', key);
       assert.equal(pin.production_inspect.live_definition_sha256, pin.expected_live_definition_sha256, key);
-      assert.match(pin.authorization, /^Owner approved 2026-(10-(19|20|21|22|23|25|26|27|28|29|30|31)|11-(0[12567]|1[012346])) /, key);
+      assert.match(pin.authorization, /^Owner approved 2026-(10-(19|20|21|22|23|25|26|27|28|29|30|31)|11-(0[12567]|1[0123469])) /, key);
       assert.match(pin.authorization, /each apply still needs the owner's run-time approval/, key);
       assert.deepEqual(Object.keys(pin.staging_acceptance).sort(), ['basis', 'ok', 'reference'], key);
       assert.deepEqual(pin.production_inspect.precondition_failures, [], key);

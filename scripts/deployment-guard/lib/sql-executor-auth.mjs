@@ -3931,8 +3931,9 @@ export const AUTHORIZED_SQL169_CHECK_BILLING_EVENTS_KEEP_CHARGE_ON_CHECK_DELETE 
 // been delivered and opened? For this to show up near the payee signature request", then "Yeah build 1 and 2"). Eight
 // columns on public.check_endorsements (Resend message id, delivered, bounced and reason, marked as spam, link first and
 // last opened, open count), the partial index check_endorsements_email_message_id_idx and three SECURITY DEFINER
-// functions, EXECUTE checksops only; no predecessor (release-sql-specs.mjs). Pending until a reviewed pin change records
-// a staging read-live; staging wave 62 when approved (ops/production-sql-170-apply.md).
+// functions, EXECUTE checksops only; no predecessor (release-sql-specs.mjs). Staging apply authorized (wave 62) from
+// staging read-live run 44569070362: every column, the index and the functions absent, equal to the derived pre-state
+// (ops/production-sql-170-apply.md).
 export const AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS = Object.freeze({
   key: 'sql170',
   filename: 'aws/workflows/sql/170_check_endorsement_email_status.sql',
@@ -3940,9 +3941,11 @@ export const AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: 'bb45ea43f305f5bb7a75a9ea47c345bc2a2442db',
   source_sha256: '44eb656742cc137bab736fb4ef54630a5c7a27df074428de918a0c7d9b942370',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-19: staging apply (wave 62) from staging read-live run 44569070362',
+  execute: true,
+  // Staging read-live run 44569070362 (main 17632da1f, executor deploy run 44567896532): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (everything absent).
+  expected_live_definition_sha256: '747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4',
   // Code-derived: releaseIntendedHash('sql170', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81',
   // The file creates and sets the ACL of these functions.
