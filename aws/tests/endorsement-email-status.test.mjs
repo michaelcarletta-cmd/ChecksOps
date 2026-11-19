@@ -357,9 +357,29 @@ test('overlay plan (2026-11-19, planning only): check-endorsement.mjs moves on f
   assert.match(manifest.notes, /Yeah build 1 and 2/);
   assert.deepEqual(manifest.members, { [name]: { live_sha256: applied.accepted_sha256, accepted_sha256: onMain, operation: 'replace', previous_manifest: appliedRel } });
   assert.notEqual(onMain, applied.accepted_sha256);
-  assert.deepEqual(plan.members[name], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied.accepted_sha256, sql_before: null, manifest: rel });
+  // Applied 2026-11-19 (production run 44589744829): the row expects main's bytes and names the applied record, which
+  // chains to this planning manifest; read the row back as it stood before the apply.
+  const statusAppliedRel = 'aws/tests/fixtures/production-endorsement-email-status-api-applied-manifest-2026-11-19.json';
+  const record = JSON.parse(read(statusAppliedRel));
+  const beforeApply = { ...plan.members[name], expected_live_sha256: manifest.members[name].live_sha256, manifest: record.members[name].previous_manifest };
+  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied.accepted_sha256, sql_before: null, manifest: rel });
   assert.equal(resolvePlannedMember(name, { root, plan }).ok, true);
   assert.ok(plan.notes.includes(`Manifest ${rel}. Nothing deployed.`));
+  assert.equal(record.workstream_id, 'endorsement-email-status-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-19\)/);
+  assert.deepEqual(record.members, { [name]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: rel } });
+  assert.deepEqual(plan.members[name], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: statusAppliedRel });
+  for (const runId of ['44589214918', '44589356924', '44589625402', '44589464432', '44589744829', '44590482759']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(plan.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['7d52780747a33f9d00bf66c771940d2db34eb5ac', '"run the API staging overlay"', '"DEPLOY check-endorsement.mjs TO PRODUCTION"',
+    'CxJIV52RWT2IdqGKhkj0OXbJH6czTVJD6TePqt7SujA=', '51c0358c-e6bc-4ccd-9cb3-bad656ee5581', 'VERIFIED', 'ALREADY_ACCEPTED', 'errors []',
+    'index.mjs is untouched', 'RESEND_WEBHOOK_SECRET are not configured yet', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(plan.notes.includes(`Recorded in ${statusAppliedRel}. The row expects the applied bytes and names the endorsement email status applied record.`));
   assert.match(plan.notes, /check-endorsement\.mjs REPLACE 3bb1ae2b -> c3a6e218/);
   // The one new import is provider-secrets.mjs, which the live package carries: the second production rebuild
   // accepted it, and main's bytes are those bytes.

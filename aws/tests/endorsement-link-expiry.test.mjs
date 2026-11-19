@@ -235,6 +235,12 @@ test('overlay plan: the link expiry manifest stays as planned; production got it
   let row = plan.members[name];
   // (The endorsement email status plan of 2026-11-19, planning only, moved the row on from the copy notice applied
   // bytes: the row is read as it stood before that plan, and those applied bytes stand for main's.)
+  // (Applied 2026-11-19, production run 44589744829: the applied record is read back to the plan it applied.)
+  if (row.manifest === 'aws/tests/fixtures/production-endorsement-email-status-api-applied-manifest-2026-11-19.json') {
+    const appliedStatus = JSON.parse(read(row.manifest)).members[name];
+    assert.deepEqual([appliedStatus.live_sha256, row.expected_live_sha256], [onMain, onMain]);
+    row = { ...row, expected_live_sha256: JSON.parse(read(appliedStatus.previous_manifest)).members[name].live_sha256, manifest: appliedStatus.previous_manifest };
+  }
   if (row.manifest === 'aws/tests/fixtures/production-endorsement-email-status-api-manifest-2026-11-19.json') {
     const emailStatus = JSON.parse(read(row.manifest)).members[name];
     assert.deepEqual([emailStatus.accepted_sha256, row.accepted_sha256, row.expected_live_sha256], [onMain, onMain, emailStatus.live_sha256]);
