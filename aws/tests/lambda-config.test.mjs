@@ -782,18 +782,15 @@ test('the committed plan records login MFA on in production (run 42293184319); p
   assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
 });
 
-test('the committed plan sets the platform sender to notify@ and replies to support@ (planned 2026-11-19, inspect 44445904800)', () => {
-  // Owner, 2026-11-19: "Send everything from notify@, replies to support@".
+test('the committed plan records the platform sender notify@ with replies to support@ in production (run 44447831441)', () => {
+  // Owner, 2026-11-19: "Send everything from notify@, replies to support@", then "Merge 2012" and
+  // "APPLY API CONFIGURATION TO PRODUCTION".
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = loadConfigPlan(REPO_ROOT, 'production');
-  assert.equal(section.status, 'planned');
-  assert.deepEqual(section.set, {
-    AWS_EMAIL_FROM: { from: 'ChecksOps <support@checksops.com>', to: 'ChecksOps <notify@checksops.com>' },
-    AWS_EMAIL_REPLY_TO: { from: null, to: 'support@checksops.com' },
-  });
+  assert.equal(section.status, 'applied');
+  assert.deepEqual(section.set, {});
   assert.deepEqual(section.unset, {});
   const row = raw.environments.production;
-  assert.equal(row.applied, undefined, 'nothing applied yet');
   assert.equal(row.inspect.run_id, '44445904800');
   assert.equal(row.inspect.main_commit, 'd8d24eea18012bea3974accf59910be05f6cac37');
   // The inspect read the package the endorsement copy notice overlay (run 44386297099) left behind.
@@ -802,16 +799,39 @@ test('the committed plan sets the platform sender to notify@ and replies to supp
   assert.equal(row.inspect.live_configuration_sha256, 'c0dbeaa95f1395a172d56b542d945919e88d48c6c0a01dd1703c04937aeb2246');
   assert.equal(row.inspect.live_variable_count, 50);
   for (const evidence of ['Send everything from notify@, replies to support@', 'ProductionApiSesSend', '#1610']) assert.ok(row.inspect.notes.includes(evidence), evidence);
-  // Live read on the production function matches the recorded from values (READY, not a collision).
-  const ready = evaluateConfigChange({ plan: raw, environment: 'production', liveVariables: { AWS_EMAIL_FROM: 'ChecksOps <support@checksops.com>', AWS_EMAIL_MODE: 'ses' } });
-  assert.equal(ready.ok, true);
-  assert.equal(ready.details.state, 'READY');
+  assert.equal(row.applied.run_id, '44447831441');
+  assert.equal(row.applied.main_commit, '8ef818eac1c4759bbc950c58fb0b892036f753b6');
+  assert.equal(row.applied.approval_phrase, 'APPLY API CONFIGURATION TO PRODUCTION');
+  assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/2012');
+  assert.equal(row.applied.state, 'VERIFIED');
+  assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+  assert.equal(row.applied.revision_id_after, '77244814-d877-4d09-b42f-1f2e8ad835c5');
+  assert.equal(row.applied.configuration_sha256_before, row.inspect.live_configuration_sha256);
+  assert.equal(row.applied.configuration_sha256_after, 'b6efe5a9b5a8ae9fb8e40b8b830d65aca660849649dfe40beb78396c8875d919');
+  assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+  assert.deepEqual(row.applied.applied_change, {
+    set: {
+      AWS_EMAIL_FROM: { from: 'ChecksOps <support@checksops.com>', to: 'ChecksOps <notify@checksops.com>' },
+      AWS_EMAIL_REPLY_TO: { from: null, to: 'support@checksops.com' },
+    },
+    unset: {},
+  });
+  // The recorded change hash is the one the run's receipt owned.
+  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  for (const evidence of ['Merge 2012', '44447745350', 'LastUpdateStatus Successful']) assert.ok(row.applied.notes.includes(evidence), evidence);
+  // The live values now equal the recorded targets: a re-run of the recorded change is ALREADY_ACCEPTED.
+  const rerun = evaluateConfigChange({
+    plan: { ...raw, environments: { ...raw.environments, production: { ...row, status: 'planned', ...row.applied.applied_change } } },
+    environment: 'production',
+    liveVariables: { AWS_EMAIL_FROM: 'ChecksOps <notify@checksops.com>', AWS_EMAIL_REPLY_TO: 'support@checksops.com', AWS_EMAIL_MODE: 'ses' },
+  });
+  assert.equal(rerun.ok, true);
+  assert.equal(rerun.details.state, 'ALREADY_ACCEPTED');
   // The keys the mailer reads, and the fallback the reply-to keeps.
   const policy = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/email-policy.mjs'), 'utf8');
   assert.match(policy, /process\.env\.AWS_EMAIL_FROM/);
   assert.match(policy, /process\.env\.AWS_EMAIL_REPLY_TO \|\| 'support@checksops\.com'/);
-  // Neither key is credential-like, and staging needs no change (it never delivers).
-  for (const key of Object.keys(section.set)) assert.doesNotMatch(key, /SECRET|PASSWORD|PASSWD|PRIVATE_KEY|API_KEY|ACCESS_KEY|TOKEN|CREDENTIAL/);
+  // Staging needed no change (it never delivers).
   const staging = loadConfigPlan(REPO_ROOT, 'staging');
   assert.deepEqual(staging.set, {});
   assert.deepEqual(staging.unset, {});
