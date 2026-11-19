@@ -14,6 +14,7 @@ import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 import { AwsStagingBanner } from "./components/AwsStagingBanner";
 import { LiveDataRefresh } from "./hooks/useLiveDataRefresh";
 import { RemoteChangeCursor } from "./hooks/useRemoteChangeCursor";
+import { NativePushRegistration } from "./components/NativePushRegistration";
 
 
 import { isPublicTokenRoute } from "./lib/publicTokenRoutes";
@@ -247,6 +248,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <RemoteChangeCursor />
+            <NativePushRegistration />
             <StepUpProvider>
               <ThemeScope className="app-shell">
                 <AwsStagingBanner />
