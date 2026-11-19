@@ -173,6 +173,7 @@ export const MIGRATIONS = Object.freeze({
   'sql167-claim-ledger-relink-check': RELEASE_2026_10_17_PENDING_SQL_PINS.sql167,
   'sql168-mortgage-desk-same-agent-new-check': RELEASE_2026_10_17_PENDING_SQL_PINS.sql168,
   'sql169-check-billing-events-keep-charge-on-check-delete': RELEASE_2026_10_17_PENDING_SQL_PINS.sql169,
+  'sql170-device-push-tokens': RELEASE_2026_10_17_PENDING_SQL_PINS.sql170,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

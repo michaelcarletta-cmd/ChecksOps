@@ -1,0 +1,65 @@
+{
+  "id": "sql170-device-push-tokens-production-apply",
+  "migration": "sql170",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/170_device_push_tokens.sql",
+  "migration_id": "170_device_push_tokens",
+  "staging_pin_commit": "b38621d943ba87bdab66d3e77904e8da09b5328c",
+  "source_sha256": "00caa09f9ba773593f8fd964da77b397b6e960ecd79f74affc527c64f9af1dad",
+  "function_identities": [
+    "public.aws_push_register_device(text, text)",
+    "public.aws_push_unregister_device(text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "f30360d36ec937a37dcd88feaed80061c892fc990923105a0730c03aa9b9dd8d",
+  "authorization_phrase": "REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 170 creates one table and two functions and replaces nothing (owner 2026-11-19: app notifications when signatures are received, funds are disbursed or received, the wallet changes, or a message arrives; the app side is PR 2016, src/lib/nativePush.ts, which asks permission after sign-in and sends the phone's push token to the API). public.device_push_tokens (id, user_id, platform ios or android, token unique, created_at, last_seen_at; RLS on, no policy, every non-owner grant revoked, default privileges included, as SQL 118 and SQL 158) and two SECURITY DEFINER functions, search_path public, row_security off, EXECUTE checksops and the owner: aws_push_register_device(text, text) (the signed-in user, auth.uid(), registers a token; a token registered by another user moves to the caller; at most 20 per user, the least recently seen dropped beyond that; returns the row id) and aws_push_unregister_device(text) (removes only the caller's own token; returns whether a row was removed). The file refuses (55000) sql170_prerequisite_missing (auth.uid(), gen_random_uuid(), role checksops) and sql170_unexpected_table (a device_push_tokens table with other columns); a table with these columns but another shape is refused by the engine (created_tables_absent_or_intended). The applying login owns the new table and functions (created_tables_owned_by_login, functions_owned_by_login). No existing table, column, constraint, trigger, policy, grant or row changes; nothing reads the tokens or sends a notification yet: sending is a later, separate step with its own review. Expected pre-state in both environments: the table and both functions absent (release sql170 v1: 18bfd4fd6f59df48cc41b1058fddf1d3ca9334fe46b6547f3de87c9920a4db32, releaseStateHash('sql170', {})). No API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql170-device-push-tokens-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql170-device-push-tokens",
+    "one_shot_migration": "sql170",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-170-apply.md",
+    "tests": [
+      "aws/tests/release-sql170-executor.test.mjs",
+      "aws/tests/release-sql170-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql170-device-push-tokens-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 170: sql170-device-push-tokens-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql170-device-push-tokens); production-sql-one-shot.mjs --migration sql170. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two functions' attributes, body hashes and EXECUTE ACLs and the table's columns, constraints, indexes, RLS, policies, triggers and grants. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 170 yet. Expected: prerequisites_missing [], the table public.device_push_tokens and both functions absent, already_applied false. Expected release-engine fingerprint of that pre-state under sql170: 18bfd4fd6f59df48cc41b1058fddf1d3ca9334fe46b6547f3de87c9920a4db32. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (the table or a function present), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "f30360d36ec937a37dcd88feaed80061c892fc990923105a0730c03aa9b9dd8d",
+    "note": "public.device_push_tokens: six columns (id uuid default gen_random_uuid(), user_id, platform, token, created_at, last_seen_at, all NOT NULL), primary key, the platform and token-shape CHECKs, UNIQUE (token), the index on (user_id, last_seen_at DESC), RLS on (not forced), no policy, no trigger, no grant but the owner's. aws_push_register_device(text, text) returns uuid and aws_push_unregister_device(text) returns boolean: plpgsql, VOLATILE, SECURITY DEFINER, search_path public, row_security off, EXECUTE checksops and the owner. No other object changes; no row written by the apply. The fingerprint is releaseIntendedHash('sql170', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): f30360d36ec937a37dcd88feaed80061c892fc990923105a0730c03aa9b9dd8d."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 170 (choice sql170-device-push-tokens) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql170-device-push-tokens-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
