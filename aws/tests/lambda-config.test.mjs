@@ -173,7 +173,7 @@ test('the committed plan keeps the dead credential-key removals (runs 3965802303
     assert.equal(row.inspect.live_revision_id, want.revision);
     assert.equal(row.inspect.live_variable_count, want.count);
     // The earlier changes stay in history, oldest first.
-    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run, '40219217811'] : ['39594352935', '39617806126', want.run, '40148243435', '41106380051', '41953736410']);
+    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run, '40219217811'] : ['39594352935', '39617806126', want.run, '40148243435', '41106380051', '41953736410', '42293184319']);
     assert.equal(row.applied.run_id, want.run);
     assert.equal(row.applied.main_commit, 'fdde89459b5fb3a6669427677141ce955eaa9aac');
     assert.equal(row.applied.state, 'VERIFIED');
@@ -194,7 +194,7 @@ test('the committed plan records production payees on (run 40148243435); product
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = raw.environments.production;
   const row = section.history[3];
-  assert.deepEqual(section.history.map((entry) => entry.applied.run_id), ['39594352935', '39617806126', '39658423786', '40148243435', '41106380051', '41953736410']);
+  assert.deepEqual(section.history.map((entry) => entry.applied.run_id), ['39594352935', '39617806126', '39658423786', '40148243435', '41106380051', '41953736410', '42293184319']);
   assert.equal(row.inspect.run_id, '40147060785');
   assert.equal(row.inspect.main_commit, '2670a22d3ff077b3dc199be30afe638429d44ad8');
   // The inspect starts from the revision the credential-key removal left behind.
@@ -754,13 +754,10 @@ test('the committed plan records login MFA on in staging (run 42283026717) and s
   assert.match(source, /export const loginMfaRequired = \(\) => flagTrue\(LOGIN_MFA_FLAG\);/);
 });
 
-test('the committed plan records login MFA on in production (run 42293184319) and starts the next change empty', () => {
+test('the committed plan records login MFA on in production (run 42293184319); production keeps it in history', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
-  const section = loadConfigPlan(REPO_ROOT, 'production');
-  assert.equal(section.status, 'applied');
-  assert.deepEqual(section.set, {});
-  assert.deepEqual(section.unset, {});
-  const row = raw.environments.production;
+  // Moved to history when the sender change (2026-11-19) was planned.
+  const row = { function_name: raw.environments.production.function_name, ...raw.environments.production.history[6] };
   assert.equal(row.function_name, 'checksops-production-prep-api');
   assert.equal(row.inspect.run_id, '42290357692');
   assert.equal(row.inspect.main_commit, '6c2f5a26552ec842ccd6da30eb127a74226f4f20');
@@ -783,4 +780,39 @@ test('the committed plan records login MFA on in production (run 42293184319) an
   assert.deepEqual(row.applied.applied_change, raw.environments.staging.applied.applied_change);
   // The recorded change hash is the one the run's receipt owned.
   assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+});
+
+test('the committed plan sets the platform sender to notify@ and replies to support@ (planned 2026-11-19, inspect 44445904800)', () => {
+  // Owner, 2026-11-19: "Send everything from notify@, replies to support@".
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
+  const section = loadConfigPlan(REPO_ROOT, 'production');
+  assert.equal(section.status, 'planned');
+  assert.deepEqual(section.set, {
+    AWS_EMAIL_FROM: { from: 'ChecksOps <support@checksops.com>', to: 'ChecksOps <notify@checksops.com>' },
+    AWS_EMAIL_REPLY_TO: { from: null, to: 'support@checksops.com' },
+  });
+  assert.deepEqual(section.unset, {});
+  const row = raw.environments.production;
+  assert.equal(row.applied, undefined, 'nothing applied yet');
+  assert.equal(row.inspect.run_id, '44445904800');
+  assert.equal(row.inspect.main_commit, 'd8d24eea18012bea3974accf59910be05f6cac37');
+  // The inspect read the package the endorsement copy notice overlay (run 44386297099) left behind.
+  assert.equal(row.inspect.live_revision_id, '7879cc8a-b71d-4c57-9841-fe4c184a9246');
+  assert.equal(row.inspect.live_code_sha256, 'RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=');
+  assert.equal(row.inspect.live_configuration_sha256, 'c0dbeaa95f1395a172d56b542d945919e88d48c6c0a01dd1703c04937aeb2246');
+  assert.equal(row.inspect.live_variable_count, 50);
+  for (const evidence of ['Send everything from notify@, replies to support@', 'ProductionApiSesSend', '#1610']) assert.ok(row.inspect.notes.includes(evidence), evidence);
+  // Live read on the production function matches the recorded from values (READY, not a collision).
+  const ready = evaluateConfigChange({ plan: raw, environment: 'production', liveVariables: { AWS_EMAIL_FROM: 'ChecksOps <support@checksops.com>', AWS_EMAIL_MODE: 'ses' } });
+  assert.equal(ready.ok, true);
+  assert.equal(ready.details.state, 'READY');
+  // The keys the mailer reads, and the fallback the reply-to keeps.
+  const policy = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/email-policy.mjs'), 'utf8');
+  assert.match(policy, /process\.env\.AWS_EMAIL_FROM/);
+  assert.match(policy, /process\.env\.AWS_EMAIL_REPLY_TO \|\| 'support@checksops\.com'/);
+  // Neither key is credential-like, and staging needs no change (it never delivers).
+  for (const key of Object.keys(section.set)) assert.doesNotMatch(key, /SECRET|PASSWORD|PASSWD|PRIVATE_KEY|API_KEY|ACCESS_KEY|TOKEN|CREDENTIAL/);
+  const staging = loadConfigPlan(REPO_ROOT, 'staging');
+  assert.deepEqual(staging.set, {});
+  assert.deepEqual(staging.unset, {});
 });

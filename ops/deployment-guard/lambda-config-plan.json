@@ -230,18 +230,27 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
-      "set": {},
+      "status": "planned",
+      "set": {
+        "AWS_EMAIL_FROM": {
+          "from": "ChecksOps <support@checksops.com>",
+          "to": "ChecksOps <notify@checksops.com>"
+        },
+        "AWS_EMAIL_REPLY_TO": {
+          "from": null,
+          "to": "support@checksops.com"
+        }
+      },
       "unset": {},
       "inspect": {
-        "run_id": "42290357692",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42290357692",
-        "main_commit": "6c2f5a26552ec842ccd6da30eb127a74226f4f20",
-        "live_code_sha256": "9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=",
-        "live_revision_id": "52828f5f-5a3d-460f-95e9-329cf723d3a1",
-        "live_configuration_sha256": "90840ecde7eefd92832068462bbf1db1c92c3a7bb4317281e246e12a1f2d7178",
-        "live_variable_count": 49,
-        "notes": "Owner, 2026-11-06: \"Login MFA - yes for everyone\", \"deploy MFA to production when staging is done\" and, after signing in to staging with the email code and then the authenticator code, \"staging MFA works\". login-mfa.mjs (PR #1657) refuses every identity-backed request of a sign-in that has not passed the authenticator check only while AWS_LOGIN_MFA_REQUIRED is the string \"true\" (loginMfaRequired = flagTrue). The three members are live in production: login-mfa.mjs ADD (overlay run 42283495148, VERIFIED a2bdeea9), data.mjs REPLACE 24784169 -> daf31fa2 (run 42284228921), auth-financial-totp.mjs REPLACE ae72b808 -> f5104282 (run 42284721201); the sign-in screen (LoginMfaGate) is live in the production SPA /assets/index-BMlsQuA0.js (upload run 42285187951, lock PR #1661). Staging acceptance: staging configuration apply run 42283026717 set the same key from absent to \"true\" (VERIFIED) and the owner confirmed the staging sign-in. The inspect (state PENDING_PLAN, 49 variables) lists no AWS_LOGIN_MFA_REQUIRED, so from is null. The name is not credential-like; the value is a switch. Effect: every production user is asked for the authenticator code after each sign-in; a user with no authenticator is walked through enrollment (emailed setup code, QR code, first code) before the app loads. Public token links (sign, endorse, invoice) and the /auth/mfa and /identity routes stay exempt. Rollback: a plan with from and to swapped (the gate is off again at once; no data changes)."
+        "run_id": "44445904800",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44445904800",
+        "main_commit": "d8d24eea18012bea3974accf59910be05f6cac37",
+        "live_code_sha256": "RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=",
+        "live_revision_id": "7879cc8a-b71d-4c57-9841-fe4c184a9246",
+        "live_configuration_sha256": "c0dbeaa95f1395a172d56b542d945919e88d48c6c0a01dd1703c04937aeb2246",
+        "live_variable_count": 50,
+        "notes": "Owner, 2026-11-19: \"Send everything from notify@, replies to support@\". Every email the shared mailer sends through SES (email.mjs sendViaSesOrSink: the claim ledger link, team and portal invites, e-sign requests, homeowner upload codes, payment-direction requests, fee invoices and the other ChecksOps-branded notices) takes its sender from AWS_EMAIL_FROM (email-policy.mjs defaultFromAddress, through email-branding.mjs platformBranding) and its reply-to from AWS_EMAIL_REPLY_TO (defaultReplyTo, which falls back to support@checksops.com when the key is absent). Endorsement requests already send from notify@checksops.com through Resend and are not affected. The inspect (state PENDING_PLAN, 50 variables) read AWS_EMAIL_FROM \"ChecksOps <support@checksops.com>\" and no AWS_EMAIL_REPLY_TO (the same values a boto3 GetFunctionConfiguration read on 2026-11-18, user/claude-code). Setting AWS_EMAIL_REPLY_TO to support@checksops.com keeps today's replies exactly as they are (the code default) and pins them if the sender changes again. Tenants with their own reply address keep it: resolveEmailBranding prefers the tenant's reply_to / email_reply_to and uses the platform value only as the fallback. Sending as notify@checksops.com needs no new identity or permission: the SES domain identity checksops.com is verified with DKIM signing (SUCCESS), and the production role checksops-production-api-execution holds ses:SendEmail on identity/checksops.com (inline policy ProductionApiSesSend), both read 2026-11-18. Neither name is credential-like. Staging needs no change: staging runs AWS_EMAIL_MODE=sink and never delivers; its sender stays \"ChecksOps Staging <noreply@checksops.com>\"; staging acceptance is this reviewed plan PR, as for the production sends switch (#1610). Rollback: a plan with from and to swapped (AWS_EMAIL_FROM back to support@, AWS_EMAIL_REPLY_TO unset)."
       },
       "history": [
         {
@@ -514,37 +523,49 @@
               "unset": {}
             }
           }
-        }
-      ],
-      "applied": {
-        "run_id": "42293184319",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42293184319",
-        "main_commit": "b83f21140881c5f0b7e79ecae58dc80cf7f85a09",
-        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42283026717",
-        "change_sha256": "b10be2ace261cb1d395228c66b451d244393da2bdc7321e0629d1ea4abca3579",
-        "revision_id_before": "52828f5f-5a3d-460f-95e9-329cf723d3a1",
-        "revision_id_after": "eb9f5362-3171-41d0-9343-e6074c1885e9",
-        "configuration_sha256_before": "90840ecde7eefd92832068462bbf1db1c92c3a7bb4317281e246e12a1f2d7178",
-        "configuration_sha256_after": "4d8f9919838daed998b7ba76d94ae49949e67dee71a7fde9f688cc654a82d0d7",
-        "applied_at": "2026-11-06T21:01:26.094Z",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "code_sha256": "9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=",
-        "state": "VERIFIED",
-        "notes": "Owner approval: \"merge 1664\" and \"APPLY API CONFIGURATION TO PRODUCTION\". #1664 merged as b83f21140 on green CI. Pre-apply inspect 42293077530 on main b83f21140: state READY, RevisionId 52828f5f, configuration 90840ecd, 49 variables, change sha256 b10be2ac. The run re-read the same immediately before the write. Verify step VERIFIED (50 variables: 49 + 1 set; AWS_LOGIN_MFA_REQUIRED already_accepted, \"true\"). CodeSha256 unchanged. Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_LOGIN_MFA_REQUIRED \"true\", 50 variables, RevisionId eb9f5362-3171-41d0-9343-e6074c1885e9, LastUpdateStatus Successful. Staging acceptance: staging apply run 42283026717 and the owner's \"staging MFA works\".",
-        "applied_change": {
-          "set": {
-            "AWS_LOGIN_MFA_REQUIRED": {
-              "from": null,
-              "to": "true"
-            }
+        },
+        {
+          "inspect": {
+            "run_id": "42290357692",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42290357692",
+            "main_commit": "6c2f5a26552ec842ccd6da30eb127a74226f4f20",
+            "live_code_sha256": "9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=",
+            "live_revision_id": "52828f5f-5a3d-460f-95e9-329cf723d3a1",
+            "live_configuration_sha256": "90840ecde7eefd92832068462bbf1db1c92c3a7bb4317281e246e12a1f2d7178",
+            "live_variable_count": 49,
+            "notes": "Owner, 2026-11-06: \"Login MFA - yes for everyone\", \"deploy MFA to production when staging is done\" and, after signing in to staging with the email code and then the authenticator code, \"staging MFA works\". login-mfa.mjs (PR #1657) refuses every identity-backed request of a sign-in that has not passed the authenticator check only while AWS_LOGIN_MFA_REQUIRED is the string \"true\" (loginMfaRequired = flagTrue). The three members are live in production: login-mfa.mjs ADD (overlay run 42283495148, VERIFIED a2bdeea9), data.mjs REPLACE 24784169 -> daf31fa2 (run 42284228921), auth-financial-totp.mjs REPLACE ae72b808 -> f5104282 (run 42284721201); the sign-in screen (LoginMfaGate) is live in the production SPA /assets/index-BMlsQuA0.js (upload run 42285187951, lock PR #1661). Staging acceptance: staging configuration apply run 42283026717 set the same key from absent to \"true\" (VERIFIED) and the owner confirmed the staging sign-in. The inspect (state PENDING_PLAN, 49 variables) lists no AWS_LOGIN_MFA_REQUIRED, so from is null. The name is not credential-like; the value is a switch. Effect: every production user is asked for the authenticator code after each sign-in; a user with no authenticator is walked through enrollment (emailed setup code, QR code, first code) before the app loads. Public token links (sign, endorse, invoice) and the /auth/mfa and /identity routes stay exempt. Rollback: a plan with from and to swapped (the gate is off again at once; no data changes)."
           },
-          "unset": {}
+          "applied": {
+            "run_id": "42293184319",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42293184319",
+            "main_commit": "b83f21140881c5f0b7e79ecae58dc80cf7f85a09",
+            "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42283026717",
+            "change_sha256": "b10be2ace261cb1d395228c66b451d244393da2bdc7321e0629d1ea4abca3579",
+            "revision_id_before": "52828f5f-5a3d-460f-95e9-329cf723d3a1",
+            "revision_id_after": "eb9f5362-3171-41d0-9343-e6074c1885e9",
+            "configuration_sha256_before": "90840ecde7eefd92832068462bbf1db1c92c3a7bb4317281e246e12a1f2d7178",
+            "configuration_sha256_after": "4d8f9919838daed998b7ba76d94ae49949e67dee71a7fde9f688cc654a82d0d7",
+            "applied_at": "2026-11-06T21:01:26.094Z",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "code_sha256": "9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=",
+            "state": "VERIFIED",
+            "notes": "Owner approval: \"merge 1664\" and \"APPLY API CONFIGURATION TO PRODUCTION\". #1664 merged as b83f21140 on green CI. Pre-apply inspect 42293077530 on main b83f21140: state READY, RevisionId 52828f5f, configuration 90840ecd, 49 variables, change sha256 b10be2ac. The run re-read the same immediately before the write. Verify step VERIFIED (50 variables: 49 + 1 set; AWS_LOGIN_MFA_REQUIRED already_accepted, \"true\"). CodeSha256 unchanged. Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_LOGIN_MFA_REQUIRED \"true\", 50 variables, RevisionId eb9f5362-3171-41d0-9343-e6074c1885e9, LastUpdateStatus Successful. Staging acceptance: staging apply run 42283026717 and the owner's \"staging MFA works\".",
+            "applied_change": {
+              "set": {
+                "AWS_LOGIN_MFA_REQUIRED": {
+                  "from": null,
+                  "to": "true"
+                }
+              },
+              "unset": {}
+            }
+          }
         }
-      }
+      ]
     }
   }
 }
