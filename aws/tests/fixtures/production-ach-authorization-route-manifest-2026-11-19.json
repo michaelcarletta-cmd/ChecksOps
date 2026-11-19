@@ -1,0 +1,21 @@
+{
+  "workstream_id": "ach-authorization-route",
+  "authorization": "Pending owner review (2026-11-19). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "ACH debit authorization route (owner 2026-11-19: Condition One's \"Sign & Authorize ACH\" failed with writes_disabled; owner chose \"Go with A\", a server write path). The Settings bank account card (AchAuthorizationForm.tsx) inserted and updated public.ach_authorizations from the browser; the AWS client refuses every table outside AWS_WRITE_TABLES with writes_disabled before any request, the generic /data/write route refuses the table, and SQL 136 accepts its writes only on a server write path. ach-authorization.mjs (new) adds the route save-ach-authorization: a member of the tenant (resolveTenantAccess canConfigure), the tenant's own stakeholder_accounts row, action get, authorize or revoke. The server writes authorized_name and form_text from the stored account (custname; last four from chk_acct, else provider_last_four, else \"on file\"), authorized_by from the verified sign-in, ip_address and user_agent from API Gateway; request fields are ignored. authorize returns an existing active row instead of inserting; revoke sets is_active false, revoked_at, revoked_by and revoke_reason on the active row. Each write sets request.money_write immediately before it runs (money-write-flag.mjs). Nothing is debited and no provider is called. app-services.mjs registers the route (Class A) and dispatches it; it imports the new module statically, so ach-authorization.mjs is ADDed first, just before app-services.mjs in order. app-services.mjs live_sha256 is main's accepted transfer to bank bytes, put live in production by the seventh full rebuild (lambda-rebuild-plan.json production history 6, apply 43464046767) and unchanged since; a read-only production overlay inspect must confirm them before any apply. No SQL change. No release-lock change. The website change that calls the route is a separate PR.",
+  "members": {
+    "ach-authorization.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "f3cfc65bf6ea90be16c5ae922dde91d3980a4dd3dd01476c64dbf01d90e45929",
+      "operation": "add",
+      "previous_manifest": null
+    },
+    "app-services.mjs": {
+      "live_sha256": "6735d88fc0aeaf5789fbf96ec2f33b980a1f85a6f71d9224ec4f93272810e769",
+      "accepted_sha256": "4a66482f9402d5091a45ae5035e20bfd70c2bc0034edff474bda641f238c3131",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json"
+    }
+  }
+}
