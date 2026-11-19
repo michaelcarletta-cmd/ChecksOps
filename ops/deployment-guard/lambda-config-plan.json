@@ -230,17 +230,8 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "planned",
-      "set": {
-        "AWS_EMAIL_FROM": {
-          "from": "ChecksOps <support@checksops.com>",
-          "to": "ChecksOps <notify@checksops.com>"
-        },
-        "AWS_EMAIL_REPLY_TO": {
-          "from": null,
-          "to": "support@checksops.com"
-        }
-      },
+      "status": "applied",
+      "set": {},
       "unset": {},
       "inspect": {
         "run_id": "44445904800",
@@ -565,7 +556,40 @@
             }
           }
         }
-      ]
+      ],
+      "applied": {
+        "run_id": "44447831441",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44447831441",
+        "main_commit": "8ef818eac1c4759bbc950c58fb0b892036f753b6",
+        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/2012",
+        "change_sha256": "fb3870a8824013ea7b5c7a154ce070a23815a56c0b9934cc73c3294ce3d07811",
+        "revision_id_before": "7879cc8a-b71d-4c57-9841-fe4c184a9246",
+        "revision_id_after": "77244814-d877-4d09-b42f-1f2e8ad835c5",
+        "configuration_sha256_before": "c0dbeaa95f1395a172d56b542d945919e88d48c6c0a01dd1703c04937aeb2246",
+        "configuration_sha256_after": "b6efe5a9b5a8ae9fb8e40b8b830d65aca660849649dfe40beb78396c8875d919",
+        "applied_at": "2026-11-19T02:56:25.270Z",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "code_sha256": "RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=",
+        "state": "VERIFIED",
+        "notes": "Owner approval: \"Merge 2012\" and \"APPLY API CONFIGURATION TO PRODUCTION\". #2012 merged as 8ef818eac on green CI. Pre-apply inspect 44447745350 on main 8ef818eac: state READY, RevisionId 7879cc8a, configuration c0dbeaa9, 50 variables, change sha256 fb3870a8, 0 keys off their recorded live value. The run re-read the same immediately before the write. Verify step VERIFIED (51 variables: 50 + AWS_EMAIL_REPLY_TO; AWS_EMAIL_FROM and AWS_EMAIL_REPLY_TO already_accepted). CodeSha256 unchanged. Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_EMAIL_FROM \"ChecksOps <notify@checksops.com>\", AWS_EMAIL_REPLY_TO \"support@checksops.com\", AWS_EMAIL_MODE ses, 51 variables, RevisionId 77244814-d877-4d09-b42f-1f2e8ad835c5, LastUpdateStatus Successful. Staging acceptance: the reviewed plan PR #2012 (staging runs AWS_EMAIL_MODE=sink and needs no change, as for #1610).",
+        "applied_change": {
+          "set": {
+            "AWS_EMAIL_FROM": {
+              "from": "ChecksOps <support@checksops.com>",
+              "to": "ChecksOps <notify@checksops.com>"
+            },
+            "AWS_EMAIL_REPLY_TO": {
+              "from": null,
+              "to": "support@checksops.com"
+            }
+          },
+          "unset": {}
+        }
+      }
     }
   }
 }
