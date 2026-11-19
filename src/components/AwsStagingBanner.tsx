@@ -1,4 +1,5 @@
 import { isAwsStaging } from "@/lib/awsStaging";
+import { isProductionAppBuild } from "@/lib/awsStagingSite";
 
 export function AwsStagingBanner() {
   const hostname =
@@ -7,6 +8,9 @@ export function AwsStagingBanner() {
   if (hostname === "checksops.com" || hostname === "www.checksops.com") {
     return null;
   }
+
+  // The iOS/Android app runs on localhost; a production build still says nothing about staging.
+  if (isProductionAppBuild()) return null;
 
   if (!isAwsStaging()) return null;
 
