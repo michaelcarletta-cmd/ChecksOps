@@ -149,7 +149,12 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 169's pin is `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 170's pin is `execute: true`
+   (owner-approved pin change of 2026-11-19: the read-only production inspect of 2026-11-19, SSM
+   `67613a6c-45ae-4d2e-b1ba-5adb161b80a1`, recorded as its pre-state, the same one staging had, on its
+   guarded staging apply run 44576208345; see `ops/production-sql-170-apply.md`) until its
+   record-and-retire change; the production apply still needs the owner's words for that run.
+   SQL 169's pin is `execute: false`
    again since its 2026-11-16 apply (owner statement "apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED"; see
    `ops/production-sql-169-apply.md`).
    SQL 168's pin is `execute: false`

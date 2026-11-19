@@ -40,7 +40,7 @@ as before until the API calls the functions: its own later step (a Lambda overla
 Resend webhook, with the webhook signing secret through the guarded configuration path), then the website, each after
 this pin is applied in production. No API, Lambda or SPA change is part of this pin.
 
-**Status:** staging pin execute-authorized (wave 62); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 62, 2026-11-19, apply run 44576208345); staging acceptance: the staging apply under the owner's run approval ("run the SQL 170 staging apply"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `67613a6c-45ae-4d2e-b1ba-5adb161b80a1`, 2026-11-19) by the owner-reviewed pin change; not applied in production.
 
 **Staging read-live (2026-11-19).** Run 44569070362 (main `17632da1f`, after executor inspect run 44562828532 and executor deploy
 run 44567896532 (executor CodeSha256 `8i2ZsahmH…` -> `50KumbQJ…`)), under the owner's words "run the staging SQL executor
@@ -50,6 +50,32 @@ the eight columns, the index and the three functions absent. Live
 (`expected_live_definition_sha256`, `execute: true`, wave 62) on the owner's "approve the SQL 170 staging apply". The
 staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words
 for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-19).** The staging pin for SQL 170 (wave 62, PR #2021, owner's words
+"Merge 2021 when green") merged as `bc3d16a928330b66a76c59e86792fd734e6e5f5e`. Deploy run 44575220951 updated the staging guarded SQL
+executor (CodeSha256 `50KumbQJ…` -> `0MpkBqG5…`, `EXECUTOR_CURRENT` true). Apply run 44576208345 (main `bc3d16a92`) under the owner's
+words "run the SQL 170 staging apply": `before_hash` `747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4`, `after_hash` `e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81` (the intended hash), `result` applied; the eight
+columns, the index and the three functions `intended`, EXECUTE `checksops` and the owner. Read-live run 44577378245: `already_applied`
+true, `precondition_failures` `[]`. The owner gave the run approval "run the SQL 170 staging apply"; no separate staging acceptance
+statement was given. There is no separate staging record PR for SQL 170: these staging runs are recorded here and in the production
+pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-19).** Read-only `--inspect` through SSM `67613a6c-45ae-4d2e-b1ba-5adb161b80a1` on
+`i-0c35557c4e5385406` (under the owner's words "run the SQL 170 production inspect"; runner started from stopped with no SSM
+command in progress at 17:28:02Z, command 17:28:35Z to 17:28:40Z, AWS-RunShellScript, Success, runner stopped again at 17:29:27Z,
+all by `user/claude-code`; an AWS-managed AmazonInspector2-ConfigureInspectorSsmPlugin command `029078bf` was in progress at the
+stop, as during earlier inspects, and no SQL ran in it), main `bc3d16a92` (tarball sha256
+`e48f8139dae4de7f79e898fad14d3c7049c76366d556cc53faa9491b4239acb1`, checked by `sha256sum -c` on the runner, `SOURCE_COMMIT` matched,
+staged by `sql53-temporary-transfer.yml` run 44576498107; sha256 of the printed sql170 output, computed on the runner,
+`f6844c88119c7e1a38ea22f324af5acce4377559c209262892a683328ad4ebe2`, 3438 bytes), exit 0, `ok` true, `read_only` true, `source_ok` true,
+`current_user` `checksops_admin`, `predecessors_applied` true: live `747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4` (the eight columns, the index and the three functions
+absent: the derived pre-state, equal to staging's before its apply), no predecessor, `prerequisites_missing` `[]`, `successors_applied`
+`[]`, `definer_writes` `check_endorsements` ok, `already_applied` false, `precondition_failures` `[]`, `apply_preconditions_met` false (no
+pre-state recorded yet). Production's pre-state equals staging's (read-live run 44569070362 and the staging apply's `before_hash`), so
+the staging apply took the path production will. Recorded in the production pin with the staging apply (run 44576208345) as its
+staging acceptance and `execute: true` under the owner's words "open the SQL 170 production pin PR". The owner merges the pin change;
+the apply runs only after that merge is on main and staged, under the owner's words for that run (phrase
+`SHOW_ENDORSEMENT_EMAIL_STATUS`).
 
 ## Fingerprint
 
