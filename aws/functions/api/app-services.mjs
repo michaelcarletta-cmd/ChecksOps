@@ -92,6 +92,7 @@ import {
   handleSaveTenantWalletFundingSettings,
 } from './tenant-settings-handlers.mjs';
 import { handleRecordExternalDisbursement } from './external-disbursement.mjs';
+import { handlePushRegisterDevice } from './push-register-device.mjs';
 import { handleSaveTenantWalletWithdrawLimits } from './wallet-withdraw-limits.mjs';
 import {
   handleTenantBillingAdmin,
@@ -200,6 +201,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   'save-tenant-wallet-withdraw-limits',
   // A payment made outside ChecksOps, recorded against a check (SQL 147; never calls Moov)
   'record-external-disbursement',
+  // App push notifications (SQL 171): the signed-in user registers or removes this phone's push token
+  'push-register-device',
   'tenant-company-branding-save',
   'tenant-billing-admin',
   'tenant-billing-authorize',
@@ -399,6 +402,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleSaveTenantWalletWithdrawLimits(event);
     case 'record-external-disbursement':
       return handleRecordExternalDisbursement(event);
+    case 'push-register-device':
+      return handlePushRegisterDevice(event);
     case 'tenant-company-branding-save':
       // Retired 2026-10-17: the SPA saves tenant branding through /data/write
       // (write-app-metadata executeTenantsNarrow). Nothing is written here.
