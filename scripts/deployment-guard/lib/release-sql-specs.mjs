@@ -10207,6 +10207,130 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_billing_events"
     ]
   },
+  // SQL 170 (owner 2026-11-19, "Is there anyway for tenants to see if an email has been delivered and opened? For this
+  // to show up near the payee signature request", then "Yeah build 1 and 2": the opened link and Resend's delivery
+  // reports): eight columns on public.check_endorsements (the latest request email's Resend id, delivered, bounced with
+  // its reason, marked as spam, and the link's first and last opening and count; link_open_count NOT NULL DEFAULT 0, the
+  // rest nullable with no default; no column grant), the partial index check_endorsements_email_message_id_idx, and three
+  // SECURITY DEFINER functions (search_path public, row_security off; EXECUTE checksops and the owner) the API calls:
+  // aws_endorsement_email_sent, aws_endorsement_email_event and aws_endorsement_link_opened. definer_writes: the table
+  // the functions update past RLS (the file's sql170_definer_cannot_write check). No predecessor; no policy, trigger,
+  // table grant or other column change.
+  sql170: {
+    "key": "sql170",
+    "label": "SQL 170",
+    "choice": "sql170-check-endorsement-email-status",
+    "production_pin_rel": "ops/deployment-guard/sql170-check-endorsement-email-status-production-apply.json",
+    "script": "sql170-check-endorsement-email-status-production-apply",
+    "prerequisites": [
+      "public.check_endorsements",
+      "role checksops",
+      "column public.check_endorsements.id"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_endorsement_email_sent(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_endorsement_link_opened(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_endorsements"
+    ],
+    "added_columns": [
+      {
+        "table": "public.check_endorsements",
+        "column": "email_message_id",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_delivered_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_bounced_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_bounce_reason",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_complained_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "link_first_opened_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "link_last_opened_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "link_open_count",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      }
+    ],
+    "indexes": [
+      {
+        "table": "public.check_endorsements",
+        "name": "check_endorsements_email_message_id_idx",
+        "def": "CREATE INDEX check_endorsements_email_message_id_idx ON public.check_endorsements USING btree (email_message_id) WHERE (email_message_id IS NOT NULL)"
+      }
+    ],
+    "altered_relations": [
+      "public.check_endorsements"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",

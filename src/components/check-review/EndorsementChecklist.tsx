@@ -31,7 +31,7 @@ import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
   Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload, FileImage,
-  Plus, Trash2,
+  Plus, Trash2, MailCheck, MailWarning, MousePointerClick,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { InPersonSignatureDialog } from "./InPersonSignatureDialog";
@@ -39,12 +39,13 @@ import { InPersonSignatureDialog } from "./InPersonSignatureDialog";
 import { format } from "date-fns";
 import { CheckStatusTimeline } from "./CheckStatusTimeline";
 import { evaluateEndorsementMath } from "@/lib/endorsementCompletion";
+import { endorsementEmailStatus, type EndorsementEmailFields } from "@/lib/endorsementEmailStatus";
 
 // Hidden for now (owner 2026-11-18): "Mark All Endorsements Received" gives an error. The tenant marks each payee with
 // "Endorsed on Check", which works. The button and its handler stay in the code so it can be switched back on once fixed.
 const SHOW_MARK_ALL_ENDORSEMENTS = false;
 
-interface CheckEndorsement {
+interface CheckEndorsement extends EndorsementEmailFields {
   id: string;
   check_id: string;
   payee_id?: string | null;
@@ -665,6 +666,7 @@ function EndorsementCard({
 
   const isMortgage = endorsement.payee_type === "mortgage_company";
   const isSynthetic = endorsement.id.startsWith("payee-");
+  const emailStatus = endorsementEmailStatus(endorsement);
   // Any tenant (including shared partners) may send or resend a pending endorsement request.
   const canSendRequest = !readOnly && !isMortgage &&
     endorsement.status !== "signed" &&
@@ -938,6 +940,45 @@ function EndorsementCard({
           Last sent {format(new Date(endorsement.request_sent_at), "MMM d h:mm a")}
           {endorsement.reminder_count > 0 && ` · ${endorsement.reminder_count} reminder(s)`}
         </p>
+      )}
+
+      {/* Email delivery and link opened (SQL 170). Absent columns: nothing more than the line above. */}
+      {emailStatus.tracked && (emailStatus.delivery || emailStatus.linkOpenedAt) && (
+        <div data-endorsement-email-status="" className="space-y-0.5 text-[10px]">
+          {emailStatus.delivery === "bounced" && endorsement.status !== "signed" && (
+            <p className="flex items-start gap-1 text-red-400">
+              <MailWarning className="mt-px h-3 w-3 shrink-0" />
+              <span>
+                Bounced{emailStatus.bounceReason ? ` — ${emailStatus.bounceReason}` : ""}. Check the email address and resend.
+              </span>
+            </p>
+          )}
+          {emailStatus.delivery === "complained" && endorsement.status !== "signed" && (
+            <p className="flex items-center gap-1 text-amber-400">
+              <MailWarning className="h-3 w-3 shrink-0" />
+              Marked as spam by the recipient
+            </p>
+          )}
+          {emailStatus.delivery === "delivered" && emailStatus.deliveredAt && endorsement.status !== "signed" && (
+            <p className="flex items-center gap-1 text-muted-foreground">
+              <MailCheck className="h-3 w-3 shrink-0 text-emerald-400" />
+              Delivered {format(new Date(emailStatus.deliveredAt), "MMM d h:mm a")}
+            </p>
+          )}
+          {emailStatus.delivery === "pending" && endorsement.status !== "signed" && (
+            <p className="flex items-center gap-1 text-muted-foreground">
+              <Clock className="h-3 w-3 shrink-0" />
+              Delivery pending
+            </p>
+          )}
+          {emailStatus.linkOpenedAt && (
+            <p className="flex items-center gap-1 text-muted-foreground">
+              <MousePointerClick className="h-3 w-3 shrink-0 text-blue-400" />
+              Link opened {format(new Date(emailStatus.linkOpenedAt), "MMM d h:mm a")}
+              {emailStatus.linkOpenCount > 1 && ` (${emailStatus.linkOpenCount}×)`}
+            </p>
+          )}
+        </div>
       )}
 
       {isSynthetic && (
