@@ -59,7 +59,7 @@ const PRODUCTION_PRE = 'fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c359
 // The guarded staging apply from the same pre-state.
 const STAGING_ACCEPTANCE_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44614240107';
 // The owner's words for SQL 171, quoted in the authorization.
-const OWNER_WORDS = Object.freeze(['"run staging read-live"', '"deploy staging executor"', '"approve the SQL 171 staging apply"', '"run the SQL 171 production inspect"', '"approve the SQL 171 production pin"']);
+const OWNER_WORDS = Object.freeze(['"run staging read-live"', '"deploy staging executor"', '"approve the SQL 171 staging apply"', '"deploy and apply SQL 171 on staging"', '"run the SQL 171 production inspect"', '"approve the SQL 171 production pin"']);
 const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 const keyPaths = (o, p = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? keyPaths(v, `${p}${k}.`) : [`${p}${k}`]));
 const neverConnect = async () => { throw new Error('should-not-connect'); };
@@ -244,7 +244,7 @@ test('order: no predecessor; one new table and two new DEFINER functions, nothin
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, ABSENT, 'REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 63, 2026-11-19, apply run 44614240107\); staging acceptance: the staging apply on the staging pin the owner approved \(\"approve the SQL 171 staging apply\"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19\) by the owner-reviewed pin change; not applied in production\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 63, 2026-11-19, apply run 44614240107\); staging acceptance: the staging apply under the owner\'s run approval \(\"deploy and apply SQL 171 on staging\"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19\) by the owner-reviewed pin change; not applied in production\./);
   assert.match(runbook, /\*\*Production inspect \(2026-11-19\)\.\*\* Read-only `--inspect` through SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql171` \|/);

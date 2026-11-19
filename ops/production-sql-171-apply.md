@@ -34,7 +34,7 @@ sends anything or is read by anything yet.
 API, Lambda or SPA change is part of this pin; the API route that calls the functions ships in its own step after this pin
 is applied in production.
 
-**Status:** applied in staging (wave 63, 2026-11-19, apply run 44614240107); staging acceptance: the staging apply on the staging pin the owner approved ("approve the SQL 171 staging apply"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19) by the owner-reviewed pin change; not applied in production.
+**Status:** applied in staging (wave 63, 2026-11-19, apply run 44614240107); staging acceptance: the staging apply under the owner's run approval ("deploy and apply SQL 171 on staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19) by the owner-reviewed pin change; not applied in production.
 
 **Staging read-live (2026-11-19).** Run 44610159066 (main `5b1beac6f`, after executor inspect run 44608135543 and executor deploy
 run 44609532435 (executor CodeSha256 `0MpkBqG5…` -> `w7QtT7Tb…`)), under the owner's words "run staging read-live" and

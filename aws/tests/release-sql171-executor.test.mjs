@@ -133,7 +133,7 @@ test('pin: SQL 171 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-19: staging apply (wave 63) from staging read-live run 44610159066');
   assert.equal(pin.expected_live_definition_sha256, ABSENT);
   assert.equal(pin.expected_live_definition_sha256, 'fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 63, 2026-11-19, apply run 44614240107\); staging acceptance: the staging apply on the staging pin the owner approved \(\"approve the SQL 171 staging apply\"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19\) by the owner-reviewed pin change; not applied in production\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 63, 2026-11-19, apply run 44614240107\); staging acceptance: the staging apply under the owner\'s run approval \(\"deploy and apply SQL 171 on staging\"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19\) by the owner-reviewed pin change; not applied in production\./);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /read-live \(2026-11-19\)\.\*\* Run 44610159066/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
