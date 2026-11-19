@@ -40,8 +40,16 @@ as before until the API calls the functions: its own later step (a Lambda overla
 Resend webhook, with the webhook signing secret through the guarded configuration path), then the website, each after
 this pin is applied in production. No API, Lambda or SPA change is part of this pin.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 62 when approved (wave 61 is SQL 169, the highest on main).
+**Status:** staging pin execute-authorized (wave 62); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-19).** Run 44569070362 (main `17632da1f`, after executor inspect run 44562828532 and executor deploy
+run 44567896532 (executor CodeSha256 `8i2ZsahmH…` -> `50KumbQJ…`)), under the owner's words "run the staging SQL executor
+deploy, then the SQL 170 read-live": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`;
+the eight columns, the index and the three functions absent. Live
+`747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4`, equal to the derived pre-state; intended `e53dd2fe…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 62) on the owner's "approve the SQL 170 staging apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words
+for that run. The production pin stays pending.
 
 ## Fingerprint
 
