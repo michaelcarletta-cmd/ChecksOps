@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-email-status-api-applied",
+  "authorization": "Record only (2026-11-19): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Endorsement email status API (#2018, merged as 17632da1f) applied. Owner 2026-11-19: \"run the API staging overlay\", then \"DEPLOY check-endorsement.mjs TO PRODUCTION\"; the owner also approved the production environment gate in GitHub. Applied 2026-11-19 from main 7d52780747a33f9d00bf66c771940d2db34eb5ac, after SQL 170 was applied in production (its record #2023). Staging (checksops-staging-api): inspect run 44589214918 read 3bb1ae2b live (CodeSha256 RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=, RevisionId 643128a9-0046-41fe-ab44-9c3221de1f80); apply run 44589356924 (expected live 3bb1ae2b -> CodeSha256 CxJIV52RWT2IdqGKhkj0OXbJH6czTVJD6TePqt7SujA=, RevisionId 38fc9dd9-df74-4270-ab35-00c4ca551227), errors [], with the public staging smoke /health, /db-health and /db-readonly-validate 200; staging re-inspect run 44589625402 read c3a6e218 live (RevisionId d10c9716-a49b-4f3b-946b-d1037187e87f). Production (checksops-production-prep-api): preflight inspect run 44589464432 read 3bb1ae2b live, READY (CodeSha256 RXdhPzXIvGDCBa4LWirOhn/m7Nrz23ZZpVUFR57wkcc=, RevisionId 77244814-d877-4d09-b42f-1f2e8ad835c5, the endorsement copy notice applied bytes after the sender configuration change); apply run 44589744829 (staging acceptance: staging apply run 44589356924) replaced it, errors [], VERIFIED by its verify step (c3a6e218, CodeSha256 CxJIV52RWT2IdqGKhkj0OXbJH6czTVJD6TePqt7SujA=, RevisionId 51c0358c-e6bc-4ccd-9cb3-bad656ee5581) and by re-inspect run 44590482759 on main 081c6bb90, ALREADY_ACCEPTED; /health and /db-health 200. Only this member changed; index.mjs is untouched. No hold. Not verified by this record: an endorsement request sent from production after the apply, a payee opening the link, or a Resend delivery report (the Resend webhook and RESEND_WEBHOOK_SECRET are not configured yet, so delivery reports answer 503 until they are).",
+  "members": {
+    "check-endorsement.mjs": {
+      "live_sha256": "c3a6e218ccbff647192fc20cc70b9d08fb2aba7f33dc24805fac9869ad65612e",
+      "accepted_sha256": "c3a6e218ccbff647192fc20cc70b9d08fb2aba7f33dc24805fac9869ad65612e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-endorsement-email-status-api-manifest-2026-11-19.json"
+    }
+  }
+}
