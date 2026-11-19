@@ -10331,6 +10331,121 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_endorsements"
     ]
   },
+  // SQL 171 (owner 2026-11-19: app notifications when signatures are received, funds are disbursed or received, the
+  // wallet changes, or a message arrives; the app side is PR 2016, src/lib/nativePush.ts): where the API keeps the phone
+  // push tokens a signed-in user registers. One table, public.device_push_tokens (RLS on, no policy, no grant to anyone
+  // but the owner, default privileges included, as SQL 118 and SQL 158), its unique token key and per-user index, and two
+  // SECURITY DEFINER functions, aws_push_register_device(text, text) (returns uuid) and aws_push_unregister_device(text)
+  // (returns boolean), search_path public, row_security off, EXECUTE checksops and the owner. Constraint and index texts
+  // are as the catalog prints them. The functions write only the file's own table (no definer_writes); nothing reads the
+  // tokens yet. No predecessor.
+  sql171: {
+    "key": "sql171",
+    "label": "SQL 171",
+    "choice": "sql171-device-push-tokens",
+    "production_pin_rel": "ops/deployment-guard/sql171-device-push-tokens-production-apply.json",
+    "script": "sql171-device-push-tokens-production-apply",
+    "prerequisites": [
+      "auth.uid()",
+      "gen_random_uuid()",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_push_register_device(text, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_push_unregister_device(text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.device_push_tokens",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          [
+            "id",
+            "uuid",
+            true,
+            "gen_random_uuid()"
+          ],
+          [
+            "user_id",
+            "uuid",
+            true,
+            null
+          ],
+          [
+            "platform",
+            "text",
+            true,
+            null
+          ],
+          [
+            "token",
+            "text",
+            true,
+            null
+          ],
+          [
+            "created_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ],
+          [
+            "last_seen_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ]
+        ],
+        "constraints": [
+          [
+            "device_push_tokens_pkey",
+            "PRIMARY KEY (id)"
+          ],
+          [
+            "device_push_tokens_platform",
+            "CHECK ((platform = ANY (ARRAY['ios'::text, 'android'::text])))"
+          ],
+          [
+            "device_push_tokens_token_key",
+            "UNIQUE (token)"
+          ],
+          [
+            "device_push_tokens_token_shape",
+            "CHECK ((((length(token) >= 1) AND (length(token) <= 4096)) AND (token !~ '\\s'::text)))"
+          ]
+        ],
+        "indexes": [
+          [
+            "device_push_tokens_pkey",
+            "CREATE UNIQUE INDEX device_push_tokens_pkey ON public.device_push_tokens USING btree (id)"
+          ],
+          [
+            "device_push_tokens_token_key",
+            "CREATE UNIQUE INDEX device_push_tokens_token_key ON public.device_push_tokens USING btree (token)"
+          ],
+          [
+            "device_push_tokens_user_idx",
+            "CREATE INDEX device_push_tokens_user_idx ON public.device_push_tokens USING btree (user_id, last_seen_at DESC)"
+          ]
+        ],
+        "acl": []
+      }
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
