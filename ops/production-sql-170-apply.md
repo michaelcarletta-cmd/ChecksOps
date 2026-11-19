@@ -40,7 +40,7 @@ as before until the API calls the functions: its own later step (a Lambda overla
 Resend webhook, with the webhook signing secret through the guarded configuration path), then the website, each after
 this pin is applied in production. No API, Lambda or SPA change is part of this pin.
 
-**Status:** applied in staging (wave 62, 2026-11-19, apply run 44576208345); staging acceptance: the staging apply under the owner's run approval ("run the SQL 170 staging apply"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `67613a6c-45ae-4d2e-b1ba-5adb161b80a1`, 2026-11-19) by the owner-reviewed pin change; not applied in production.
+**Status:** applied in staging (wave 62, 2026-11-19, apply run 44576208345); staging acceptance: the staging apply under the owner's run approval ("run the SQL 170 staging apply"; no separate acceptance statement); applied to production (2026-11-19); the production pin is retired (`execute: false`). Nothing a user sees changes until the API overlay (`check-endorsement.mjs`, #2018) is deployed.
 
 **Staging read-live (2026-11-19).** Run 44569070362 (main `17632da1f`, after executor inspect run 44562828532 and executor deploy
 run 44567896532 (executor CodeSha256 `8i2ZsahmH…` -> `50KumbQJ…`)), under the owner's words "run the staging SQL executor
@@ -76,6 +76,35 @@ the staging apply took the path production will. Recorded in the production pin 
 staging acceptance and `execute: true` under the owner's words "open the SQL 170 production pin PR". The owner merges the pin change;
 the apply runs only after that merge is on main and staged, under the owner's words for that run (phrase
 `SHOW_ENDORSEMENT_EMAIL_STATUS`).
+
+**Production apply (2026-11-19).** After the pin change (#2022, merged to main as `7d5278074` on the owner's words "Merge 2022"),
+transfer run 44586789514 (`sql53-temporary-transfer.yml`) staged main `7d5278074` (tarball sha256
+`a0ddfc88f66397809f5f6cc5c1bc549e84aa7a8c0c01ff0cd7dc700e219f7025`, equal to the S3 sidecar, checked by `sha256sum -c` on the runner;
+`SOURCE_COMMIT` matched). The runner `i-0c35557c4e5385406` was started from stopped at 18:22:02Z (Online 18:22:38Z) by `user/claude-code`;
+one AWS-managed SSM command, `029078bf` AmazonInspector2-ConfigureInspectorSsmPlugin (left from the stop after the read-only inspect
+`67613a6c`), was listed InProgress throughout; it is not a ChecksOps run and no SQL ran in it. Under the owner's words "apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS"
+(passed verbatim to this run; root volume 39% used): one-shot `--phase inspect` (SSM `68cc0056-a0a1-4ac6-adec-35b9c4b75249`, Success, exit 0, steps pin,
+source, inspect and contracts ok, nothing written) read live `747d10df…` (`live_matches_expected` true, `already_applied` false,
+`apply_preconditions_met` true, `precondition_failures` `[]`); the apply command was sent only after that. Then `--phase apply` (SSM
+`d3acdfce-755f-498c-9d88-d35fa645b43e`, Success, exit 0, run `ec7cfd44-a912-49c9-b908-0c4b0269c201`, workstream `prod-sql170-endorsement-email-status-20261119`, one_use_id `sql170-prod-0c205621-fa88-41f5-9903-b12cd1465b28`): contracts claim-ledger, tenant-isolation and
+financial-write-protections ok; all 11 steps ok; manifest `bf5b34c7…`; receipt `747d10df…` → `e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81` (intended), result `applied`;
+post-apply inspect `already_applied` true, `precondition_failures` `[]`, the eight `check_endorsements` columns,
+`check_endorsements_email_message_id_idx` and the three functions `intended`, EXECUTE `checksops` and the owner. A process check after the
+apply found no one-shot running; the runner was stopped at 18:24:40Z (stopped 18:25:11Z) by `user/claude-code`. Recorded in the pin's
+`applied` and `production_evidence`; `execute` is false again. Production acceptance had not been reported by the owner when this record
+was written; this record does not claim it. Nothing a user sees changes until the API overlay of `check-endorsement.mjs` (#2018) is
+deployed.
+
+**Not all of the run's output was kept.** One SSM command after the apply (`258766ee-b8d4-4365-a35a-cb746f20d23c`) printed the sha256
+and size of the two compact output copies on the runner (inspect `b54708d8…`, 4518 bytes; apply
+`5033bb146e433aee5a1ec7cd28b635f6af7963ce03451386b34affdb2780df1f`, 19452 bytes), printed the compact apply copy as base64 and, in the same
+command, removed both copies. SSM returns at most 24000 characters, so only the first 17869 of the 19452 bytes arrived, and the runner's copy
+was already gone: an operator error (the delete ran before the read-back was confirmed complete). Every value in `applied` comes verbatim
+from those bytes, which hold the run's details whole through `apply_result` and its `applied` object whole except the end of its last key,
+`post_apply_inspect` (cut off after 753 characters). `applied.post_apply_inspect` is the run's complete `details.post_apply_inspect` from the
+same output; the 753 characters that arrived of the applied copy match its first 753. The last 182 bytes of the output, after the `applied`
+object, are unknown, so the runner-computed sha256 of the whole output cannot be reproduced. `applied.output_recovery_note` states this in
+the pin. Next time the read-back is confirmed complete before any copy is removed.
 
 ## Fingerprint
 
