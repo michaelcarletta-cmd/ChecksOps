@@ -34,7 +34,7 @@ sends anything or is read by anything yet.
 API, Lambda or SPA change is part of this pin; the API route that calls the functions ships in its own step after this pin
 is applied in production.
 
-**Status:** staging pin execute-authorized (wave 63); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 63, 2026-11-19, apply run 44614240107); staging acceptance: the staging apply on the staging pin the owner approved ("approve the SQL 171 staging apply"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19) by the owner-reviewed pin change; not applied in production.
 
 **Staging read-live (2026-11-19).** Run 44610159066 (main `5b1beac6f`, after executor inspect run 44608135543 and executor deploy
 run 44609532435 (executor CodeSha256 `0MpkBqG5…` -> `w7QtT7Tb…`)), under the owner's words "run staging read-live" and
@@ -44,6 +44,31 @@ run 44609532435 (executor CodeSha256 `0MpkBqG5…` -> `w7QtT7Tb…`)), under the
 (`expected_live_definition_sha256`, `execute: true`, wave 63) on the owner's "approve the SQL 171 staging apply". The
 staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words
 for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-19).** The staging pin for SQL 171 (wave 63, PR #2026) merged as
+`dc9e02688b79f83314fd2148f41ba89659902d73`. Deploy run 44613639425 updated the staging guarded SQL executor (CodeSha256
+`w7QtT7Tb…` -> `gGHt9f/X…`, `staging_api_untouched` true, `billing_sql44_untouched` true). Apply run 44614240107: expected live
+`fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555`; after it `device_push_tokens` `intended` (RLS on, 6 columns, 0 policies) and
+both functions `intended`, EXECUTE `checksops` and the owner. Read-live run 44614848373: `already_applied` true, `precondition_failures`
+`[]`, `prerequisites_missing` `[]`, live `254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff` (the intended hash). No separate staging acceptance statement
+was given. There is no separate staging record PR for SQL 171: these staging runs are recorded here and in the production pin's
+`staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-19).** Read-only `--inspect` through SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b` on
+`i-0c35557c4e5385406` (under the owner's words "run the SQL 171 production inspect"; runner stopped with no SSM command pending or
+in progress, started 21:12:31Z, SSM Online 21:12:47Z, command 21:12:48Z to 21:12:56Z, AWS-RunShellScript, Success, stop issued
+21:12:58Z, stopped at 21:13:30Z, all by `user/claude-code`), main `dc9e02688` (tarball sha256
+`04ab7add22f12f91829d24d51eb4503ad6961308c57a00193bb1c17869c5e2f6`, checked by `sha256sum -c` on the runner, `SOURCE_COMMIT` matched,
+staged by `sql53-temporary-transfer.yml` run 44615906274; the tool ran from the extracted tarball in a temporary directory removed
+afterwards; sha256 of the printed sql171 output, computed on the runner,
+`f27fb009cfd918a74c4ed9cf15c044b8b83ca6d10d988f18b3f1664a83c870b1`, 2230 bytes), exit 0, `ok` true, `read_only` true, `source_ok` true,
+`current_user` `checksops_admin`, `predecessors_applied` true: live `fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555` (the table and both functions
+absent: the derived pre-state, equal to staging's before its apply), no predecessor, `prerequisites_missing` `[]`, `successors_applied`
+`[]`, `already_applied` false, `precondition_failures` `[]`, `apply_preconditions_met` false (no pre-state recorded yet). Production's
+pre-state equals staging's (read-live run 44610159066), so the staging apply took the path production will. Recorded in the
+production pin with the staging apply (run 44614240107) as its staging acceptance and `execute: true` under the owner's words
+"approve the SQL 171 production pin". The owner merges the pin change; the apply runs only after that merge is on main and staged,
+under the owner's words for that run (phrase `REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS`).
 
 ## Fingerprint
 
