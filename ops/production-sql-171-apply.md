@@ -34,8 +34,16 @@ sends anything or is read by anything yet.
 API, Lambda or SPA change is part of this pin; the API route that calls the functions ships in its own step after this pin
 is applied in production.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 63 when approved (SQL 170, the endorsement email status, takes wave 62).
+**Status:** staging pin execute-authorized (wave 63); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-19).** Run 44610159066 (main `5b1beac6f`, after executor inspect run 44608135543 and executor deploy
+run 44609532435 (executor CodeSha256 `0MpkBqG5…` -> `w7QtT7Tb…`)), under the owner's words "run staging read-live" and
+"deploy staging executor": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; the table
+`public.device_push_tokens` and both functions absent. Live
+`fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555`, equal to the derived pre-state; intended `254a44e1…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 63) on the owner's "approve the SQL 171 staging apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words
+for that run. The production pin stays pending.
 
 ## Fingerprint
 
