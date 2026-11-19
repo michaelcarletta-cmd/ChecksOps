@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * Official production entry for SQL 170 (aws/workflows/sql/170_device_push_tokens.sql): where the API keeps the phones
- * a signed-in user receives ChecksOps push notifications on. One new table, public.device_push_tokens (RLS on, no
- * policy, no grant but the owner's), and two new SECURITY DEFINER functions, aws_push_register_device(text, text) and
- * aws_push_unregister_device(text), EXECUTE checksops and the owner; no predecessor (owner 2026-11-19, app
- * notifications; the app side is PR 2016); see ops/production-sql-170-apply.md.
+ * Official production entry for SQL 170 (aws/workflows/sql/170_check_endorsement_email_status.sql):
+ * a payee's endorsement request shows whether the email was delivered, bounced or marked as spam,
+ * and when the payee opened the link. Eight new columns on public.check_endorsements, the partial
+ * index check_endorsements_email_message_id_idx and three new SECURITY DEFINER functions
+ * (aws_endorsement_email_sent, aws_endorsement_email_event, aws_endorsement_link_opened; EXECUTE
+ * checksops and the owner); no predecessor (owner 2026-11-19, "Yeah build 1 and 2"); see
+ * ops/production-sql-170-apply.md.
  *
  *   --inspect                 read-only (BEGIN READ ONLY ... ROLLBACK): catalog state, the
  *                             fingerprint, prerequisites and preconditions; reads no table rows

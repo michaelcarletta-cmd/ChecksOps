@@ -1,0 +1,66 @@
+{
+  "id": "sql170-check-endorsement-email-status-production-apply",
+  "migration": "sql170",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/170_check_endorsement_email_status.sql",
+  "migration_id": "170_check_endorsement_email_status",
+  "staging_pin_commit": "bb45ea43f305f5bb7a75a9ea47c345bc2a2442db",
+  "source_sha256": "44eb656742cc137bab736fb4ef54630a5c7a27df074428de918a0c7d9b942370",
+  "function_identities": [
+    "public.aws_endorsement_email_event(text, text, timestamp with time zone, text)",
+    "public.aws_endorsement_email_sent(uuid, text)",
+    "public.aws_endorsement_link_opened(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
+  "authorization_phrase": "SHOW_ENDORSEMENT_EMAIL_STATUS",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 170 adds what a payee's endorsement request needs to show whether its email was delivered, bounced or marked as spam and when the payee opened the link (owner 2026-11-19, \"Is there anyway for tenants to see if an email has been delivered and opened? For this to show up near the payee signature request\", then \"Yeah build 1 and 2\": the opened link and Resend's delivery reports; no tracking pixel). On public.check_endorsements: eight new columns, email_message_id text, email_delivered_at, email_bounced_at, email_bounce_reason text, email_complained_at, link_first_opened_at, link_last_opened_at (timestamptz, all nullable, no default) and link_open_count integer NOT NULL DEFAULT 0; the partial index check_endorsements_email_message_id_idx on (email_message_id) WHERE email_message_id IS NOT NULL; no column grant (the table SELECT for checksops already covers new columns). Three new SECURITY DEFINER functions (plpgsql, VOLATILE, search_path public, row_security off; EXECUTE checksops and the owner, revoked from PUBLIC, anon, authenticated and service_role): aws_endorsement_email_sent(uuid, text), aws_endorsement_email_event(text, text, timestamp with time zone, text) and aws_endorsement_link_opened(uuid). The file refuses (55000) sql170_prerequisite_missing, sql170_definer_cannot_write (the applying login must own check_endorsements without FORCE ROW LEVEL SECURITY, or be a superuser or BYPASSRLS; the engine's definer_can_write_relations) and sql170_column_conflict (a new column already present with another type, NOT NULL or default). No policy, trigger, table grant, other column or row change beyond link_open_count's default. Expected pre-state in both environments: everything absent (release sql170 v1: 747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4, releaseStateHash('sql170', {})). The API that calls the functions and the website that shows the status are later, separate changes (a Lambda overlay and a website upload, after this pin is applied in production). No API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql170-check-endorsement-email-status-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql170-check-endorsement-email-status",
+    "one_shot_migration": "sql170",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-170-apply.md",
+    "tests": [
+      "aws/tests/release-sql170-executor.test.mjs",
+      "aws/tests/release-sql170-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql170-check-endorsement-email-status-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 170: sql170-check-endorsement-email-status-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql170-check-endorsement-email-status); production-sql-one-shot.mjs --migration sql170. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the three functions' definitions and ACLs, the eight columns' type, NOT NULL, default and grants, and the index definition. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 170 yet. Expected: prerequisites_missing [], check_endorsements owned by checksops_admin without FORCE ROW LEVEL SECURITY (definer_can_write_relations), the three functions, the eight columns and the index absent, already_applied false. Expected release-engine fingerprint of that pre-state under sql170: 747d10df6bd187e566fff75f14e2c2be43f14e350e70a7fabb8457931a3a7dc4. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (a column, function or index already present), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81",
+    "note": "On public.check_endorsements: the eight columns (email_message_id text, email_delivered_at, email_bounced_at, email_complained_at, link_first_opened_at, link_last_opened_at timestamptz, email_bounce_reason text, all nullable with no default and no column grant; link_open_count integer NOT NULL DEFAULT 0), the index check_endorsements_email_message_id_idx (btree on email_message_id WHERE email_message_id IS NOT NULL), and the three SECURITY DEFINER functions with EXECUTE for checksops and the owner only. No other column, constraint, index, trigger, function, policy or grant change; no row written by the apply beyond link_open_count's default. The fingerprint is releaseIntendedHash('sql170', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 170 (choice sql170-check-endorsement-email-status) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql170-check-endorsement-email-status-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

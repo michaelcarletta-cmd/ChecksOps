@@ -114,7 +114,7 @@ on:
           - sql167-claim-ledger-relink-check
           - sql168-mortgage-desk-same-agent-new-check
           - sql169-check-billing-events-keep-charge-on-check-delete
-          - sql170-device-push-tokens
+          - sql170-check-endorsement-email-status
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false

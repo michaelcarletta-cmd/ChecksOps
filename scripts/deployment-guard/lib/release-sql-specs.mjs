@@ -10207,119 +10207,128 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_billing_events"
     ]
   },
-  // SQL 170 (owner 2026-11-19: app notifications when signatures are received, funds are disbursed or received, the
-  // wallet changes, or a message arrives; the app side is PR 2016, src/lib/nativePush.ts): where the API keeps the phone
-  // push tokens a signed-in user registers. One table, public.device_push_tokens (RLS on, no policy, no grant to anyone
-  // but the owner, default privileges included, as SQL 118 and SQL 158), its unique token key and per-user index, and two
-  // SECURITY DEFINER functions, aws_push_register_device(text, text) (returns uuid) and aws_push_unregister_device(text)
-  // (returns boolean), search_path public, row_security off, EXECUTE checksops and the owner. Constraint and index texts
-  // are as the catalog prints them. The functions write only the file's own table (no definer_writes); nothing reads the
-  // tokens yet. No predecessor.
+  // SQL 170 (owner 2026-11-19, "Is there anyway for tenants to see if an email has been delivered and opened? For this
+  // to show up near the payee signature request", then "Yeah build 1 and 2": the opened link and Resend's delivery
+  // reports): eight columns on public.check_endorsements (the latest request email's Resend id, delivered, bounced with
+  // its reason, marked as spam, and the link's first and last opening and count; link_open_count NOT NULL DEFAULT 0, the
+  // rest nullable with no default; no column grant), the partial index check_endorsements_email_message_id_idx, and three
+  // SECURITY DEFINER functions (search_path public, row_security off; EXECUTE checksops and the owner) the API calls:
+  // aws_endorsement_email_sent, aws_endorsement_email_event and aws_endorsement_link_opened. definer_writes: the table
+  // the functions update past RLS (the file's sql170_definer_cannot_write check). No predecessor; no policy, trigger,
+  // table grant or other column change.
   sql170: {
     "key": "sql170",
     "label": "SQL 170",
-    "choice": "sql170-device-push-tokens",
-    "production_pin_rel": "ops/deployment-guard/sql170-device-push-tokens-production-apply.json",
-    "script": "sql170-device-push-tokens-production-apply",
+    "choice": "sql170-check-endorsement-email-status",
+    "production_pin_rel": "ops/deployment-guard/sql170-check-endorsement-email-status-production-apply.json",
+    "script": "sql170-check-endorsement-email-status-production-apply",
     "prerequisites": [
-      "auth.uid()",
-      "gen_random_uuid()",
-      "role checksops"
+      "public.check_endorsements",
+      "role checksops",
+      "column public.check_endorsements.id"
     ],
     "predecessors": [],
     "functions": [
       {
-        "identity": "public.aws_push_register_device(text, text)",
+        "identity": "public.aws_endorsement_email_event(text, text, timestamp with time zone, text)",
         "acl": [
           "checksops EXECUTE",
           "owner EXECUTE"
         ]
       },
       {
-        "identity": "public.aws_push_unregister_device(text)",
+        "identity": "public.aws_endorsement_email_sent(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_endorsement_link_opened(uuid)",
         "acl": [
           "checksops EXECUTE",
           "owner EXECUTE"
         ]
       }
     ],
-    "tables": [
+    "definer_writes": [
+      "public.check_endorsements"
+    ],
+    "added_columns": [
       {
-        "name": "public.device_push_tokens",
-        "rls": true,
-        "forced": false,
-        "columns": [
-          [
-            "id",
-            "uuid",
-            true,
-            "gen_random_uuid()"
-          ],
-          [
-            "user_id",
-            "uuid",
-            true,
-            null
-          ],
-          [
-            "platform",
-            "text",
-            true,
-            null
-          ],
-          [
-            "token",
-            "text",
-            true,
-            null
-          ],
-          [
-            "created_at",
-            "timestamp with time zone",
-            true,
-            "now()"
-          ],
-          [
-            "last_seen_at",
-            "timestamp with time zone",
-            true,
-            "now()"
-          ]
-        ],
-        "constraints": [
-          [
-            "device_push_tokens_pkey",
-            "PRIMARY KEY (id)"
-          ],
-          [
-            "device_push_tokens_platform",
-            "CHECK ((platform = ANY (ARRAY['ios'::text, 'android'::text])))"
-          ],
-          [
-            "device_push_tokens_token_key",
-            "UNIQUE (token)"
-          ],
-          [
-            "device_push_tokens_token_shape",
-            "CHECK ((((length(token) >= 1) AND (length(token) <= 4096)) AND (token !~ '\\s'::text)))"
-          ]
-        ],
-        "indexes": [
-          [
-            "device_push_tokens_pkey",
-            "CREATE UNIQUE INDEX device_push_tokens_pkey ON public.device_push_tokens USING btree (id)"
-          ],
-          [
-            "device_push_tokens_token_key",
-            "CREATE UNIQUE INDEX device_push_tokens_token_key ON public.device_push_tokens USING btree (token)"
-          ],
-          [
-            "device_push_tokens_user_idx",
-            "CREATE INDEX device_push_tokens_user_idx ON public.device_push_tokens USING btree (user_id, last_seen_at DESC)"
-          ]
-        ],
+        "table": "public.check_endorsements",
+        "column": "email_message_id",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_delivered_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_bounced_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_bounce_reason",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_complained_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "link_first_opened_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "link_last_opened_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "link_open_count",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
         "acl": []
       }
+    ],
+    "indexes": [
+      {
+        "table": "public.check_endorsements",
+        "name": "check_endorsements_email_message_id_idx",
+        "def": "CREATE INDEX check_endorsements_email_message_id_idx ON public.check_endorsements USING btree (email_message_id) WHERE (email_message_id IS NOT NULL)"
+      }
+    ],
+    "altered_relations": [
+      "public.check_endorsements"
     ]
   },
   sql76: {

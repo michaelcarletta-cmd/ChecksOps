@@ -1,20 +1,20 @@
 /**
- * Production tool for SQL 170 (scripts/deployment-guard/sql170-device-push-tokens-production-apply.mjs on
- * lib/release-sql-production-apply.mjs and lib/release-sql-production-cli.mjs). Owner 2026-11-19: app notifications when
- * signatures are received, funds are disbursed or received, the wallet changes, or a message arrives (the app side is PR
- * 2016); this file is where the API keeps the phones' push tokens.
+ * Production tool for SQL 170 (scripts/deployment-guard/sql170-check-endorsement-email-status-production-apply.mjs on
+ * lib/release-sql-production-apply.mjs and lib/release-sql-production-cli.mjs). Owner 2026-11-19: "Is there anyway for
+ * tenants to see if an email has been delivered and opened? For this to show up near the payee signature request", then
+ * "Yeah build 1 and 2".
  * release-sql90-97-production-apply.test.mjs runs every release key (SQL 170 included) through the shared refusals;
  * this file covers SQL 170's own:
  *
  *   - the pin has the release pin shape, is pending (execute false, no pre-state, no approval) and is in step with the
  *     staging pin, the one-shot, the bypass inventory and the test lists;
- *   - no predecessor; one new table (device_push_tokens: RLS on, no policy, no grant) and two new SECURITY DEFINER
- *     functions (EXECUTE checksops and the owner); no existing object changed; no overlay plan entry yet; the runbook,
- *     one-shot doc and README name it;
+ *   - no predecessor; three new SECURITY DEFINER functions (EXECUTE checksops and the owner), eight columns on
+ *     check_endorsements and one partial index; no table, policy, trigger, constraint or table grant; no overlay plan
+ *     entry yet; the runbook, one-shot doc and README name it;
  *   - the pending pin refuses before connecting; an approved, accepted copy evaluates for the manifest built from it,
  *     and refuses with execute false, another live hash, another staging reference or a wrong phrase; the CLI spends no
  *     receipt.
- * The behavior on PostgreSQL 16 is aws/tests/sql170-device-push-tokens-pg.test.mjs; the executor path is
+ * The behavior on PostgreSQL 16 is aws/tests/sql170-check-endorsement-email-status-pg.test.mjs; the executor path is
  * aws/tests/release-sql170-executor.test.mjs.
  */
 import assert from 'node:assert/strict';
@@ -36,16 +36,22 @@ import {
   precheckReleaseProductionApply,
   readPinnedReleaseSql,
 } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
-import { main } from '../../scripts/deployment-guard/sql170-device-push-tokens-production-apply.mjs';
+import { main } from '../../scripts/deployment-guard/sql170-check-endorsement-email-status-production-apply.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const KEY = 'sql170';
-const SQL170_FILE = 'aws/workflows/sql/170_device_push_tokens.sql';
-const TABLE = 'public.device_push_tokens';
-const FNS = Object.freeze(['public.aws_push_register_device(text, text)', 'public.aws_push_unregister_device(text)']);
-const ACL = Object.freeze(['checksops EXECUTE', 'owner EXECUTE']);
-/** The expected pre-state: the table and both functions absent. */
-const ABSENT = releaseStateHash(KEY, {});
+const SQL170_FILE = 'aws/workflows/sql/170_check_endorsement_email_status.sql';
+const TABLE = 'public.check_endorsements';
+const INDEX = 'check_endorsements_email_message_id_idx';
+const FUNCTIONS = Object.freeze([
+  'public.aws_endorsement_email_event(text, text, timestamp with time zone, text)',
+  'public.aws_endorsement_email_sent(uuid, text)',
+  'public.aws_endorsement_link_opened(uuid)',
+]);
+const COLUMNS = Object.freeze(['email_message_id', 'email_delivered_at', 'email_bounced_at', 'email_bounce_reason',
+  'email_complained_at', 'link_first_opened_at', 'link_last_opened_at', 'link_open_count']);
+/** The expected pre-state: the functions, the columns and the index absent. */
+const ABSENT_PRE = releaseStateHash(KEY, {});
 const COMMITTED = loadReleaseProductionPin(KEY, ROOT);
 const SQL96_PIN = loadReleaseProductionPin('sql96', ROOT);
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
@@ -108,7 +114,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(pin.applied, undefined);
   assert.equal(pin.production_inspect.status, 'pending');
   assert.equal(pin.production_inspect.live_definition_sha256, null);
-  for (const text of ['prerequisites_missing', 'already_applied false', 'precondition_failures', 'the table or a function present', ABSENT]) {
+  for (const text of ['prerequisites_missing', 'already_applied false', 'precondition_failures', 'definer_can_write_relations', ABSENT_PRE]) {
     assert.ok(pin.production_inspect.note.includes(text), text);
   }
   assert.deepEqual([pin.staging_acceptance.ok, pin.staging_acceptance.reference], [false, null]);
@@ -119,15 +125,15 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(pin.intended_replacement_sha256, staging.intended_replacement_sha256);
   assert.equal(pin.intended_post_state.fingerprint, pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, releaseIntendedHash(KEY, fs.readFileSync(path.join(ROOT, SQL170_FILE), 'utf8')));
-  assert.deepEqual(pin.function_identities, FNS);
+  assert.deepEqual(pin.function_identities, FUNCTIONS);
   assert.deepEqual(pin.function_identities, [...staging.function_identities]);
   assert.deepEqual(pin.predecessors, []);
   assert.deepEqual(pin.predecessors, RELEASE_SQL_SPECS[KEY].predecessors);
-  assert.equal(pin.authorization_phrase, 'REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS');
+  assert.equal(pin.authorization_phrase, 'SHOW_ENDORSEMENT_EMAIL_STATUS');
   for (const k of ['admin_login', 'rds_identifier', 'rds_host', 'admin_secret_arn']) assert.equal(pin[k], SQL96_PIN[k], k);
   assert.equal(pin.tooling.status, 'built');
   assert.equal(pin.tooling.production_tool, RELEASE_PRODUCTION[KEY].cli);
-  assert.equal(pin.tooling.production_tool, 'scripts/deployment-guard/sql170-device-push-tokens-production-apply.mjs');
+  assert.equal(pin.tooling.production_tool, 'scripts/deployment-guard/sql170-check-endorsement-email-status-production-apply.mjs');
   assert.equal(pin.tooling.staging_workflow_choice, RELEASE_SQL_SPECS[KEY].choice);
   assert.equal(pin.tooling.one_shot_migration, KEY);
   assert.equal(pin.tooling.runbook, 'ops/production-sql-170-apply.md');
@@ -146,69 +152,74 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(tool.inspect_requires, undefined);
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
-  assert.match(rows, /"path":"scripts\/deployment-guard\/sql170-device-push-tokens-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql170-production-apply"\]/);
+  assert.match(rows, /"path":"scripts\/deployment-guard\/sql170-check-endorsement-email-status-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql170-production-apply"\]/);
   assert.match(rows, /sql167, sql168, sql169, sql170\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
-  for (const name of ['aws/tests/release-sql170-executor.test.mjs', 'aws/tests/release-sql170-production-apply.test.mjs', 'aws/tests/sql170-device-push-tokens-pg.test.mjs']) {
+  for (const name of ['aws/tests/release-sql170-executor.test.mjs', 'aws/tests/release-sql170-production-apply.test.mjs', 'aws/tests/sql170-check-endorsement-email-status-pg.test.mjs']) {
     assert.ok(scripts['test:deployment-guard'].includes(name), name);
     assert.ok(workflow.includes(name), name);
   }
 });
 
-test('order: no predecessor; one new table and two new DEFINER functions, nothing existing changed; no overlay plan entry yet; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; three DEFINER functions, eight columns and one index on check_endorsements, nothing else; no overlay plan entry yet; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
   assert.equal(spec.production_only, undefined);
   assert.equal(spec.production_noop, undefined);
-  assert.deepEqual(spec.functions, FNS.map((identity) => ({ identity, acl: [...ACL] })));
-  assert.deepEqual(spec.tables.map((t) => [t.name, t.rls, t.forced, t.acl]), [[TABLE, true, false, []]]);
-  assert.deepEqual(spec.prerequisites, ['auth.uid()', 'gen_random_uuid()', 'role checksops']);
-  for (const absent of ['views', 'policies', 'table_privileges', 'column_acl', 'dropped_functions', 'acl_functions', 'indexes', 'added_columns', 'altered_columns', 'constraints', 'triggers', 'dropped_triggers', 'definer_writes', 'altered_relations']) {
+  assert.deepEqual(spec.functions.map((f) => [f.identity, f.acl]), FUNCTIONS.map((f) => [f, ['checksops EXECUTE', 'owner EXECUTE']]));
+  assert.deepEqual(spec.added_columns.map((c) => [c.table, c.column, c.acl]), COLUMNS.map((c) => [TABLE, c, []]));
+  assert.deepEqual(spec.indexes.map((i) => [i.table, i.name]), [[TABLE, INDEX]]);
+  assert.deepEqual(spec.definer_writes, [TABLE]);
+  assert.deepEqual(spec.altered_relations, [TABLE]);
+  for (const absent of ['tables', 'views', 'policies', 'table_privileges', 'column_acl', 'dropped_functions', 'acl_functions', 'constraints', 'added_constraints', 'altered_columns', 'triggers', 'dropped_triggers']) {
     assert.equal(spec[absent], undefined, absent);
   }
-  // No other release migration names the table or the functions.
+  // No other release migration fingerprints these functions, columns or the index.
   for (const key of Object.keys(RELEASE_SQL_SPECS).filter((k) => k !== KEY)) {
     const other = JSON.stringify(RELEASE_SQL_SPECS[key]);
-    for (const name of ['device_push_tokens', 'aws_push_register_device', 'aws_push_unregister_device']) assert.ok(!other.includes(name), `${key} ${name}`);
+    for (const name of ['aws_endorsement_email_sent', 'aws_endorsement_email_event', 'aws_endorsement_link_opened', INDEX, 'link_open_count', 'email_message_id']) {
+      assert.ok(!other.includes(name), `${key} ${name}`);
+    }
   }
-  assert.match(COMMITTED.order_note, /^No predecessor\. SQL 170 creates one table and two functions and replaces nothing/);
-  for (const text of ['PR 2016', 'sql170_prerequisite_missing', 'sql170_unexpected_table', 'created_tables_absent_or_intended',
-    'created_tables_owned_by_login', 'at most 20 per user', 'No API, Lambda or SPA change is part of this pin', ABSENT]) {
+  assert.match(COMMITTED.order_note, /^No predecessor\. SQL 170 adds what a payee's endorsement request needs/);
+  for (const text of ['"Yeah build 1 and 2"', 'no tracking pixel', 'sql170_prerequisite_missing', 'sql170_definer_cannot_write',
+    'sql170_column_conflict', 'definer_can_write_relations', 'No API, Lambda or SPA change is part of this pin', ABSENT_PRE]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // The API route that calls the functions is a later step: nothing in the overlay plan waits on SQL 170 yet.
+  // The API that calls the functions is a later step: nothing in the overlay plan waits on SQL 170 yet.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.equal(plan.sql_prerequisites?.[SQL170_FILE], undefined);
-  assert.doesNotMatch(JSON.stringify(plan), /170_device_push_tokens/);
-  // The file: two guarded DO blocks, the table, its index, RLS, the two functions with their ACLs and comments; no other
-  // object, and no row written.
+  assert.doesNotMatch(JSON.stringify(plan), /170_check_endorsement_email_status/);
+  // Outside the DO blocks and function bodies: the columns, the index, the three functions and their ACL only.
   const text = fs.readFileSync(path.join(ROOT, SQL170_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');
-  // String literals (the COMMENT texts) blanked.
-  const bare = outside.replace(/'(?:[^']|'')*'/g, "''");
   assert.equal([...outside.matchAll(/\bDO\s+\$/g)].length, 2);
-  assert.deepEqual([...outside.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?(TABLE|INDEX|FUNCTION)\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+?)(?:\(|\s)/gi)].map((m) => `${m[1].toUpperCase()} ${m[2]}`),
-    ['TABLE public.device_push_tokens', 'INDEX device_push_tokens_user_idx', 'FUNCTION public.aws_push_register_device', 'FUNCTION public.aws_push_unregister_device']);
-  assert.deepEqual([...outside.matchAll(/\bALTER\s+TABLE\s+(\S+)\s+([^;]+);/gi)].map((m) => `${m[1]} ${m[2].trim()}`), [`${TABLE} ENABLE ROW LEVEL SECURITY`]);
-  assert.deepEqual([...bare.matchAll(/\b(GRANT|REVOKE)\s+[^;]+;/gi)].map((m) => m[0]), [
-    'REVOKE ALL ON FUNCTION public.aws_push_register_device(text, text) FROM PUBLIC;',
-    'GRANT EXECUTE ON FUNCTION public.aws_push_register_device(text, text) TO checksops;',
-    'REVOKE ALL ON FUNCTION public.aws_push_unregister_device(text) FROM PUBLIC;',
-    'GRANT EXECUTE ON FUNCTION public.aws_push_unregister_device(text) TO checksops;',
-  ]);
-  assert.doesNotMatch(bare, /\bDROP\b|\bPOLICY\b|\bTRIGGER\b|\bFORCE\b/i);
-  assert.doesNotMatch(outside, /\b(TRUNCATE|DELETE\s+FROM|INSERT\s+INTO|UPDATE\s+public\.)/i);
+  assert.deepEqual([...outside.matchAll(/\bCREATE OR REPLACE FUNCTION (public\.\w+)\(/g)].map((m) => m[1]),
+    ['public.aws_endorsement_email_sent', 'public.aws_endorsement_email_event', 'public.aws_endorsement_link_opened']);
+  assert.deepEqual([...outside.matchAll(/\bGRANT\s+([^;]+);/g)].map((m) => m[1].replace(/\s+/g, ' ')),
+    ['public.aws_endorsement_email_sent(uuid, text)', 'public.aws_endorsement_email_event(text, text, timestamp with time zone, text)', 'public.aws_endorsement_link_opened(uuid)']
+      .map((f) => `EXECUTE ON FUNCTION ${f} TO checksops`));
+  assert.deepEqual([...outside.matchAll(/ADD COLUMN IF NOT EXISTS (\w+)/g)].map((m) => m[1]), [...COLUMNS]);
+  assert.doesNotMatch(outside, /\bDROP\b|\bPOLICY\b|\bTRIGGER\b|ROW LEVEL SECURITY|\bCONSTRAINT\b|\bCREATE\s+TABLE\b/i);
+  assert.doesNotMatch(text, /\b(TRUNCATE|DELETE\s+FROM|INSERT\s+INTO)\b/i);
+  // Every UPDATE is a function's, on check_endorsements, and none sets status, signed_at, the token or updated_at.
+  const updates = [...text.matchAll(/\bUPDATE\s+(\S+)\s+\w+\s+SET([\s\S]*?)WHERE/gi)];
+  assert.equal(updates.length, 5);
+  for (const [, table, set] of updates) {
+    assert.equal(table, TABLE);
+    assert.doesNotMatch(set, /\b(status|signed_at|token|token_expires_at|updated_at)\s*=/);
+  }
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
-  for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, ABSENT, 'REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS']) {
+  for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, ABSENT_PRE, 'SHOW_ENDORSEMENT_EMAIL_STATUS']) {
     assert.ok(runbook.includes(value), value);
   }
   assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql170` \|/);
   assert.match(oneShot, /`sql168`, `sql169`, `sql170`\) \|/);
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql170-device-push-tokens-production-apply\.mjs --inspect/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql170-check-endorsement-email-status-production-apply\.mjs --inspect/);
 });
 
 test('the pending pin refuses before connecting; an approved copy allows only its own manifest; execute false, other hashes and phrases refuse', async () => {

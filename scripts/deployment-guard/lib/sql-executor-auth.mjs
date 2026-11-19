@@ -3927,27 +3927,29 @@ export const AUTHORIZED_SQL169_CHECK_BILLING_EVENTS_KEEP_CHARGE_ON_CHECK_DELETE 
   function_identities: Object.freeze([]),
 });
 
-// Device push tokens staging pin: SQL 170 (owner 2026-11-19: app notifications when signatures are received, funds are
-// disbursed or received, the wallet changes, or a message arrives; the app side is PR 2016). One new table,
-// public.device_push_tokens (RLS on, no policy, no grant but the owner's), and two new SECURITY DEFINER functions,
-// aws_push_register_device(text, text) and aws_push_unregister_device(text), EXECUTE checksops and the owner. No
-// predecessor (release-sql-specs.mjs). Pending until a reviewed pin change records a staging read-live; staging wave 62
-// when approved (ops/production-sql-170-apply.md).
-export const AUTHORIZED_SQL170_DEVICE_PUSH_TOKENS = Object.freeze({
+// Endorsement email status staging pin: SQL 170 (owner 2026-11-19, "Is there anyway for tenants to see if an email has
+// been delivered and opened? For this to show up near the payee signature request", then "Yeah build 1 and 2"). Eight
+// columns on public.check_endorsements (Resend message id, delivered, bounced and reason, marked as spam, link first and
+// last opened, open count), the partial index check_endorsements_email_message_id_idx and three SECURITY DEFINER
+// functions, EXECUTE checksops only; no predecessor (release-sql-specs.mjs). Pending until a reviewed pin change records
+// a staging read-live; staging wave 62 when approved (ops/production-sql-170-apply.md).
+export const AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS = Object.freeze({
   key: 'sql170',
-  filename: 'aws/workflows/sql/170_device_push_tokens.sql',
-  migration_id: '170_device_push_tokens',
+  filename: 'aws/workflows/sql/170_check_endorsement_email_status.sql',
+  migration_id: '170_check_endorsement_email_status',
   // The commit that last authored the file bytes.
-  commit: 'b38621d943ba87bdab66d3e77904e8da09b5328c',
-  source_sha256: '00caa09f9ba773593f8fd964da77b397b6e960ecd79f74affc527c64f9af1dad',
+  commit: 'bb45ea43f305f5bb7a75a9ea47c345bc2a2442db',
+  source_sha256: '44eb656742cc137bab736fb4ef54630a5c7a27df074428de918a0c7d9b942370',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql170', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: 'f30360d36ec937a37dcd88feaed80061c892fc990923105a0730c03aa9b9dd8d',
+  intended_replacement_sha256: 'e53dd2feaae35238f25a194cae9bc4d6356c21d4ad616051180c162eb59b0c81',
+  // The file creates and sets the ACL of these functions.
   function_identities: Object.freeze([
-    'public.aws_push_register_device(text, text)',
-    'public.aws_push_unregister_device(text)',
+    'public.aws_endorsement_email_event(text, text, timestamp with time zone, text)',
+    'public.aws_endorsement_email_sent(uuid, text)',
+    'public.aws_endorsement_link_opened(uuid)',
   ]),
 });
 
@@ -4028,7 +4030,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql167: AUTHORIZED_SQL167_CLAIM_LEDGER_RELINK_CHECK,
   sql168: AUTHORIZED_SQL168_MORTGAGE_DESK_SAME_AGENT_NEW_CHECK,
   sql169: AUTHORIZED_SQL169_CHECK_BILLING_EVENTS_KEEP_CHARGE_ON_CHECK_DELETE,
-  sql170: AUTHORIZED_SQL170_DEVICE_PUSH_TOKENS,
+  sql170: AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
