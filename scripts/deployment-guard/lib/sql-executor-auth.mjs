@@ -3953,6 +3953,30 @@ export const AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS = Object.freeze({
   ]),
 });
 
+// Device push tokens staging pin: SQL 171 (owner 2026-11-19: app notifications when signatures are received, funds are
+// disbursed or received, the wallet changes, or a message arrives; the app side is PR 2016). One new table,
+// public.device_push_tokens (RLS on, no policy, no grant but the owner's), and two new SECURITY DEFINER functions,
+// aws_push_register_device(text, text) and aws_push_unregister_device(text), EXECUTE checksops and the owner. No
+// predecessor (release-sql-specs.mjs). Renumbered from SQL 170 (main's SQL 170 is the endorsement email status). Pending
+// until a reviewed pin change records a staging read-live; staging wave 63 when approved (ops/production-sql-171-apply.md).
+export const AUTHORIZED_SQL171_DEVICE_PUSH_TOKENS = Object.freeze({
+  key: 'sql171',
+  filename: 'aws/workflows/sql/171_device_push_tokens.sql',
+  migration_id: '171_device_push_tokens',
+  // The commit that last authored the file bytes.
+  commit: '8f9d568d0644b014a539cc42ced12c6fd319535a',
+  source_sha256: '40d5fbfbbedf9a6787346f3d5e517857aa20cad37f328f7e0ab2db4dc1a64d59',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql171', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff',
+  function_identities: Object.freeze([
+    'public.aws_push_register_device(text, text)',
+    'public.aws_push_unregister_device(text)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -4031,6 +4055,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql168: AUTHORIZED_SQL168_MORTGAGE_DESK_SAME_AGENT_NEW_CHECK,
   sql169: AUTHORIZED_SQL169_CHECK_BILLING_EVENTS_KEEP_CHARGE_ON_CHECK_DELETE,
   sql170: AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS,
+  sql171: AUTHORIZED_SQL171_DEVICE_PUSH_TOKENS,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -4047,7 +4072,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168, sql169, sql170; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168, sql169, sql170, sql171; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
