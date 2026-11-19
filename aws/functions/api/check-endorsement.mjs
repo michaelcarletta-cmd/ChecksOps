@@ -5,11 +5,12 @@
  * Official endorsed rear JPEG must exist before workflow Ready is applied.
  * Does not trigger payment-direction disbursement, CheckAlt, or Moov.
  */
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import pg from 'pg';
 import { parseBody, ignoredSpoof, withIdentityWrite } from './data.mjs';
 import { APP_USER_ID_GUC } from './cognito.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
+import { loadProviderSecrets } from './provider-secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderTransactionalTemplate } from './email-templates.mjs';
@@ -180,6 +181,73 @@ const safeQuery = async (client, sql, params = []) => {
     return await client.query(sql, params);
   } catch {
     return { rows: [], rowCount: 0 };
+  }
+};
+
+/**
+ * Email status next to each payee (owner 2026-11-19: "Yeah build 1 and 2": delivered or bounced, and when
+ * the payee opened the link). Both are bookkeeping and never change what the request or the endorsement
+ * page answers: a missing SQL 170 function, a read-only connection or any other error is swallowed. Inside
+ * a transaction the call runs under a savepoint, so its failure cannot abort the caller's transaction.
+ */
+const bestEffortCall = async (client, sql, params) => {
+  let savepoint = false;
+  try {
+    await client.query('SAVEPOINT endorsement_email_status');
+    savepoint = true;
+  } catch { /* not in a transaction block: a failed statement aborts nothing */ }
+  try {
+    const result = await client.query(sql, params);
+    if (savepoint) await client.query('RELEASE SAVEPOINT endorsement_email_status');
+    return { ok: true, rows: result?.rows || [] };
+  } catch {
+    if (savepoint) {
+      try {
+        await client.query('ROLLBACK TO SAVEPOINT endorsement_email_status');
+        await client.query('RELEASE SAVEPOINT endorsement_email_status');
+      } catch { /* ignore */ }
+    }
+    return { ok: false, rows: [] };
+  }
+};
+
+// The Resend email id of the payee's request, so its delivery reports (email-queue.mjs handleResendWebhook)
+// find the row. Only a real Resend send has one; a sink or SES send is not tracked.
+export const recordEndorsementEmailSent = async (client, endorsementId, sendResult) => {
+  const messageId = typeof sendResult?.messageId === 'string' ? sendResult.messageId.trim() : '';
+  if (!endorsementId || sendResult?.mode !== 'resend' || !messageId) return false;
+  const result = await bestEffortCall(
+    client,
+    'SELECT public.aws_endorsement_email_sent($1::uuid, $2) AS tracked',
+    [endorsementId, messageId],
+  );
+  return result.ok && result.rows[0]?.tracked === true;
+};
+
+// The payee opened their endorsement page (the token link). Staff and tenant views never reach this path.
+export const recordEndorsementLinkOpened = async (client, endorsementId) => {
+  if (!endorsementId) return false;
+  const result = await bestEffortCall(
+    client,
+    'SELECT public.aws_endorsement_link_opened($1::uuid) AS opens',
+    [endorsementId],
+  );
+  return result.ok && Number(result.rows[0]?.opens || 0) > 0;
+};
+
+// The page load reads on a read-only connection; the open is recorded on its own short write connection
+// (or the injected client in tests). Never throws.
+const recordLinkOpenedFromPage = async (endorsementId, deps = {}) => {
+  let opened;
+  try {
+    opened = await publicDb(true, deps);
+    return await recordEndorsementLinkOpened(opened.client, endorsementId);
+  } catch {
+    return false;
+  } finally {
+    if (opened?.owned) {
+      try { await opened.client.end(); } catch { /* ignore */ }
+    }
   }
 };
 
@@ -916,6 +984,8 @@ export const runPublicEndorsement = async (event, deps = {}) => {
     let result;
     if (action === 'get_endorsement_data') {
       result = await runGetEndorsementData(client, String(body.token || '').trim(), spoof, deps);
+      // A valid, unexpired link was opened by the payee: record it (best effort; the response is unchanged).
+      if (result.ok && result.id) await recordLinkOpenedFromPage(result.id, deps);
     } else if (action === 'submit_endorsement') {
       result = await runSubmitEndorsement(client, event, body, spoof, deps);
     } else if (action === 'reject_endorsement') {
@@ -1367,6 +1437,8 @@ export const runAuthenticatedEndorsement = async ({
          AND COALESCE(deposit_recommendation, '') IS DISTINCT FROM 'ready_for_deposit'`,
       [endorsement.check_id],
     );
+    // The Resend email id, so delivered/bounced reports reach this payee's row (best effort).
+    const emailStatusTracking = await recordEndorsementEmailSent(client, endorsement.id, sendResult);
     // Contractor payees and the CC box get a notice that the request went out, without the signing link.
     const copies = await sendEndorsementCopyNotices({
       endorsement, check, payeeEmail: email, cc, branding, send, fetchImpl,
@@ -1378,7 +1450,12 @@ export const runAuthenticatedEndorsement = async ({
       event_type: 'request_sent',
       check_event_type: 'endorsement_request_sent',
       event_description: `Endorsement request sent to ${endorsement.payee_name} via email`,
-      event_data: { method: 'email', copy_notices_sent: copies.sent, copy_notices_failed: copies.failed },
+      event_data: {
+        method: 'email',
+        copy_notices_sent: copies.sent,
+        copy_notices_failed: copies.failed,
+        email_status_tracking: emailStatusTracking,
+      },
       actor_id: mapping.application_user_id,
     });
     return {
@@ -1391,6 +1468,7 @@ export const runAuthenticatedEndorsement = async ({
       emailProvider: sendResult?.provider || sendResult?.mode || (endorsementResendEnabled() ? 'resend' : 'sink'),
       copyNoticesSent: copies.sent,
       copyNoticesFailed: copies.failed,
+      emailStatusTracking,
       linkExpiresAt,
       ...denyDepositAdvance(),
       spoofFieldsIgnored: spoof,
@@ -1513,7 +1591,163 @@ export const runAuthenticatedEndorsement = async ({
   return { ok: true, statusCode: 200, success: true, ...completion, spoofFieldsIgnored: spoof };
 };
 
+/**
+ * Resend delivery reports for endorsement request emails (owner 2026-11-19: "Yeah build 1 and 2" — show
+ * tenants next to each payee whether the request was delivered or bounced). The Resend webhook points at
+ * /functions/v1/check-endorsement; handleCheckEndorsement hands any request carrying Svix headers here,
+ * before the public and signed-in actions, so no user session is involved.
+ *
+ * Resend signs every webhook with Svix: headers svix-id, svix-timestamp and svix-signature, the secret
+ * "whsec_<base64>" shown when the webhook is added in the Resend dashboard. The signed content is
+ * `${svix-id}.${svix-timestamp}.${raw body}`, HMAC-SHA256 with the base64-decoded secret, sent as one or
+ * more space-separated "v1,<base64>" entries. Nothing is read from or written to the database until the
+ * signature checks out, and a report older or newer than five minutes is refused (replay).
+ *
+ * email.delivered, email.bounced and email.complained are passed to public.aws_endorsement_email_event
+ * (SQL 170), which stamps the check_endorsements row whose latest request carries that Resend email id;
+ * an id that is not an endorsement request matches no row and changes nothing. Every other event type is
+ * acknowledged and ignored. A database failure answers 500 so Resend retries the delivery.
+ *
+ * The signing secret is RESEND_WEBHOOK_SECRET in the provider secrets JSON (PROVIDER_SECRETS_ARN), or the
+ * environment variable of the same name. Without it every report is refused (503) and nothing is read.
+ */
+export const RESEND_WEBHOOK_TOLERANCE_SECONDS = 5 * 60;
+export const RESEND_WEBHOOK_EVENTS = Object.freeze({
+  'email.delivered': 'delivered',
+  'email.bounced': 'bounced',
+  'email.complained': 'complained',
+});
+
+const headerValue = (headers, name) => {
+  if (!headers || typeof headers !== 'object') return '';
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (String(key).toLowerCase() === wanted) return String(value ?? '').trim();
+  }
+  return '';
+};
+
+export const rawWebhookBody = (event) => {
+  const body = event?.body;
+  if (body == null) return '';
+  if (typeof body !== 'string') return JSON.stringify(body);
+  return event?.isBase64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body;
+};
+
+const webhookSecretBytes = (secret) => {
+  const value = String(secret || '').trim();
+  if (!value) return null;
+  const encoded = value.startsWith('whsec_') ? value.slice('whsec_'.length) : value;
+  const bytes = Buffer.from(encoded, 'base64');
+  return bytes.length ? bytes : null;
+};
+
+export const verifyResendSignature = ({ secret, headers, rawBody, nowMs = Date.now() } = {}) => {
+  const key = webhookSecretBytes(secret);
+  if (!key) return { ok: false, reason: 'secret_missing' };
+  const id = headerValue(headers, 'svix-id');
+  const timestamp = headerValue(headers, 'svix-timestamp');
+  const signature = headerValue(headers, 'svix-signature');
+  if (!id || !timestamp || !signature) return { ok: false, reason: 'signature_headers_missing' };
+  if (!/^\d{1,12}$/.test(timestamp)) return { ok: false, reason: 'timestamp_invalid' };
+  const skew = Math.abs(Math.floor(nowMs / 1000) - Number(timestamp));
+  if (skew > RESEND_WEBHOOK_TOLERANCE_SECONDS) return { ok: false, reason: 'timestamp_out_of_tolerance' };
+  const expected = createHmac('sha256', key).update(`${id}.${timestamp}.${rawBody ?? ''}`).digest();
+  for (const entry of signature.split(' ')) {
+    const [version, value] = entry.split(',');
+    if (version !== 'v1' || !value) continue;
+    const given = Buffer.from(value, 'base64');
+    if (given.length === expected.length && timingSafeEqual(given, expected)) return { ok: true, id };
+  }
+  return { ok: false, reason: 'signature_mismatch' };
+};
+
+// The time Resend reports for the event; the email's own created_at only when the event has none.
+const eventTime = (body) => {
+  for (const value of [body?.created_at, body?.data?.created_at]) {
+    const ms = Date.parse(String(value || ''));
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  return null;
+};
+
+const bounceReason = (data) => {
+  const bounce = data?.bounce || {};
+  const reason = [bounce.message, bounce.subType, bounce.type].find((value) => typeof value === 'string' && value.trim());
+  return reason ? reason.trim().slice(0, 300) : null;
+};
+
+export const isResendWebhookEvent = (event) => Boolean(
+  headerValue(event?.headers, 'svix-id') || headerValue(event?.headers, 'svix-signature'),
+);
+
+const resendWebhookSecret = async (deps = {}) => {
+  let secrets = {};
+  try {
+    secrets = await (deps.loadProviderSecrets || loadProviderSecrets)();
+  } catch { /* fall back to the environment */ }
+  const value = secrets?.RESEND_WEBHOOK_SECRET || process.env.RESEND_WEBHOOK_SECRET || '';
+  return String(value).trim() || null;
+};
+
+export const handleEndorsementEmailWebhook = async (event, deps = {}) => {
+  const secret = await resendWebhookSecret(deps);
+  if (!secret) {
+    return { ok: false, statusCode: 503, error: 'webhook_not_configured' };
+  }
+  const rawBody = rawWebhookBody(event);
+  const nowMs = typeof deps.now === 'function' ? deps.now() : Date.now();
+  const verified = verifyResendSignature({ secret, headers: event?.headers, rawBody, nowMs });
+  if (!verified.ok) {
+    return { ok: false, statusCode: 401, error: 'invalid_signature', reason: verified.reason };
+  }
+  let body;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return { ok: false, statusCode: 400, error: 'invalid_json' };
+  }
+  const type = typeof body?.type === 'string' ? body.type : null;
+  const kind = RESEND_WEBHOOK_EVENTS[type];
+  const emailId = typeof body?.data?.email_id === 'string' ? body.data.email_id.trim() : '';
+  if (!kind || !emailId) {
+    return { ok: true, statusCode: 200, received: true, type, ignored: true };
+  }
+  let client;
+  let owned = false;
+  try {
+    if (deps.client) {
+      client = deps.client;
+    } else {
+      const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
+      const createClient = deps.createClient || ((config) => new Client(config));
+      client = createClient(buildWriteClientConfig(await loadCredentials(), { queryTimeoutMillis: 8000 }));
+      owned = true;
+      await client.connect();
+    }
+    const result = await client.query(
+      'SELECT public.aws_endorsement_email_event($1, $2, $3::timestamptz, $4) AS updated',
+      [emailId, kind, eventTime(body), kind === 'bounced' ? bounceReason(body.data) : null],
+    );
+    return {
+      ok: true,
+      statusCode: 200,
+      received: true,
+      type,
+      updated: Number(result.rows?.[0]?.updated || 0),
+    };
+  } catch (error) {
+    return { ok: false, statusCode: 500, error: 'webhook_record_failed', message: sanitizePublicError(error) };
+  } finally {
+    if (owned && client) {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+};
+
 export const handleCheckEndorsement = async (event, deps = {}) => {
+  // Resend's signed delivery reports (no user session): see handleEndorsementEmailWebhook.
+  if (isResendWebhookEvent(event)) return handleEndorsementEmailWebhook(event, deps);
   const body = parseBody(event);
   if (PUBLIC_ENDORSEMENT_ACTIONS.has(body.action || 'get_endorsement_data')) {
     return handlePublicEndorsement(event, deps);
