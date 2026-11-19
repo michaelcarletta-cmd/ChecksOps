@@ -5,7 +5,7 @@
  * (PR 2016) sends the phone's push token to the API, and this file is where the API keeps it.
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 171 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 63) from staging read-live run 44610159066, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the file and spec: one table (device_push_tokens: RLS on, no policy, no grant; SQL 118's revoke block for it) and
  *     two SECURITY DEFINER functions (search_path public, row_security off, EXECUTE checksops and the owner); no other
@@ -114,7 +114,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 171 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 171 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -125,11 +125,15 @@ test('pin: SQL 171 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql171-device-push-tokens');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending until a reviewed pin change records a staging read-live.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-19) from staging read-live run 44610159066: already_applied false,
+  // precondition_failures []. It read the derived pre-state (everything absent).
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-19: staging apply (wave 63) from staging read-live run 44610159066');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT);
+  assert.equal(pin.expected_live_definition_sha256, 'fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 63\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /read-live \(2026-11-19\)\.\*\* Run 44610159066/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
@@ -312,8 +316,9 @@ test('PostgreSQL 16, default privileges on: SQL 171 through the executor: the ab
     assert.deepEqual(r.release_sql_inspect.prerequisites_missing, []);
     assert.equal(r.already_applied, false);
     assert.equal(r.live_definition_sha256, ABSENT);
-    // A pending pin cannot apply (the committed pin is pending).
-    assert.equal(r.pin_executable, false);
+    // The committed staging pin is authorized on exactly this pre-state (wave 63, read-live run 44610159066).
+    assert.equal(r.pin_executable, true);
+    // A pending pin cannot apply: a pending copy of the committed pin (the committed pin is staging-authorized, wave 63).
     const pendingCopy = Object.freeze({ ...pendingPin(PINS[KEY]), expected_live_definition_sha256: ABSENT });
     assert.equal((await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy }))).ok, false);
     assert.equal((await admin.query(`SELECT to_regclass('${TABLE}') AS t`)).rows[0].t, null);

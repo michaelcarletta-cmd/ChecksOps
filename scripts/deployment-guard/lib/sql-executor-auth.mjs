@@ -3960,8 +3960,9 @@ export const AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS = Object.freeze({
 // disbursed or received, the wallet changes, or a message arrives; the app side is PR 2016). One new table,
 // public.device_push_tokens (RLS on, no policy, no grant but the owner's), and two new SECURITY DEFINER functions,
 // aws_push_register_device(text, text) and aws_push_unregister_device(text), EXECUTE checksops and the owner. No
-// predecessor (release-sql-specs.mjs). Renumbered from SQL 170 (main's SQL 170 is the endorsement email status). Pending
-// until a reviewed pin change records a staging read-live; staging wave 63 when approved (ops/production-sql-171-apply.md).
+// predecessor (release-sql-specs.mjs). Renumbered from SQL 170 (main's SQL 170 is the endorsement email status). Staging
+// apply authorized (wave 63) from staging read-live run 44610159066: the table and both functions absent, equal to the
+// derived pre-state (ops/production-sql-171-apply.md).
 export const AUTHORIZED_SQL171_DEVICE_PUSH_TOKENS = Object.freeze({
   key: 'sql171',
   filename: 'aws/workflows/sql/171_device_push_tokens.sql',
@@ -3969,9 +3970,11 @@ export const AUTHORIZED_SQL171_DEVICE_PUSH_TOKENS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '8f9d568d0644b014a539cc42ced12c6fd319535a',
   source_sha256: '40d5fbfbbedf9a6787346f3d5e517857aa20cad37f328f7e0ab2db4dc1a64d59',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-19: staging apply (wave 63) from staging read-live run 44610159066',
+  execute: true,
+  // Staging read-live run 44610159066 (main 5b1beac6f, executor deploy run 44609532435): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (everything absent).
+  expected_live_definition_sha256: 'fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555',
   // Code-derived: releaseIntendedHash('sql171', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff',
   function_identities: Object.freeze([
