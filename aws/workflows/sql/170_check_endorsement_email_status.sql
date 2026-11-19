@@ -80,7 +80,8 @@ BEGIN
   WHERE obj IS NULL;
   IF v_missing IS NULL AND NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_attribute a
-     WHERE a.attrelid = 'public.check_endorsements'::regclass AND a.attname = 'id' AND a.attnum > 0 AND NOT a.attisdropped
+     WHERE a.attrelid = pg_catalog.to_regclass('public.check_endorsements') AND a.attname = 'id' AND a.attnum > 0
+       AND NOT a.attisdropped
   ) THEN
     v_missing := ARRAY['column public.check_endorsements.id'];
   END IF;
