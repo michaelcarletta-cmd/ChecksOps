@@ -34,7 +34,7 @@ sends anything or is read by anything yet.
 API, Lambda or SPA change is part of this pin; the API route that calls the functions ships in its own step after this pin
 is applied in production.
 
-**Status:** applied in staging (wave 63, 2026-11-19, apply run 44614240107); staging acceptance: the staging apply under the owner's run approval ("deploy and apply SQL 171 on staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19) by the owner-reviewed pin change; not applied in production.
+**Status:** applied in staging (wave 63, 2026-11-19, apply run 44614240107); staging acceptance: the staging apply under the owner's run approval ("deploy and apply SQL 171 on staging"; no separate acceptance statement); applied to production (2026-11-19); the production pin is retired (`execute: false`). Nothing a user sees changes until the API route that calls the functions (`push-register-device`) is deployed.
 
 **Staging read-live (2026-11-19).** Run 44610159066 (main `5b1beac6f`, after executor inspect run 44608135543 and executor deploy
 run 44609532435 (executor CodeSha256 `0MpkBqG5…` -> `w7QtT7Tb…`)), under the owner's words "run staging read-live" and
@@ -69,6 +69,25 @@ pre-state equals staging's (read-live run 44610159066), so the staging apply too
 production pin with the staging apply (run 44614240107) as its staging acceptance and `execute: true` under the owner's words
 "approve the SQL 171 production pin". The owner merges the pin change; the apply runs only after that merge is on main and staged,
 under the owner's words for that run (phrase `REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS`).
+
+**Production apply (2026-11-19).** After the pin change (#2027, merged to main as `d3bd9476f` on the owner's words "merge 2027"),
+transfer run 44625822986 (`sql53-temporary-transfer.yml`) staged main `d3bd9476f` (tarball sha256
+`ddadb58ac09ff51a5a44ec4ad14939acffa68fc72e059f723928902fa8aafb86`, equal to the S3 sidecar, checked by `sha256sum -c` on the runner before each
+command; `SOURCE_COMMIT` matched). The runner `i-0c35557c4e5385406` was stopped with no RunShellScript command pending and was started at
+22:11:57Z (Online 22:12:14Z) by `user/claude-code`. Under the owner's words "REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS" (passed verbatim to
+this run; root volume 39% used): one-shot `--phase inspect` (SSM `f36eab39-9c69-4fde-a561-dbede503359a`, Success, exit 0, steps pin, source,
+inspect and contracts ok, nothing written) read live `fb6d8c05…` (`live_matches_expected` true, `already_applied` false,
+`apply_preconditions_met` true, `precondition_failures` `[]`); the apply command was sent only after that. Then `--phase apply` (SSM
+`64a77757-c18c-4b10-bdfe-b0555632e893`, Success, exit 0, run `6a62cd62-ede8-40bf-a096-3ba44bdd9fbe`, workstream `prod-sql171-device-push-tokens-20261119`, one_use_id
+`sql171-prod-19a5dee9-0cde-4c6b-833d-b7754cecd65a`): contracts claim-ledger, tenant-isolation and financial-write-protections ok; all 11 steps ok;
+manifest `f7a539de…`; receipt `fb6d8c05…` → `254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff` (intended), result `applied`; post-apply inspect
+`already_applied` true, `precondition_failures` `[]`, `device_push_tokens` `intended` (RLS on, 6 columns, 0 policies) and both functions
+`intended`, EXECUTE `checksops` and the owner. The whole output arrived through SSM (compact copy 14590 bytes, sha256
+`0025de9fe1357fbc47826c95e15d1d4df19da42c7b0d07c964f7a9be65f7bf51`, the same as computed on the runner); the two one-shot output files were left on the runner
+under `/var/tmp` (small, outside the command's temporary directory). A process check after the apply (SSM
+`553c3ea2-025d-437a-a4ad-c6fd58d278d5`) found no one-shot running; the runner stop was issued at 22:12:54Z (stopped 22:13:10Z) by
+`user/claude-code`. Recorded in the pin's `applied` and `production_evidence`; `execute` is false again. Production acceptance had not
+been reported by the owner when this record was written; this record does not claim it.
 
 ## Fingerprint
 

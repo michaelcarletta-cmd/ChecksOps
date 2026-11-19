@@ -1,8 +1,8 @@
 {
   "id": "sql171-device-push-tokens-production-apply",
   "migration": "sql171",
-  "authorization": "Owner approved 2026-11-19 (the owner's words of 2026-11-19: \"run staging read-live\", \"deploy staging executor\", \"approve the SQL 171 staging apply\", \"deploy and apply SQL 171 on staging\", \"run the SQL 171 production inspect\" and \"approve the SQL 171 production pin\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 171 after the staging apply below (production fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555 -> 254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 171 production pin change on 2026-11-19 in the words \"run staging read-live\", \"deploy staging executor\", \"approve the SQL 171 staging apply\", \"deploy and apply SQL 171 on staging\", \"run the SQL 171 production inspect\", \"approve the SQL 171 production pin\" and \"merge 2027\" (on the staging apply run 44614240107; fb6d8c05 -> 254a44e1, #2027, merged to main as d3bd9476f) and the one apply run recorded in applied (workstream prod-sql171-device-push-tokens-20261119) in the words \"REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS\", passed to it verbatim. That approval covered that one run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -61,5 +61,286 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44614240107",
     "basis": "Guarded staging SQL executor apply of sql171-device-push-tokens, run 44614240107 (2026-11-19, wave 63, staging pin PR #2026 merged as dc9e026), on the executor redeployed by deploy run 44613639425 (CodeSha256 w7QtT7Tb... -> gGHt9f/X6WJhjUhBSE1h3mhREaEO3AOpggK6Wh9z4Ac=, staging_api_untouched true, billing_sql44_untouched true), from the staging pre-state read by read-live run 44610159066 (fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555; main 5b1beac6f after executor inspect run 44608135543 and deploy run 44609532435, CodeSha256 0MpkBqG5hzidgNcm7CN2Fx57oOH5MDWLNcIb1KjV6mg= -> w7QtT7TbD2ML/x8dHe5T8WNkj8Y5JQQkpj+jPlZ7rnk=): expected live fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555; after: device_push_tokens intended, rls true, 6 columns, 0 policies; both functions intended, ACL checksops EXECUTE and owner EXECUTE. Read-live run 44614848373 then reported already_applied true, precondition_failures [], prerequisites_missing [], live 254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff == intended. The staging pin was authorized on the owner's words \"approve the SQL 171 staging apply\" and the redeploy, apply and post-apply read-live ran under the owner's run approval \"deploy and apply SQL 171 on staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-171-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql171-device-push-tokens-pg.test.mjs and through the executor by aws/tests/release-sql171-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so staging accepted exactly the production transition. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-19",
+    "result": "applied",
+    "source_commit": "d3bd9476fe1ac857c3f9b5950098470a360a22d1",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-d3bd9476fe1ac857c3f9b5950098470a360a22d1.tar.gz",
+      "sha256": "ddadb58ac09ff51a5a44ec4ad14939acffa68fc72e059f723928902fa8aafb86"
+    },
+    "source_staged_by": "sql53-temporary-transfer.yml run 44625822986 (staged main d3bd9476fe1ac857c3f9b5950098470a360a22d1; TARBALL_SHA256 ddadb58ac09ff51a5a44ec4ad14939acffa68fc72e059f723928902fa8aafb86, checked by sha256sum -c on the runner before each command; SOURCE_COMMIT matched)",
+    "migration_source_sha256": "40d5fbfbbedf9a6787346f3d5e517857aa20cad37f328f7e0ab2db4dc1a64d59",
+    "migration_source_sha256_note": "The one-shot source step checked the pinned migration file in the tarball against source_sha256 (step source ok).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql171-device-push-tokens-20261119",
+    "one_use_id": "sql171-prod-19a5dee9-0cde-4c6b-833d-b7754cecd65a",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql171; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "inspect_ssm_command_id": "f36eab39-9c69-4fde-a561-dbede503359a",
+    "apply_ssm_command_id": "64a77757-c18c-4b10-bdfe-b0555632e893",
+    "one_shot_run_id": "6a62cd62-ede8-40bf-a096-3ba44bdd9fbe",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql171_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. Recorded from the run's own output, which arrived complete through SSM (no truncation): the one-shot's JSON output (/var/tmp/sql171-oneshot-apply-20261119T221235Z.json, 20918 bytes as printed, sha256 851d1025fcdaa82e8951e5d7e70a81b3b24b26d62fafc1acba4884d8f3301bb7 as computed on the runner; compact copy 14590 bytes, sha256 0025de9fe1357fbc47826c95e15d1d4df19da42c7b0d07c964f7a9be65f7bf51 as computed on the runner, the same sha256 recomputed from the bytes read back). Pre-apply inspect: one-shot --phase inspect SSM f36eab39-9c69-4fde-a561-dbede503359a (Success, 2026-11-19T22:12:13.782Z to 2026-11-19T22:12:30.782Z, EXIT=0, run a1400a0d-3afb-48cb-8646-769679304444, steps pin, source, inspect and contracts ok, nothing written, output /var/tmp/sql171-oneshot-inspect-20261119T221223Z.json 4949 bytes as printed, sha256 d90008b85ffd1a3dfbe09853515190565978b161c59a2a899266a234c1206c21; compact copy 3713 bytes, sha256 73c8196e59db619caf5eea6e3139c6c1443bf77b1a1a9ebb1a7916a8093c1203, both computed on the runner) read live fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures []); the apply command (SSM 64a77757-c18c-4b10-bdfe-b0555632e893, Success, 2026-11-19T22:12:31.876Z to 2026-11-19T22:12:43.876Z, EXIT=0) was sent only after that output showed this pre-state. Source staged by transfer run 44625822986 (main d3bd9476fe1ac857c3f9b5950098470a360a22d1; TARBALL_SHA256 ddadb58ac09ff51a5a44ec4ad14939acffa68fc72e059f723928902fa8aafb86; the tarball passed sha256sum -c on the runner before each command and SOURCE_COMMIT matched). The runner was stopped with no RunShellScript command pending, started at 22:11:57Z (Online 22:12:14Z) by user/claude-code. Root volume 39% used (16G, 9.8G available). A process check after the apply (SSM 553c3ea2-025d-437a-a4ad-c6fd58d278d5, pgrep -af production-sql-one-shot) found no one-shot running, and the runner stop was issued at 22:12:54Z (stopped 22:13:10Z) by user/claude-code. The two one-shot output files were left on the runner under /var/tmp (outside the command's temporary work directory; small), unlike SQL 170's run. Production acceptance: not yet reported by the owner when this was recorded.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d3bd9476fe1ac857c3f9b5950098470a360a22d1 (production-sql-one-shot 6a62cd62-ede8-40bf-a096-3ba44bdd9fbe, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d3bd9476fe1ac857c3f9b5950098470a360a22d1 (production-sql-one-shot 6a62cd62-ede8-40bf-a096-3ba44bdd9fbe, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d3bd9476fe1ac857c3f9b5950098470a360a22d1 (production-sql-one-shot 6a62cd62-ede8-40bf-a096-3ba44bdd9fbe, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_push_register_device(text, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_push_unregister_device(text)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "device_push_tokens",
+            "state": "absent",
+            "rls": false,
+            "column_count": 0,
+            "policy_count": 0
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_push_register_device(text, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_push_unregister_device(text)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "f7a539deafc7ce2dc99a86d92f40cf0fa74b539aa05ccfcb1bb8a0f7bbcc6e1b",
+    "receipt": {
+      "migration": "sql171",
+      "workstream": "prod-sql171-device-push-tokens-20261119",
+      "commit": "d3bd9476fe1ac857c3f9b5950098470a360a22d1",
+      "sql_file": "aws/workflows/sql/171_device_push_tokens.sql",
+      "before_hash": "fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555",
+      "after_hash": "254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff",
+      "release_sql_inspect": {
+        "live_definition_sha256": "254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_push_register_device(text, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_push_unregister_device(text)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "device_push_tokens",
+            "state": "intended",
+            "rls": true,
+            "column_count": 6,
+            "policy_count": 0
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_push_register_device(text, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_push_unregister_device(text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "731a43894c46c5529e2126bccf20a3885f2f594fa22032d2d08c53b79c7f4159",
+      "unrelated_catalog_counts": {
+        "relations": 907,
+        "columns": 3594,
+        "constraints": 2280,
+        "policies": 481,
+        "functions": 1398,
+        "indexes": 666,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 192,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44614240107",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "254a44e1fadb60b19715d8d281fbf704d4070e43fb92e9ba35fad95186b717ff",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_push_register_device(text, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_push_unregister_device(text)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "device_push_tokens",
+            "state": "intended",
+            "rls": true,
+            "column_count": 6,
+            "policy_count": 0
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_push_register_device(text, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_push_unregister_device(text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql171-device-push-tokens-20261119, main d3bd9476f (tarball ddadb58a…, transfer run 44625822986, migration source 40d5fbfb… == pin), owner-approved run (\"REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS\"), pre-apply --phase inspect SSM f36eab39-9c69-4fde-a561-dbede503359a (live fb6d8c05…, live_matches_expected true, precondition_failures []), apply SSM 64a77757-c18c-4b10-bdfe-b0555632e893, run_id 6a62cd62-ede8-40bf-a096-3ba44bdd9fbe, one_use_id sql171-prod-19a5dee9-0cde-4c6b-833d-b7754cecd65a: every step ok; contracts claim-ledger, tenant-isolation and financial-write-protections ok (see applied.contract_results); manifest f7a539de…; fb6d8c05… -> 254a44e1…, result applied; post-apply inspect already_applied true, precondition_failures [], device_push_tokens intended (RLS on, 6 columns, 0 policies) and both functions intended, EXECUTE checksops and the owner. The whole one-shot output arrived through SSM (compact copy 14590 bytes, sha256 0025de9f…, recomputed from the bytes read back). A process check (SSM 553c3ea2-025d-437a-a4ad-c6fd58d278d5) found no one-shot process; the runner was stopped afterwards. Production acceptance was not yet reported by the owner when this was recorded. Nothing a user sees changes until the API route that calls the functions is deployed; execute is false so the pin is no longer a standing authorization."
   }
 }

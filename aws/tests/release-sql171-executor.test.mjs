@@ -6,7 +6,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 171 included); this file covers what is new:
  *
  *   - the pin: staging-authorized (wave 63) from staging read-live run 44610159066 (applied in staging by run 44614240107), code-derived,
- *     selectable, packed, in step with the execute-authorized production pin (production's own pre-state); the pinned commit
+ *     selectable, packed, in step with the production pin (applied 2026-11-19 from production's own pre-state, retired); the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the file and spec: one table (device_push_tokens: RLS on, no policy, no grant; SQL 118's revoke block for it) and
  *     two SECURITY DEFINER functions (search_path public, row_security off, EXECUTE checksops and the owner); no other
@@ -115,7 +115,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 171 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor', () => {
+test('pin: SQL 171 staging-authorized from its read-live, code-derived, selectable, packed, in step with the applied and retired production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -133,7 +133,7 @@ test('pin: SQL 171 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-19: staging apply (wave 63) from staging read-live run 44610159066');
   assert.equal(pin.expected_live_definition_sha256, ABSENT);
   assert.equal(pin.expected_live_definition_sha256, 'fb6d8c05258dd4094a5b48c9ca3e703ce4cbc2884bcfa07e81f9c35968a8b555');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 63, 2026-11-19, apply run 44614240107\); staging acceptance: the staging apply under the owner\'s run approval \(\"deploy and apply SQL 171 on staging\"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `ffa9f784-a7f8-49ff-b10e-895b1aae7f0b`, 2026-11-19\) by the owner-reviewed pin change; not applied in production\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 63, 2026-11-19, apply run 44614240107\); staging acceptance: the staging apply under the owner\'s run approval \(\"deploy and apply SQL 171 on staging\"; no separate acceptance statement\); applied to production \(2026-11-19\); the production pin is retired \(`execute: false`\)\./);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-171-apply.md'), 'utf8'), /read-live \(2026-11-19\)\.\*\* Run 44610159066/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
@@ -172,8 +172,10 @@ test('pin: SQL 171 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(prod.predecessors, []);
   // Production pin execute-authorized (owner-approved pin change of 2026-11-19) on the staging apply from the same pre-state.
   // Its pre-state is production's own (read-only inspect SSM ffa9f784): everything absent, equal to the staging pin's.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-19 /);
+  // Then applied 2026-11-19 ("REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS") and retired.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-19; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, ABSENT);

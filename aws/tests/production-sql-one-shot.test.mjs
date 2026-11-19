@@ -747,10 +747,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // "open the SQL 170 production pin PR", #2022: the read-only production inspect SSM 67613a6c recorded as its pre-state, the guarded
 // staging apply run 44576208345 from the same pre-state) until its record-and-retire change after its 2026-11-19 apply
 // ("apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS").
-// SQL 171's pin is execute-authorized (owner-approved pin change of 2026-11-19, "run the SQL 171 production inspect" /
-// "approve the SQL 171 production pin": the read-only production inspect SSM ffa9f784 recorded as its pre-state, the guarded
-// staging apply run 44614240107 from the same pre-state) until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql171']);
+// SQL 171's pin was execute-authorized (owner-approved pin change of 2026-11-19, "run the SQL 171 production inspect" /
+// "approve the SQL 171 production pin", #2027: the read-only production inspect SSM ffa9f784 recorded as its pre-state, the guarded
+// staging apply run 44614240107 from the same pre-state) until its record-and-retire change after its 2026-11-19 apply
+// ("REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS").
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -858,6 +859,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql169: Object.freeze({ ssm: '9c92cb54-fc92-47b0-9fa1-cb7764b2f992', run: 'd64ba504-e0e3-42ea-92d4-57ae4af26008', one_use_id: 'sql169-prod-91223610-db3b-4249-b7b3-59502f378d5d', workstream: 'prod-sql169-keep-charge-on-delete-20261116', approval: 'apply SQL 169 in production KEEP_CHARGES_WHEN_CHECK_IS_DELETED' }),
   // SQL 170's production apply of 2026-11-19 (main 7d5278074), on the owner's "apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS".
   sql170: Object.freeze({ ssm: 'd3acdfce-755f-498c-9d88-d35fa645b43e', run: 'ec7cfd44-a912-49c9-b908-0c4b0269c201', one_use_id: 'sql170-prod-0c205621-fa88-41f5-9903-b12cd1465b28', workstream: 'prod-sql170-endorsement-email-status-20261119', approval: 'apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS' }),
+  // SQL 171's production apply of 2026-11-19 (main d3bd9476f), on the owner's "REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS".
+  sql171: Object.freeze({ ssm: '64a77757-c18c-4b10-bdfe-b0555632e893', run: '6a62cd62-ede8-40bf-a096-3ba44bdd9fbe', one_use_id: 'sql171-prod-19a5dee9-0cde-4c6b-833d-b7754cecd65a', workstream: 'prod-sql171-device-push-tokens-20261119', approval: 'REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb), on the owner's "apply SQL 136 in production".
   sql136: Object.freeze({ ssm: 'd52b099a-56c7-4148-828c-2530b48c40fb', run: 'b47f4c29-c5bf-4288-82ff-870f057489d9', one_use_id: 'sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673', workstream: 'prod-sql136-money-write-restrictive-20261102', approval: 'apply SQL 136 in production' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).
