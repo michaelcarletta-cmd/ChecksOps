@@ -10797,6 +10797,26 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   assert.deepEqual(Object.keys(ACH.members), [ADD, ROUTER]);
   const acceptedAdd = sha(`aws/functions/api/${ADD}`);
   const acceptedRouter = sha(`aws/functions/api/${ROUTER}`);
+  // Applied 2026-11-20 (production runs 44654350821 and 44656016371, recorded): the router row now expects the applied bytes
+  // and names the applied record. PLANNED is the plan as this planning change left it; the checks below run on it.
+  const ACH_APPLIED_REL = 'aws/tests/fixtures/production-ach-authorization-route-applied-manifest-2026-11-20.json';
+  const ACH_APPLIED = JSON.parse(fs.readFileSync(path.join(ROOT, ACH_APPLIED_REL), 'utf8'));
+  const PLANNED = structuredClone(PLAN);
+  PLANNED.members[ROUTER] = { ...PLAN.members[ROUTER], expected_live_sha256: ACH.members[ROUTER].live_sha256, manifest: ACH_REL };
+  assert.deepEqual(PLAN.members[ROUTER], { ...PLANNED.members[ROUTER], expected_live_sha256: acceptedRouter, manifest: ACH_APPLIED_REL });
+  assert.equal(ACH_APPLIED.workstream_id, 'ach-authorization-route-applied');
+  assert.equal(ACH_APPLIED.deploy_authorized, false);
+  assert.match(ACH_APPLIED.authorization, /^Record only \(2026-11-20\)/);
+  assert.deepEqual(ACH_APPLIED.members, {
+    [ADD]: { live_sha256: acceptedAdd, accepted_sha256: acceptedAdd, operation: 'add', previous_manifest: ACH_REL },
+    [ROUTER]: { live_sha256: acceptedRouter, accepted_sha256: acceptedRouter, operation: 'replace', previous_manifest: ACH_REL },
+  });
+  for (const text of ['DEPLOY ach-authorization.mjs TO PRODUCTION', 'DEPLOY app-services.mjs TO PRODUCTION', 'production apply run 44654350821',
+    'production apply run 44656016371', 'actions/runs/44653472240', 'actions/runs/44653688697', 'VERIFIED', 'ALREADY_ACCEPTED']) {
+    assert.ok(ACH_APPLIED.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`ACH debit authorization route applied 2026-11-20`));
+  assert.ok(PLAN.notes.includes(ACH_APPLIED_REL));
   // The ADD: main's bytes, absent live. The REPLACE: from the transfer to bank router bytes (that manifest's accepted, put live by
   // the seventh production rebuild, apply 43464046767) to main's; the transfer to bank manifest is its previous manifest.
   assert.deepEqual(ACH.members[ADD], { live_sha256: null, accepted_sha256: acceptedAdd, operation: 'add', previous_manifest: null });
@@ -10808,7 +10828,7 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   assert.equal(rebuild.members[ROUTER].accepted_sha256, T2B_ROUTER_BYTES);
   // The plan rows: the ADD on main's bytes, no hold; the router row moved on from the transfer to bank row, its hold unchanged.
   assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: acceptedAdd, expected_live_sha256: null, sql_before: null, manifest: ACH_REL });
-  assert.deepEqual(PLAN.members[ROUTER], { ...PLAN_PRE_ACH.members[ROUTER], accepted_sha256: acceptedRouter, expected_live_sha256: T2B_ROUTER_BYTES, manifest: ACH_REL });
+  assert.deepEqual(PLANNED.members[ROUTER], { ...PLAN_PRE_ACH.members[ROUTER], accepted_sha256: acceptedRouter, expected_live_sha256: T2B_ROUTER_BYTES, manifest: ACH_REL });
   assert.deepEqual(PLAN_PRE_ACH.members[ROUTER], { operation: 'replace', accepted_sha256: T2B_ROUTER_BYTES, expected_live_sha256: T2B.members[ROUTER].live_sha256, sql_before: null, manifest: T2B_REL });
   assert.ok(PLAN.notes.includes('ACH debit authorization route (owner 2026-11-19, "Go with A")'));
   assert.ok(PLAN.notes.includes(`app-services.mjs REPLACE ${T2B_ROUTER_BYTES.slice(0, 8)} -> ${acceptedRouter.slice(0, 8)}`));
@@ -10825,6 +10845,7 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   assert.equal(WORKFLOW.replace(`          - ${ADD}\n`, ''), WORKFLOW_PRE_ACH);
   for (const name of [ADD, ROUTER]) {
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLANNED }).ok, true, name);
     assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
   }
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
@@ -10833,23 +10854,23 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   assert.match(routerSource, /'save-ach-authorization'/);
   // Inspect: the ADD READY while absent, ALREADY_ACCEPTED at main's bytes, a collision for anything else present.
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
-  const readyAdd = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD) });
+  const readyAdd = await run(inspect(ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ADD, { plan: PLANNED }) });
   assert.equal(readyAdd.state, 'READY');
   assert.equal(readyAdd.mutation, false);
-  assert.equal((await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: acceptedAdd }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ADD, { sha256: acceptedAdd, plan: PLANNED }) })).state, 'ALREADY_ACCEPTED');
   await assert.rejects(
-    run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: 'c'.repeat(64) }) }),
+    run(inspect(ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ADD, { sha256: 'c'.repeat(64), plan: PLANNED }) }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   // The REPLACE: READY on the transfer to bank bytes, ALREADY_ACCEPTED on main's; the external disbursement bytes (the transfer
   // to bank REPLACE's pre-state) or anything else a reconciliation stop.
-  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: T2B_ROUTER_BYTES }) });
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: T2B_ROUTER_BYTES, plan: PLANNED }) });
   assert.equal(readyRouter.state, 'READY');
   assert.equal(readyRouter.mutation, false);
-  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter, plan: PLANNED }) })).state, 'ALREADY_ACCEPTED');
   for (const other of [T2B.members[ROUTER].live_sha256, 'c'.repeat(64)]) {
     await assert.rejects(
-      run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: other }) }),
+      run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: other, plan: PLANNED }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
       other,
     );
@@ -10858,18 +10879,26 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   // the router then passes from the transfer to bank bytes. (On the committed plan: the shared replay helpers start
   // app-services.mjs from older recorded bytes.)
   const env = applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: T2B_ROUTER_BYTES });
-  const pendingPlan = structuredClone(PLAN);
+  const pendingPlan = structuredClone(PLANNED);
   await assert.rejects(
     run(env, { ...applyDeps(ROUTER, { sha256: T2B_ROUTER_BYTES, pending: [ADD], plan: pendingPlan }).deps, plan: pendingPlan }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
-  const { deps: addDeps, calls: addCalls } = applyDeps(ADD);
+  const { deps: addDeps, calls: addCalls } = applyDeps(ADD, { plan: structuredClone(PLANNED) });
   const added = await run(applyEnv(ADD), addDeps);
   assert.equal(added.mutation, false);
   assert.deepEqual(addCalls.receipt.owned_member_ops, { replace: [], add: [ADD] });
-  const routerPlan = structuredClone(PLAN);
+  const routerPlan = structuredClone(PLANNED);
   const { deps: routerDeps, calls: routerCalls } = applyDeps(ROUTER, { sha256: T2B_ROUTER_BYTES, plan: routerPlan });
   const replaced = await run(env, { ...routerDeps, plan: routerPlan });
   assert.equal(replaced.mutation, false);
   assert.deepEqual(routerCalls.receipt.owned_member_ops, { replace: [ROUTER], add: [] });
+  // On the committed (recorded) plan: both members are already accepted at the applied bytes; the transfer to bank router
+  // bytes are no longer an accepted live state.
+  assert.equal((await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: acceptedAdd }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: T2B_ROUTER_BYTES }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
 });
