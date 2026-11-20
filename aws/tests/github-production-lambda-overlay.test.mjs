@@ -10974,6 +10974,32 @@ test('App push registration (2026-11-19, planning only), combined with the ACH r
   assert.deepEqual(ACH_ROUTER, { live_sha256: ACH_ROUTER.accepted_sha256, accepted_sha256: ACH_ROUTER.accepted_sha256, operation: 'replace', previous_manifest: ACH_REL });
   assert.deepEqual(PUSH.members[ROUTER], { live_sha256: ACH_ROUTER.accepted_sha256, accepted_sha256: sha(`aws/functions/api/${ROUTER}`), operation: 'replace', previous_manifest: ACH_APPLIED_REL });
   assert.notEqual(PUSH.members[ROUTER].live_sha256, PUSH.members[ROUTER].accepted_sha256);
+  // Applied 2026-11-20 (production runs 44746906815 and 44748599628, recorded): the router row now expects the applied bytes
+  // and names the applied record. PLANNED is the plan as this planning change left it; the checks below run on it.
+  const PUSH_APPLIED_REL = 'aws/tests/fixtures/production-push-register-device-applied-manifest-2026-11-20.json';
+  const PUSH_APPLIED = readJson(PUSH_APPLIED_REL);
+  const acceptedAdd = sha(`aws/functions/api/${PUSH_ADD}`);
+  const acceptedRouter = sha(`aws/functions/api/${ROUTER}`);
+  const PLANNED = structuredClone(PLAN);
+  PLANNED.members[ROUTER] = { ...PLAN.members[ROUTER], expected_live_sha256: PUSH.members[ROUTER].live_sha256, manifest: PUSH_REL };
+  assert.deepEqual(PLAN.members[ROUTER], { ...PLANNED.members[ROUTER], expected_live_sha256: acceptedRouter, manifest: PUSH_APPLIED_REL });
+  assert.equal(PUSH_APPLIED.workstream_id, 'push-register-device-applied');
+  assert.equal(PUSH_APPLIED.deploy_authorized, false);
+  assert.equal(PUSH_APPLIED.live_lambda, FUNCTION_NAME);
+  assert.match(PUSH_APPLIED.authorization, /^Record only \(2026-11-20\)/);
+  assert.deepEqual(PUSH_APPLIED.members, {
+    [PUSH_ADD]: { live_sha256: acceptedAdd, accepted_sha256: acceptedAdd, operation: 'add', previous_manifest: PUSH_REL },
+    [ROUTER]: { live_sha256: acceptedRouter, accepted_sha256: acceptedRouter, operation: 'replace', previous_manifest: PUSH_REL },
+  });
+  for (const text of ['DEPLOY push-register-device.mjs TO PRODUCTION', 'DEPLOY app-services.mjs TO PRODUCTION', 'deploy push-register-device to staging',
+    'production apply run 44746906815', 'production apply run 44748599628', 'actions/runs/44742631391', 'actions/runs/44742884491', 'VERIFIED',
+    '4801a4e88039a3a14b56f02bfc78647276ed458a', 'expected live 4a66482f', 'index.mjs is untouched', 're-inspect run 44750691843', 're-inspect run 44750744943',
+    'ALREADY_ACCEPTED', 'push-register-device with body {} answered 401']) {
+    assert.ok(PUSH_APPLIED.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes('App push registration applied 2026-11-20'));
+  assert.ok(PLAN.notes.includes('each VERIFIED and re-inspected ALREADY_ACCEPTED (runs 44750691843, 44750744943)'));
+  assert.ok(PLAN.notes.includes(PUSH_APPLIED_REL));
   // The combined router: both Class A names routed, the ACH lines as the ACH router had them.
   const routerSource = fs.readFileSync(path.join(API, ROUTER), 'utf8');
   for (const line of ["import { handleSaveAchAuthorization } from './ach-authorization.mjs';", "import { handlePushRegisterDevice } from './push-register-device.mjs';",
@@ -10990,7 +11016,7 @@ test('App push registration (2026-11-19, planning only), combined with the ACH r
   assert.ok(PLAN.notes.includes('Combined router (owner 2026-11-20, "Merge 2029 and 2030")'));
   // The plan rows: the ADD held on SQL 171, the router REPLACE on the applied ACH router bytes; the ACH ADD row as it was.
   assert.deepEqual(PLAN.members[PUSH_ADD], { operation: 'add', accepted_sha256: PUSH.members[PUSH_ADD].accepted_sha256, expected_live_sha256: null, sql_before: SQL171_FILE, manifest: PUSH_REL });
-  assert.deepEqual(PLAN.members[ROUTER], { operation: 'replace', accepted_sha256: PUSH.members[ROUTER].accepted_sha256, expected_live_sha256: PUSH.members[ROUTER].live_sha256, sql_before: null, manifest: PUSH_REL });
+  assert.deepEqual(PLANNED.members[ROUTER], { operation: 'replace', accepted_sha256: PUSH.members[ROUTER].accepted_sha256, expected_live_sha256: PUSH.members[ROUTER].live_sha256, sql_before: null, manifest: PUSH_REL });
   assert.deepEqual(PLAN.members[ACH_ADD], PLAN_PRE_PUSH.members[ACH_ADD]);
   assert.equal(PLAN.members[ACH_ADD].manifest, ACH_REL);
   // Before this plan: the router row on the ACH applied record, no ADD row, no SQL 171 prerequisite.
@@ -11023,54 +11049,68 @@ test('App push registration (2026-11-19, planning only), combined with the ACH r
   assert.ok(WORKFLOW.includes(`          - tenant-management-v2.mjs\n          - ${ACH_ADD}\n          - ${ROUTER}\n`));
   for (const name of [PUSH_ADD, ROUTER]) {
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLANNED }).ok, true, name);
     assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
   }
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
   // Inspect: the ADD READY while absent, ALREADY_ACCEPTED at its bytes, a collision for anything else present.
-  const readyAdd = await run(inspect(PUSH_ADD), { root: ROOT, inspectLive: liveFor(PUSH_ADD) });
+  const readyAdd = await run(inspect(PUSH_ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(PUSH_ADD, { plan: PLANNED }) });
   assert.equal(readyAdd.state, 'READY');
   assert.equal(readyAdd.mutation, false);
-  assert.equal((await run(inspect(PUSH_ADD), { root: ROOT, inspectLive: liveFor(PUSH_ADD, { sha256: PUSH.members[PUSH_ADD].accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(PUSH_ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(PUSH_ADD, { sha256: PUSH.members[PUSH_ADD].accepted_sha256, plan: PLANNED }) })).state, 'ALREADY_ACCEPTED');
   await assert.rejects(
-    run(inspect(PUSH_ADD), { root: ROOT, inspectLive: liveFor(PUSH_ADD, { sha256: 'c'.repeat(64) }) }),
+    run(inspect(PUSH_ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(PUSH_ADD, { sha256: 'c'.repeat(64), plan: PLANNED }) }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   // The router: READY only from the applied ACH router bytes, ALREADY_ACCEPTED at the combined bytes; a router with only the push
   // route (de4fb39d, this plan before the combination), the transfer to bank bytes (6735d88f), the older 8b91a644 or anything
   // else a reconciliation stop (a read-only production inspect must confirm the live bytes first).
   const PUSH_ONLY_ROUTER = 'de4fb39d56fc21ec5ef3070d85734d213d763fe9bd4b5dea4da67bcb201d58fb';
-  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: ACH_ROUTER.accepted_sha256 }) });
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: ACH_ROUTER.accepted_sha256, plan: PLANNED }) });
   assert.equal(readyRouter.state, 'READY');
   assert.equal(readyRouter.mutation, false);
-  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: PUSH.members[ROUTER].accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: PUSH.members[ROUTER].accepted_sha256, plan: PLANNED }) })).state, 'ALREADY_ACCEPTED');
   for (const other of [PUSH_ONLY_ROUTER, T2B.members[ROUTER].accepted_sha256, T2B.members[ROUTER].live_sha256, 'c'.repeat(64)]) {
     await assert.rejects(
-      run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: other }) }),
+      run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: other, plan: PLANNED }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
       other,
     );
   }
   // Apply (dry): the ADD is refused while SQL 171 is not recorded verified live (a copy) and passes the SQL gate on the
   // committed plan, one receipt for this member.
-  const sql171Pending = structuredClone(PLAN);
+  const sql171Pending = structuredClone(PLANNED);
   sql171Pending.sql_prerequisites[SQL171_FILE] = { verified_live: false, evidence: null };
   await assert.rejects(
     run(applyEnv(PUSH_ADD), { ...applyDeps(PUSH_ADD, { plan: sql171Pending }).deps, plan: sql171Pending }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL171_FILE,
   );
-  const { deps: addDeps, calls } = applyDeps(PUSH_ADD);
+  const { deps: addDeps, calls } = applyDeps(PUSH_ADD, { plan: structuredClone(PLANNED) });
   const added = await run(applyEnv(PUSH_ADD), addDeps);
   assert.equal(added.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [PUSH_ADD] });
   // The router is refused while either ADD is not live (its imports), and links once both are.
+  const routerEnv = applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ACH_ROUTER.accepted_sha256 });
   for (const pending of [PUSH_ADD, ACH_ADD]) {
+    const pendingPlan = structuredClone(PLANNED);
     await assert.rejects(
-      run(applyEnv(ROUTER), applyDeps(ROUTER, { pending: [pending] }).deps),
+      run(routerEnv, { ...applyDeps(ROUTER, { sha256: ACH_ROUTER.accepted_sha256, pending: [pending], plan: pendingPlan }).deps, plan: pendingPlan }),
       (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing.includes(pending),
       pending,
     );
   }
-  const router = await run(applyEnv(ROUTER), applyDeps(ROUTER).deps);
+  const routerPlan = structuredClone(PLANNED);
+  const { deps: routerDeps, calls: routerCalls } = applyDeps(ROUTER, { sha256: ACH_ROUTER.accepted_sha256, plan: routerPlan });
+  const router = await run(routerEnv, { ...routerDeps, plan: routerPlan });
   assert.equal(router.mutation, false);
+  assert.deepEqual(routerCalls.receipt.owned_member_ops, { replace: [ROUTER], add: [] });
   assert.match(fs.readFileSync(path.join(API, ROUTER), 'utf8'), /case 'push-register-device':\n\s+return handlePushRegisterDevice\(event\);/);
+  // On the committed (recorded) plan: both members are already accepted at the applied bytes; the applied ACH router bytes are
+  // no longer an accepted live state.
+  assert.equal((await run(inspect(PUSH_ADD), { root: ROOT, inspectLive: liveFor(PUSH_ADD, { sha256: acceptedAdd }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: ACH_ROUTER.accepted_sha256 }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
 });
