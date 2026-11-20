@@ -3898,9 +3898,16 @@ test('Onboarding reconciliation: four live onboarding members replaced the bytes
   assert.match(manifest.notes, /run 39669873076/);
   assert.match(PLAN.notes, /Onboarding reconciliation \(2026-10-26, planning only, not authorized\)/);
   const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
+  // The bank verified-means-linked plan (2026-11-20, planning only) has since moved handlers.mjs on: its applied bytes
+  // are read from that plan's manifest (live_sha256), and its row as it stood before that plan.
+  const LATER = readJson('aws/tests/fixtures/production-bank-verified-connected-manifest-2026-11-20.json').members;
   for (const name of NAMES) {
-    const onMain = sha(`aws/functions/api/${name}`);
-    const row = PLAN.members[name];
+    const moved = LATER[name];
+    if (moved) assert.equal(moved.previous_manifest, APPLIED_REL, name);
+    const onMain = moved ? moved.live_sha256 : sha(`aws/functions/api/${name}`);
+    const row = moved
+      ? { ...PLAN.members[name], accepted_sha256: moved.live_sha256, expected_live_sha256: moved.live_sha256, manifest: moved.previous_manifest }
+      : PLAN.members[name];
     const entry = manifest.members[name];
     // The live bytes, from their recorded evidence: the 2026-10-17 release manifest's accepted bytes
     // (main's file at 008af40e2, which the 2026-10-21 rebuild deployed; observed by RUNS[name]).
@@ -3921,7 +3928,8 @@ test('Onboarding reconciliation: four live onboarding members replaced the bytes
     // The pre-apply bytes are no longer an accepted live state.
     await assert.rejects(run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: live }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED, name);
     const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) });
-    assert.equal(done.state, 'ALREADY_ACCEPTED', name);
+    // A member a later plan moved on is READY from these applied bytes instead of already accepted.
+    assert.equal(done.state, moved ? 'READY' : 'ALREADY_ACCEPTED', name);
   }
   // Plan order: the four members in this order, before the send module and providers.mjs.
   const at = (name) => PLAN.order.indexOf(name);
