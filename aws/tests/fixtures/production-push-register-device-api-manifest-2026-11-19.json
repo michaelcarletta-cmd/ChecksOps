@@ -1,0 +1,23 @@
+{
+  "workstream_id": "push-register-device-api",
+  "authorization": "Pending owner review (2026-11-19). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "App push registration (2026-11-19, planning only): the iOS/Android app (PR 2016, src/components/NativePushRegistration.tsx) posts { token, platform } to push-register-device after sign-in. ADD push-register-device.mjs (route push-register-device: withIdentity as the verified sign-in, the body checked before any database connection (platform ios or android; token 1 to 4096 characters, no whitespace), one call to SQL 171's public.aws_push_register_device(platform, token), or public.aws_push_unregister_device(token) for { action: 'unregister', token }; 42501 answers 403, 22023 400, a missing function 503, anything else 500 without details; the token is never logged, only a 12-character sha256 reference; no notification is sent and no token is read), held on SQL 171, then REPLACE app-services.mjs 4a66482f -> b235327f (the Class A name push-register-device routed to it). Combined router (owner 2026-11-20, \"Merge 2029 and 2030\"): the router REPLACE carries both save-ach-authorization (#2030) and push-register-device; its pre-state is the ACH router 4a66482f, applied 2026-11-20 (production apply run 44656016371, VERIFIED, re-inspected ALREADY_ACCEPTED in run 44656155867; recorded in aws/tests/fixtures/production-ach-authorization-route-applied-manifest-2026-11-20.json), which is main's router with the push-register-device route added on top; the ACH manifests keep what they recorded. A read-only production inspect of app-services.mjs must confirm the live bytes first; any other bytes stop as SOURCE_RECONCILIATION_REQUIRED. SQL 171 (aws/workflows/sql/171_device_push_tokens.sql) is applied and recorded in staging and production (record #2028). index.mjs is untouched. Nothing deployed.",
+  "members": {
+    "push-register-device.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "bce04c68019c030b0364a73aec75a894d80ea7abc44bc910a7ad5012e7b2ff54",
+      "operation": "add",
+      "required_imports": [
+        "data.mjs"
+      ]
+    },
+    "app-services.mjs": {
+      "live_sha256": "4a66482f9402d5091a45ae5035e20bfd70c2bc0034edff474bda641f238c3131",
+      "accepted_sha256": "b235327f9fe3afa8e201c61fad21c584e539d210970cf90c40ad8edad2f5a527",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-ach-authorization-route-applied-manifest-2026-11-20.json"
+    }
+  }
+}
