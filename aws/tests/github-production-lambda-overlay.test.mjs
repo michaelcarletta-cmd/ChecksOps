@@ -10993,10 +10993,12 @@ test('App push registration (2026-11-19, planning only), combined with the ACH r
   });
   for (const text of ['DEPLOY push-register-device.mjs TO PRODUCTION', 'DEPLOY app-services.mjs TO PRODUCTION', 'deploy push-register-device to staging',
     'production apply run 44746906815', 'production apply run 44748599628', 'actions/runs/44742631391', 'actions/runs/44742884491', 'VERIFIED',
-    '4801a4e88039a3a14b56f02bfc78647276ed458a', 'expected live 4a66482f', 'index.mjs is untouched']) {
+    '4801a4e88039a3a14b56f02bfc78647276ed458a', 'expected live 4a66482f', 'index.mjs is untouched', 're-inspect run 44750691843', 're-inspect run 44750744943',
+    'ALREADY_ACCEPTED', 'push-register-device with body {} answered 401']) {
     assert.ok(PUSH_APPLIED.notes.includes(text), text);
   }
   assert.ok(PLAN.notes.includes('App push registration applied 2026-11-20'));
+  assert.ok(PLAN.notes.includes('each VERIFIED and re-inspected ALREADY_ACCEPTED (runs 44750691843, 44750744943)'));
   assert.ok(PLAN.notes.includes(PUSH_APPLIED_REL));
   // The combined router: both Class A names routed, the ACH lines as the ACH router had them.
   const routerSource = fs.readFileSync(path.join(API, ROUTER), 'utf8');
