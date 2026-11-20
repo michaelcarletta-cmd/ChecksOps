@@ -22,7 +22,7 @@ import {
   runHomeownerShareLibraryDocument,
   runTenantLibraryDocumentCreate,
 } from '../functions/api/tenant-library.mjs';
-import { runSignatureLibraryDocumentCopy } from '../functions/api/signature-library-source.mjs';
+import { runSignatureLibraryDocumentCopy, runSignatureLibraryDocumentList, signableLibraryDocument } from '../functions/api/signature-library-source.mjs';
 import { authorizeSignatureDocumentPath } from '../functions/api/write-signature.mjs';
 import { executeTenantDocuments } from '../functions/api/write-app-metadata.mjs';
 import { handleStorageUploadUrl } from '../functions/api/storage-write.mjs';
@@ -85,7 +85,9 @@ function fakeClient({ members = { [MEMBER]: [TENANT] }, claims = { [CLAIM]: TENA
         return { rows: [{ id: 'new-doc', tenant_id: params[0], doc_type: params[1], file_path: params[2], mime_type: params[4], file_size: params[5] }] };
       }
       if (/FROM public\.tenant_documents\s+WHERE tenant_id = \$1::uuid AND doc_type LIKE 'library:%'/.test(text)) {
-        return { rows: Object.values(DOCS).filter((d) => d.tenant_id === params[0] && !d.doc_type.startsWith('library:mortgage:')) };
+        // The homeowner picker's query leaves out Mortgage packet documents; the signature list query does not.
+        const noMortgage = /doc_type NOT LIKE 'library:mortgage:%'/.test(text);
+        return { rows: Object.values(DOCS).filter((d) => d.tenant_id === params[0] && !(noMortgage && d.doc_type.startsWith('library:mortgage:'))) };
       }
       if (/FROM public\.homeowner_shared_documents\s+WHERE tenant_id = \$1::uuid AND claim_id = \$2::uuid AND revoked_at IS NULL\s+ORDER BY/.test(text)) {
         return { rows: [{ id: SHARE, tenant_document_id: DOC, shared_at: '2026-10-16T00:00:00Z' }] };
@@ -361,7 +363,7 @@ test('ledger view: shared_documents is the Lambda\'s claim-scoped metadata list 
   assert.deepEqual(none.shared_documents, []);
 });
 
-test('e-sign "From Document Library": a member copies a non-mortgage PDF/DOCX into the claim\'s signature folder; non-members, other tenants, mortgage documents refused', async () => {
+test('e-sign "From Document Library": a member copies a PDF/DOCX (any category, Mortgage packet included) into the claim\'s signature folder; non-members and other tenants refused', async () => {
   const run = (overrides = {}, clientOpts = {}, s3Opts = {}) => {
     const s3 = fakeS3(s3Opts);
     const client = fakeClient(clientOpts);
@@ -390,10 +392,16 @@ test('e-sign "From Document Library": a member copies a non-mortgage PDF/DOCX in
   // Check-scoped when only a check is given.
   const byCheck = await run({ body: { claim_id: undefined, check_intake_item_id: CHECK } }).result;
   assert.match(byCheck.path, new RegExp(`^check-intake/${CHECK}/files/library-`));
+  // Owner 2026-11-20 ("In freedom adjustment only have w9 but it's not showing up"): a Mortgage packet document (the W-9)
+  // can be sent for signature; the copy comes from its own library folder into the claim's signature folder.
+  const w9 = run({ body: { tenant_document_id: MORT_DOC } });
+  const w9Res = await w9.result;
+  assert.equal(w9Res.ok, true, JSON.stringify(w9Res));
+  assert.match(w9Res.path, new RegExp(`^signatures/${CLAIM}/library-\\d+-[0-9a-f-]+\\.pdf$`));
+  assert.equal(w9.s3.sent.find((c) => c.name === 'CopyObjectCommand').input.CopySource, encodeURI(`checksops-test-files/files/tenant-documents/${TENANT}/library/mortgage/1-b.pdf`));
   const refusals = [
     ['non-member', { mapping: { application_user_id: OUTSIDER } }, {}, {}, 'not_authorized'],
     ['another tenant\'s document', { body: { tenant_document_id: OTHER_DOC } }, {}, {}, 'not_authorized'],
-    ['mortgage packet document', { body: { tenant_document_id: MORT_DOC } }, {}, {}, 'document_not_signable'],
     ['another tenant\'s claim', { body: { claim_id: OTHER_CLAIM } }, {}, {}, 'claim_not_in_tenant'],
     ['another tenant\'s check', { body: { check_intake_item_id: CHECK } }, { checks: { [CHECK]: { id: CHECK, tenant_id: OTHER_TENANT, claim_id: CLAIM } } }, {}, 'check_not_in_tenant'],
     ['a check on another claim', { body: { check_intake_item_id: CHECK } }, { checks: { [CHECK]: { id: CHECK, tenant_id: TENANT, claim_id: OTHER_CLAIM } } }, {}, 'check_not_on_claim'],
@@ -463,4 +471,26 @@ test('routes are registered; the Library UI no longer offers tenant-wide homeown
   assert.match(sig, /<SelectItem value="library">From Document Library<\/SelectItem>/);
   const signatureRule = fs.readFileSync(path.join(ROOT, 'aws/functions/api/write-signature.mjs'), 'utf8');
   assert.doesNotMatch(signatureRule, /tenant-documents|library\//, 'the signature path rule stays strict');
+});
+
+test('e-sign "From Document Library" list: every signable library document of the claim tenant, Mortgage packet included; homeowner sharing still leaves Mortgage packet out', async () => {
+  const client = fakeClient();
+  const listed = await runSignatureLibraryDocumentList({ client, mapping, body: { claim_id: CLAIM }, spoof: [] });
+  assert.equal(listed.ok, true, JSON.stringify(listed));
+  assert.equal(listed.tenant_id, TENANT);
+  assert.deepEqual(listed.documents.map((d) => [d.id, d.category]).sort(), [[DOC, 'template'], [MORT_DOC, 'mortgage']].sort());
+  // No file paths leave the server, and nothing is written.
+  assert.ok(listed.documents.every((d) => !('file_path' in d) && !('tenant_id' in d)));
+  assert.equal(client.writes().length, 0);
+  // Non-members and other tenants' claims get nothing.
+  assert.equal((await runSignatureLibraryDocumentList({ client: fakeClient(), mapping: { application_user_id: OUTSIDER }, body: { claim_id: CLAIM }, spoof: [] })).ok, false);
+  assert.equal((await runSignatureLibraryDocumentList({ client: fakeClient(), mapping, body: { claim_id: OTHER_CLAIM }, spoof: [] })).ok, false);
+  // Signable: own tenant, a library category, own library folder; another tenant's or a stray path is not.
+  assert.equal(signableLibraryDocument(DOCS[MORT_DOC], TENANT), true);
+  assert.equal(signableLibraryDocument(DOCS[OTHER_DOC], TENANT), false);
+  assert.equal(signableLibraryDocument({ ...DOCS[MORT_DOC], file_path: `${OTHER_TENANT}/library/mortgage/1-b.pdf` }, TENANT), false);
+  assert.equal(signableLibraryDocument({ ...DOCS[DOC], doc_type: 'w9' }, TENANT), false);
+  // The homeowner picker list is unchanged: no Mortgage packet document.
+  const homeowner = await runClaimLibraryDocuments({ client: fakeClient(), mapping, body: { claim_id: CLAIM }, spoof: [] });
+  assert.deepEqual(homeowner.documents.map((d) => d.id), [DOC]);
 });
