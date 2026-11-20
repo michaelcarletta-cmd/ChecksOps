@@ -1,0 +1,15 @@
+{
+  "workstream_id": "bank-verified-connected",
+  "authorization": "Pending owner review (2026-11-20). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Bank verified means linked (owner 2026-11-20: Condition One's settlement bank PNC ••6051 showed \"Not linked\" on Transfer to bank although they had entered the micro-deposits; owner \"Fix status bug yes\"). pullMoovStatus (providers/onboarding/handlers.mjs, run by moov-sync) refreshed each Moov bank but only ever set verification_status to verified: connection_status stayed pending, and Transfer to bank (walletWithdraw.ts bankIneligibility, moov-wallet-withdraw.mjs resolveDestinationBank) and the sends require connection_status connected. These bytes set connection_status connected when Moov reports the bank verified, unless the bank is disconnected (a removed bank stays removed); errored and unverified_failed still set failed; everything else is unchanged. The micro-deposit initiate and confirm routes already set connected on a verified bank. live_sha256 is the bytes the onboarding and payee sends record applied in production (production-onboarding-payee-send-applied-manifest-2026-10-26.json, apply run 40391366018), still the plan's expected live; a read-only production overlay inspect must confirm them before any apply. sql_before stays SQL 105 (applied). No SQL change. No release-lock change.",
+  "members": {
+    "providers/onboarding/handlers.mjs": {
+      "live_sha256": "ef56e6d63f15049f3acd90b06f705902a1f4628e7c1a5f69d9acde9be6d90928",
+      "accepted_sha256": "0d8531a653a804a6262bc128308736fbb52e3863e19a30af6468664fe6bdd61d",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-onboarding-payee-send-applied-manifest-2026-10-26.json"
+    }
+  }
+}
