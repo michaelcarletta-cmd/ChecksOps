@@ -3,8 +3,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { LibrarySignatureDoc } from "@/hooks/useLibrarySignatureSource";
 
 /**
- * Signature Requests source "From Document Library": a template (or catalog,
- * shingle / siding sample, letterhead) from Compliance & Docs. Data and the
+ * Signature Requests source "From Document Library": any document from
+ * Compliance & Docs (template, catalog, shingle / siding sample, letterhead, or a
+ * Mortgage packet document such as the W-9). Data and the
  * copy call live in @/hooks/useLibrarySignatureSource.
  */
 
@@ -14,6 +15,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   shingle: "Shingle",
   siding: "Siding",
   letterhead: "Letterhead",
+  mortgage: "Mortgage packet",
 };
 
 export function LibrarySignatureSourcePicker({
@@ -37,7 +39,7 @@ export function LibrarySignatureSourcePicker({
         <SelectContent>
           {!loading && (docs?.length ?? 0) === 0 && (
             <div className="px-3 py-2 text-sm text-muted-foreground">
-              No PDF or DOCX templates in the Document Library (Compliance &amp; Docs)
+              No PDF or DOCX documents in the Document Library (Compliance &amp; Docs). Images can’t be sent for signature.
             </div>
           )}
           {docs?.map((doc) => (

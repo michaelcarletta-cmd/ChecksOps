@@ -5,7 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
  * Data for the Signature Requests source "From Document Library". The server
  * (signature-library-document-copy) copies the library object into the claim's
  * signature folder and returns that claim-scoped path; the library path itself
- * is never a signature document. Mortgage packet documents are not offered.
+ * is never a signature document. The list (signature-library-document-copy,
+ * action "list") offers every library category, Mortgage packet included (owner
+ * 2026-11-20: the W-9 must be offered); homeowner sharing still leaves those out.
  */
 
 export type LibrarySignatureDoc = {
@@ -40,14 +42,14 @@ const invokeOk = async <T,>(name: string, body: Record<string, unknown>): Promis
   return res;
 };
 
-/** Templates first, then the other non-mortgage categories; PDF / DOCX only. */
+/** Templates first, then every other library category (Mortgage packet included); PDF / DOCX only. */
 export function useLibrarySignatureDocs(claimId: string, enabled: boolean) {
   return useQuery({
     queryKey: ["signature-library-documents", claimId],
     enabled,
     retry: false,
     queryFn: async () => {
-      const res = await invokeOk<{ documents: LibrarySignatureDoc[] }>("claim-library-documents", { claim_id: claimId });
+      const res = await invokeOk<{ documents: LibrarySignatureDoc[] }>("signature-library-document-copy", { action: "list", claim_id: claimId });
       const order = (doc: LibrarySignatureDoc) => (doc.category === "template" ? 0 : 1);
       return (res.documents || [])
         .filter((doc) => SIGNABLE.has(String(doc.mime_type || "").toLowerCase()))
