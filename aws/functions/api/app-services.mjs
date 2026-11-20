@@ -94,6 +94,7 @@ import {
 import { handleRecordExternalDisbursement } from './external-disbursement.mjs';
 import { handlePushRegisterDevice } from './push-register-device.mjs';
 import { handleSaveTenantWalletWithdrawLimits } from './wallet-withdraw-limits.mjs';
+import { handleSaveAchAuthorization } from './ach-authorization.mjs';
 import {
   handleTenantBillingAdmin,
   handleTenantBillingAuthorize,
@@ -199,6 +200,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   'save-tenant-wallet-funding-settings',
   // Transfer-to-bank limits (SQL 164 columns of tenant_wallet_funding_settings): members, wallet.fund step-up.
   'save-tenant-wallet-withdraw-limits',
+  // ACH debit authorization for a funding account (ach_authorizations, a money table; owner report 2026-11-19)
+  'save-ach-authorization',
   // A payment made outside ChecksOps, recorded against a check (SQL 147; never calls Moov)
   'record-external-disbursement',
   // App push notifications (SQL 171): the signed-in user registers or removes this phone's push token
@@ -400,6 +403,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleSaveTenantWalletFundingSettings(event);
     case 'save-tenant-wallet-withdraw-limits':
       return handleSaveTenantWalletWithdrawLimits(event);
+    case 'save-ach-authorization':
+      return handleSaveAchAuthorization(event);
     case 'record-external-disbursement':
       return handleRecordExternalDisbursement(event);
     case 'push-register-device':

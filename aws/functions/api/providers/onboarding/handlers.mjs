@@ -283,7 +283,12 @@ async function pullMoovStatus(client, ctx, { fetchImpl }) {
     await client.query(
       `UPDATE public.payment_provider_methods
        SET verification_status = CASE WHEN $3 = 'verified' THEN 'verified' ELSE verification_status END,
-           connection_status = CASE WHEN $3 IN ('errored', 'unverified_failed') THEN 'failed' ELSE connection_status END,
+           connection_status = CASE
+             WHEN $3 IN ('errored', 'unverified_failed') THEN 'failed'
+             -- A bank Moov reports verified is linked (owner 2026-11-20, Condition One: verified at Moov,
+             -- "Not linked" here). A disconnected bank stays disconnected.
+             WHEN $3 = 'verified' AND connection_status IS DISTINCT FROM 'disconnected' THEN 'connected'
+             ELSE connection_status END,
            routing_last_four = COALESCE(routing_last_four, $4)
        WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $5 AND provider_bank_account_id = $2`,
       [ctx.tenantId, bankId, status, safeLastFour(bank?.routingNumber), ctx.environment],

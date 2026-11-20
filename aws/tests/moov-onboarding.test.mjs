@@ -1124,6 +1124,33 @@ test('moov-sync Refresh stores active and verified from Moov\'s verificationStat
   });
 });
 
+test('moov-sync marks a bank Moov reports verified as connected (owner 2026-11-20), never a disconnected one', async () => {
+  // Condition One: the bank was verified at Moov but stayed connection_status pending here, so Transfer to bank
+  // (connection_status connected only) showed "Not linked".
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db });
+    const fetch = moovFetch([
+      { match: new RegExp(`/accounts/${MOOV_ACCOUNT}$`), method: 'GET', body: { accountID: MOOV_ACCOUNT, verification: { verificationStatus: 'verified' } } },
+      { match: /\/capabilities$/, method: 'GET', body: ENABLED_MERCHANT_CAPS },
+      { match: /\/bank-accounts$/, method: 'GET', body: [{ bankAccountID: 'bank_verified', status: 'verified' }, { bankAccountID: 'bank_new', status: 'new' }, { bankAccountID: 'bank_bad', status: 'errored' }] },
+    ]);
+    const result = await run('moov-sync', { tenant_id: TENANT }, USERS.owner, { db, fetch });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    const refresh = db.state.writes.filter((w) => w.sql.includes('routing_last_four = COALESCE(routing_last_four, $4)'));
+    assert.deepEqual(refresh.map((w) => [w.params[1], w.params[2]]), [['bank_verified', 'verified'], ['bank_new', 'new'], ['bank_bad', 'errored']]);
+    for (const w of refresh) {
+      assert.equal(w.params[0], TENANT);
+      const sql = w.sql.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ');
+      // errored stays failed; verified becomes connected unless the bank was disconnected; anything else is unchanged.
+      assert.match(sql, /connection_status = CASE WHEN \$3 IN \('errored', 'unverified_failed'\) THEN 'failed' WHEN \$3 = 'verified' AND connection_status IS DISTINCT FROM 'disconnected' THEN 'connected' ELSE connection_status END,/);
+      assert.match(sql, /verification_status = CASE WHEN \$3 = 'verified' THEN 'verified' ELSE verification_status END,/);
+      assert.match(sql, /WHERE tenant_id = \$1::uuid AND provider = 'moov' AND environment = \$5 AND provider_bank_account_id = \$2/);
+    }
+  });
+});
+
 test('legacy file upload is refused with a pointer to the new flow', async () => {
   await withEnv(BASE_ENV, async () => {
     const db = makeDb();

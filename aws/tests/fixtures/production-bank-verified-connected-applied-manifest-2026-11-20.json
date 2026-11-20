@@ -1,0 +1,15 @@
+{
+  "workstream_id": "bank-verified-connected-applied",
+  "authorization": "Record only (2026-11-20): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Bank verified means linked (#2032) applied. Owner 2026-11-20: \"DEPLOY providers/onboarding/handlers.mjs TO PRODUCTION\". Applied 2026-11-20 from main 6add4a23146992dd1bf70fd7363daefd42a5f056 (#2032 merge). The apply run concluded success including its verify step (state VERIFIED). providers/onboarding/handlers.mjs REPLACE ef56e6d6 -> 0d8531a6: staging inspect run 44663227568 (ef56e6d6 live), staging apply run 44663340757 (errors [], RevisionId a802c8ef-eef3-4569-af6f-3db687697df3), staging re-inspect run 44663770627 (0d8531a6 live, RevisionId e7fe5ea1-b584-4b06-afae-df2a97dbc44d); production inspect run 44663779544 (READY, ef56e6d6 live, RevisionId b3fc395b-8887-4d6a-8deb-34515f9f0f19); production apply run 44663882315 (job 136048380766) on the owner's \"DEPLOY providers/onboarding/handlers.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44663340757, expected live ef56e6d6, VERIFIED, after CodeSha256 pkZ3LbfAGEU3zzvPui5ex8n2zJaXpg+UNEPZqc278qA= RevisionId def4b83c-d07e-48d8-877c-b7fcc3e012bf; re-inspect run 44664559559 (ALREADY_ACCEPTED, same CodeSha256 and RevisionId). No SQL. index.mjs is untouched. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains the member to the manifest that planned it (previous_manifest).",
+  "members": {
+    "providers/onboarding/handlers.mjs": {
+      "live_sha256": "0d8531a653a804a6262bc128308736fbb52e3863e19a30af6468664fe6bdd61d",
+      "accepted_sha256": "0d8531a653a804a6262bc128308736fbb52e3863e19a30af6468664fe6bdd61d",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-bank-verified-connected-manifest-2026-11-20.json"
+    }
+  }
+}
