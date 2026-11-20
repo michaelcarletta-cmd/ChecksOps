@@ -3905,6 +3905,12 @@ test('Onboarding reconciliation: four live onboarding members replaced the bytes
     const moved = LATER[name];
     if (moved) assert.equal(moved.previous_manifest, APPLIED_REL, name);
     const onMain = moved ? moved.live_sha256 : sha(`aws/functions/api/${name}`);
+    if (moved) {
+      // Applied and recorded: the row expects the later plan's applied bytes and names its applied record.
+      const BANK_APPLIED_REL = 'aws/tests/fixtures/production-bank-verified-connected-applied-manifest-2026-11-20.json';
+      assert.deepEqual(readJson(BANK_APPLIED_REL).members[name], { live_sha256: moved.accepted_sha256, accepted_sha256: moved.accepted_sha256, operation: 'replace', previous_manifest: 'aws/tests/fixtures/production-bank-verified-connected-manifest-2026-11-20.json' }, name);
+      assert.deepEqual([PLAN.members[name].accepted_sha256, PLAN.members[name].expected_live_sha256, PLAN.members[name].manifest], [moved.accepted_sha256, moved.accepted_sha256, BANK_APPLIED_REL], name);
+    }
     const row = moved
       ? { ...PLAN.members[name], accepted_sha256: moved.live_sha256, expected_live_sha256: moved.live_sha256, manifest: moved.previous_manifest }
       : PLAN.members[name];
@@ -3927,9 +3933,15 @@ test('Onboarding reconciliation: four live onboarding members replaced the bytes
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
     // The pre-apply bytes are no longer an accepted live state.
     await assert.rejects(run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: live }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED, name);
-    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) });
-    // A member a later plan moved on is READY from these applied bytes instead of already accepted.
-    assert.equal(done.state, moved ? 'READY' : 'ALREADY_ACCEPTED', name);
+    // A member a later plan moved on (and that plan applied, 2026-11-20, recorded) no longer accepts these bytes live: a
+    // reconciliation stop; the later plan's applied bytes are the accepted state.
+    if (moved) {
+      await assert.rejects(run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED, name);
+      assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: moved.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED', name);
+    } else {
+      const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) });
+      assert.equal(done.state, 'ALREADY_ACCEPTED', name);
+    }
   }
   // Plan order: the four members in this order, before the send module and providers.mjs.
   const at = (name) => PLAN.order.indexOf(name);
