@@ -343,6 +343,9 @@ const ACH_AUTHORIZATION_APPLIED_MANIFEST = 'aws/tests/fixtures/production-ach-au
 // are its accepted bytes); pushRegisterPre reads such a row as it stood before that plan (the ACH applied row).
 const PUSH_REGISTER_API_MANIFEST = 'aws/tests/fixtures/production-push-register-device-api-manifest-2026-11-19.json';
 const PUSH_REGISTER_API = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, PUSH_REGISTER_API_MANIFEST), 'utf8'));
+// Applied 2026-11-20 (production runs 44746906815 and 44748599628, VERIFIED) and recorded: the router row expects the applied
+// bytes and names the applied record, whose previous_manifest is the planning manifest.
+const PUSH_REGISTER_APPLIED_MANIFEST = 'aws/tests/fixtures/production-push-register-device-applied-manifest-2026-11-20.json';
 const beforePushRegister = (name, onMain) => {
   const entry = PUSH_REGISTER_API.members[name];
   if (!entry || entry.operation !== 'replace') return onMain;
@@ -851,8 +854,15 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
       mainBytes = noAdditionalPre(overlay.members[name]).accepted_sha256;
     }
-    // (And the app push registration plan, 2026-11-19, planning only, combined with the ACH router on 2026-11-20: the applied ACH
-    // router bytes it moves on from stand for main's, and the row is read as it stood before that plan, on the ACH applied record.)
+    // (And the app push registration plan, 2026-11-19, combined with the ACH router and applied 2026-11-20, recorded: the applied
+    // record's row is read as the planning row it chains to, the applied ACH router bytes it moved on from stand for main's, and
+    // the row is read as it stood before that plan, on the ACH applied record.)
+    if (row && row.manifest === PUSH_REGISTER_APPLIED_MANIFEST) {
+      const applied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
+      assert.deepEqual(applied, { live_sha256: mainBytes, accepted_sha256: mainBytes, operation: 'replace', previous_manifest: PUSH_REGISTER_API_MANIFEST }, name);
+      assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [mainBytes, mainBytes], name);
+      row = { ...row, expected_live_sha256: PUSH_REGISTER_API.members[name].live_sha256, manifest: PUSH_REGISTER_API_MANIFEST };
+    }
     if (row && row.manifest === PUSH_REGISTER_API_MANIFEST) {
       assert.equal(row.accepted_sha256, mainBytes, name);
       row = pushRegisterPre(row, name);
