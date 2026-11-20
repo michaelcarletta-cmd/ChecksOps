@@ -1,0 +1,15 @@
+{
+  "workstream_id": "signature-library-all-docs-applied",
+  "authorization": "Record only (2026-11-20): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Signature library, every category (#2037) applied. Owner 2026-11-20: \"run the API staging overlay for signature-library-source\", then \"DEPLOY signature-library-source.mjs TO PRODUCTION\". Applied 2026-11-20 from main 5a4b1024193170ba25e91bf2cdee3bc2444094b4 (#2037 merge). The apply run concluded success including its verify step (state VERIFIED). signature-library-source.mjs REPLACE f4eccc99 -> 93257b78: staging inspect run 44788440783 (f4eccc99 live, RevisionId 50626604-fa81-408b-ba02-7172c1b3481c), staging apply run 44788579364 (errors [], after CodeSha256 WAphWG++inADoWBdv+l0rTEE7ep+LNpadPS8iSMJPOM= RevisionId f7f0ea98-54ef-4e7b-82fd-194a7879421c), staging re-inspect run 44788791243 (93257b78 live); production inspect run 44788797405 (READY, f4eccc99 live, RevisionId 6c406575-41fb-4994-bea7-65c374a2e21c); production apply run 44789085198 (job 136471658248) on the owner's \"DEPLOY signature-library-source.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44788579364, expected live f4eccc99, VERIFIED, after CodeSha256 WAphWG++inADoWBdv+l0rTEE7ep+LNpadPS8iSMJPOM= RevisionId fba7b7c8-ec62-46e3-b44c-55749d4d7a6c; re-inspect run 44789257115 (ALREADY_ACCEPTED). Unauthenticated POST /prep/functions/v1/signature-library-document-copy answers 401 missing_cognito_token with or without action list (sign-in required); the list action itself was not exercised signed in. No SQL. index.mjs is untouched. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains the member to the manifest that planned it (previous_manifest).",
+  "members": {
+    "signature-library-source.mjs": {
+      "live_sha256": "93257b7849db922f0798d1ca065f8641a5dc22a2253c04bb16c8d2547915908f",
+      "accepted_sha256": "93257b7849db922f0798d1ca065f8641a5dc22a2253c04bb16c8d2547915908f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-signature-library-all-docs-manifest-2026-11-20.json"
+    }
+  }
+}
