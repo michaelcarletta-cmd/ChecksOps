@@ -1,0 +1,21 @@
+{
+  "workstream_id": "ach-authorization-route-applied",
+  "authorization": "Record only (2026-11-20): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "ACH debit authorization route (#2030) applied. Owner 2026-11-20: \"the API staging overlay\", then \"DEPLOY ach-authorization.mjs TO PRODUCTION\", then \"DEPLOY app-services.mjs TO PRODUCTION\". Applied 2026-11-20 from main fac0633a70689706e3a13ab07594620242a66847 (#2030 merge), the ADD first, then the router that imports it. Each apply run concluded success including its verify step (state VERIFIED). ach-authorization.mjs ADD f3cfc65b: staging inspect run 44653225805 (ABSENT, RevisionId d10c9716-a49b-4f3b-946b-d1037187e87f, CodeSha256 CxJIV52RWT2IdqGKhkj0OXbJH6czTVJD6TePqt7SujA=), staging apply run 44653472240 (after CodeSha256 6vStyUgw9kNb3A4qPljObAnjS4t68vm1eFwzw7GlQZM=, RevisionId 1844e12b-b80f-4bed-b182-8af064743647), staging re-inspect run 44653595243 (PRESENT, f3cfc65b); production inspect run 44654253358 (READY, ABSENT, RevisionId 51c0358c-e6bc-4ccd-9cb3-bad656ee5581, CodeSha256 CxJIV52RWT2IdqGKhkj0OXbJH6czTVJD6TePqt7SujA=); production apply run 44654350821 (job 136016800579) on the owner's \"DEPLOY ach-authorization.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44653472240, VERIFIED, after CodeSha256 6vStyUgw9kNb3A4qPljObAnjS4t68vm1eFwzw7GlQZM= RevisionId e60d0ee1-9c6b-4660-beb4-aa1ea064914b; re-inspect run 44656251964 (ALREADY_ACCEPTED). app-services.mjs REPLACE 6735d88f -> 4a66482f: staging inspect run 44653229445 (6735d88f live), staging apply run 44653688697 (errors [], after CodeSha256 IQBZiH2jA9i1e6ecAXBzYjy7ia2CESKmVJAmkDafkD0=), staging re-inspect run 44653802713 (4a66482f live); production inspect run 44654482643 (READY, 6735d88f live); production apply run 44656016371 (job 136022297907) on the owner's \"DEPLOY app-services.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44653688697, expected live 6735d88f, VERIFIED, after CodeSha256 IQBZiH2jA9i1e6ecAXBzYjy7ia2CESKmVJAmkDafkD0= RevisionId b3fc395b-8887-4d6a-8deb-34515f9f0f19; re-inspect run 44656155867 (ALREADY_ACCEPTED). Unauthenticated POST /prep/functions/v1/save-ach-authorization answered 401 (sign-in required) after the router apply, where an unknown route answers 403. No SQL. index.mjs is untouched. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains each member to the manifest that planned it (previous_manifest).",
+  "members": {
+    "ach-authorization.mjs": {
+      "live_sha256": "f3cfc65bf6ea90be16c5ae922dde91d3980a4dd3dd01476c64dbf01d90e45929",
+      "accepted_sha256": "f3cfc65bf6ea90be16c5ae922dde91d3980a4dd3dd01476c64dbf01d90e45929",
+      "operation": "add",
+      "previous_manifest": "aws/tests/fixtures/production-ach-authorization-route-manifest-2026-11-19.json"
+    },
+    "app-services.mjs": {
+      "live_sha256": "4a66482f9402d5091a45ae5035e20bfd70c2bc0034edff474bda641f238c3131",
+      "accepted_sha256": "4a66482f9402d5091a45ae5035e20bfd70c2bc0034edff474bda641f238c3131",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-ach-authorization-route-manifest-2026-11-19.json"
+    }
+  }
+}

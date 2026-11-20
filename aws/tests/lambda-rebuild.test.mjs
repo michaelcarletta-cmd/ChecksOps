@@ -336,6 +336,7 @@ const SETTLEMENT_API_MANIFEST = 'aws/tests/fixtures/production-transfer-to-bank-
 // rebuild put live (the transfer to bank router bytes) through the production overlay plan, after the ach-authorization.mjs
 // ADD, no hold. The seventh sections keep the hash they recorded as evidence (listed here as changed since).
 const ACH_AUTHORIZATION_MANIFEST = 'aws/tests/fixtures/production-ach-authorization-route-manifest-2026-11-19.json';
+const ACH_AUTHORIZATION_APPLIED_MANIFEST = 'aws/tests/fixtures/production-ach-authorization-route-applied-manifest-2026-11-20.json';
 /** Members changed since the seventh sections -> the manifest whose REPLACE moved them on from the section's bytes. */
 const CHANGED_SINCE_SEVENTH_SECTION = new Map([
   ['providers/production/moov-wallet-withdraw.mjs', SETTLEMENT_API_MANIFEST],
@@ -831,8 +832,16 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
       mainBytes = noAdditionalPre(overlay.members[name]).accepted_sha256;
     }
-    // (And the ACH authorization route plan, 2026-11-19, planning only: the transfer to bank router bytes it moves on from
-    // stand for main's, and the row is read as it stood before that plan, on the transfer to bank manifest.)
+    // (And the ACH authorization route plan, 2026-11-19, applied 2026-11-20 and recorded: the applied record's row is read as the
+    // planning row it chains to, the transfer to bank router bytes it moved on from stand for main's, and the row is read as it
+    // stood before that plan, on the transfer to bank manifest.)
+    if (row && row.manifest === ACH_AUTHORIZATION_APPLIED_MANIFEST) {
+      const applied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
+      assert.deepEqual(applied, { live_sha256: mainBytes, accepted_sha256: mainBytes, operation: 'replace', previous_manifest: ACH_AUTHORIZATION_MANIFEST }, name);
+      assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [mainBytes, mainBytes], name);
+      const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, ACH_AUTHORIZATION_MANIFEST), 'utf8')).members[name];
+      row = { ...row, expected_live_sha256: planned.live_sha256, manifest: ACH_AUTHORIZATION_MANIFEST };
+    }
     if (row && row.manifest === ACH_AUTHORIZATION_MANIFEST) {
       const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
       assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [mainBytes, planned.live_sha256], name);
