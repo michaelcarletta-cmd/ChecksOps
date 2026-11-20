@@ -43,6 +43,8 @@ const writeRe = () => new RegExp(`\\b(INSERT\\s+INTO|UPDATE|DELETE\\s+FROM)\\s+(
 // How each file's money writes are gated. A new writer file fails the inventory test until it is
 // classified here (and, for step 2, in aws/docs/money-write-flag.md).
 const FLAG_BEFORE_WRITE = new Set([
+  // ACH debit authorization for a funding account (owner report 2026-11-19, save-ach-authorization).
+  'ach-authorization.mjs',
   'mortgage-ops-usage.mjs',
   'tenant-billing-engine.mjs',
   'tenant-billing-handlers.mjs',
