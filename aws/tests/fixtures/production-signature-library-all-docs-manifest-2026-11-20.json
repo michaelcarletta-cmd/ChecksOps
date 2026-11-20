@@ -1,0 +1,15 @@
+{
+  "workstream_id": "signature-library-all-docs",
+  "authorization": "Pending owner review (2026-11-20). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Signature library, every category (owner 2026-11-20: \"If I go to request a signature in files it does not show anything in document library. It should show all files in document library to add. In freedom adjustment only have w9 but it's not showing up and should be there\"). The Signature Requests source \"From Document Library\" listed the library through claim-library-documents (tenant-library.mjs), which leaves out every Mortgage packet document (doc_type library:mortgage:*), and the copy (signature-library-document-copy) refused them through shareableLibraryDocument, the homeowner-sharing rule (2026-10-16). Freedom Adjustment's only library document is its W-9, a Mortgage packet document, so the picker was empty. These bytes add action list to signature-library-document-copy: the claim tenant's library documents of every category, Mortgage packet included, PDF or DOCX only, for a member of that tenant (resolveClaimTenantForMember), read only (no write transaction, no writes gate), no file paths returned. The copy now uses signableLibraryDocument (own tenant, any library category, own library folder) instead of shareableLibraryDocument. Homeowner sharing is unchanged: tenant-library.mjs, claim-library-documents and shareableLibraryDocument still leave Mortgage packet documents out. A signature copy is claim- or check-scoped and goes only to the signers the member names. live_sha256 is the 2026-10-17 accepted bytes (release-lock pin manifest); read-only inspects 44783817623 (production, ALREADY_ACCEPTED, RevisionId 6c406575-41fb-4994-bea7-65c374a2e21c) and 44783825358 (staging) read them live. sql_before stays SQL 94 (applied). No SQL change. No release-lock change. The website change that calls the list is a separate PR.",
+  "members": {
+    "signature-library-source.mjs": {
+      "live_sha256": "f4eccc99e4c3af3d3b6b6b229f0d2408da682fc9176695acffa0e53486c7970f",
+      "accepted_sha256": "93257b7849db922f0798d1ca065f8641a5dc22a2253c04bb16c8d2547915908f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}

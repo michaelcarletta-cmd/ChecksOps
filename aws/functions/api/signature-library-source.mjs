@@ -1,24 +1,32 @@
 /**
  * E-sign source "From Document Library" (signature-library-document-copy).
  *
- * A member of the document's tenant copies one non-mortgage library document
- * (template, catalog, shingle, siding, letterhead) into the signature folder of
- * a claim or check of that same tenant:
+ * A member of the document's tenant copies one library document (template,
+ * catalog, shingle, siding, letterhead, or a Mortgage packet document such as the
+ * W-9) into the signature folder of a claim or check of that same tenant:
  *   claim-files/signatures/{claimId}/library-{ts}-{uuid}.{pdf|docx}
  *   claim-files/check-intake/{checkId}/files/library-{ts}-{uuid}.{pdf|docx}
  * and gets that path back (plus a 5 minute GET URL of the copy, to place the
  * signature fields). authorizeSignatureDocumentPath (write-signature.mjs) stays
  * as strict as it is: a tenant-documents path is never a signature document;
  * only the copy, which is check- or claim-scoped, is.
+ *
+ * action "list" (owner 2026-11-20: "It should show all files in document library
+ * to add. In freedom adjustment only have w9 but it's not showing up") lists the
+ * claim tenant's signable library documents, every category including Mortgage
+ * packet, PDF or DOCX only. Mortgage packet documents are offered here because the
+ * member chooses to send one for signature; homeowner sharing (tenant-library.mjs
+ * shareableLibraryDocument, claim-library-documents) still never offers them.
  */
 import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
-import { ignoredSpoof, parseBody, withIdentityWrite } from './data.mjs';
+import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
 import { s3KeyFor } from './storage-paths.mjs';
 import { authorizeSignatureDocumentPath } from './write-signature.mjs';
-import { LIBRARY_BUCKET, LIBRARY_MAX_BYTES, normalizeContentType } from './tenant-library-rules.mjs';
-import { claimBelongsToTenant, isTenantMember, shareableLibraryDocument } from './tenant-library.mjs';
+import { LIBRARY_BUCKET, LIBRARY_MAX_BYTES, libraryObjectPath, normalizeContentType } from './tenant-library-rules.mjs';
+import { claimBelongsToTenant, isTenantMember, resolveClaimTenantForMember } from './tenant-library.mjs';
+import { libraryCategoryOf } from './mortgage-library-doc-types.mjs';
 import { storageWritesEnabled, writesEnabled } from './write-allowlist.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -35,6 +43,42 @@ export const SIGNABLE_TYPES = Object.freeze({
 });
 
 const refuse = (statusCode, error, spoof, extra = {}) => ({ ok: false, statusCode, error, spoofFieldsIgnored: spoof, ...extra });
+
+/** A library document a member may send for signature: own tenant, any library category (Mortgage packet included), own library folder. */
+export const signableLibraryDocument = (doc, tenantId) => {
+  if (!doc || String(doc.tenant_id).toLowerCase() !== String(tenantId).toLowerCase()) return false;
+  const category = libraryCategoryOf(doc.doc_type);
+  if (!category) return false;
+  return Boolean(libraryObjectPath(doc.file_path, { tenantId, category }));
+};
+
+const isSignableType = (mimeType) => Boolean(SIGNABLE_TYPES[normalizeContentType(mimeType)]);
+
+/** The claim tenant's library documents that can be sent for signature (every category; PDF or DOCX). */
+export const runSignatureLibraryDocumentList = async ({ client, mapping, body, spoof }) => {
+  const resolved = await resolveClaimTenantForMember(client, mapping.application_user_id, body.claim_id, body.tenant_id || null);
+  if (resolved.error) return refuse(resolved.error === 'invalid_uuid' ? 400 : 403, resolved.error, spoof, resolved.field ? { field: resolved.field } : {});
+  const rows = (await client.query(
+    `SELECT id, tenant_id, doc_type, file_name, file_path, mime_type, file_size, created_at
+       FROM public.tenant_documents
+      WHERE tenant_id = $1::uuid AND doc_type LIKE 'library:%'
+      ORDER BY created_at DESC
+      LIMIT 500`,
+    [resolved.tenantId],
+  )).rows;
+  const documents = rows
+    .filter((row) => signableLibraryDocument(row, resolved.tenantId) && isSignableType(row.mime_type))
+    .map((row) => ({
+      id: row.id,
+      doc_type: row.doc_type,
+      category: libraryCategoryOf(row.doc_type),
+      file_name: row.file_name,
+      mime_type: row.mime_type,
+      file_size: row.file_size,
+      created_at: row.created_at,
+    }));
+  return { ok: true, statusCode: 200, tenant_id: resolved.tenantId, documents, spoofFieldsIgnored: spoof };
+};
 
 export const runSignatureLibraryDocumentCopy = async ({ client, mapping, body, spoof, deps = {} }) => {
   const documentId = body.tenant_document_id;
@@ -55,7 +99,7 @@ export const runSignatureLibraryDocumentCopy = async ({ client, mapping, body, s
   if (!(await isTenantMember(client, mapping.application_user_id, tenantId))) {
     return refuse(403, 'not_authorized', spoof, { message: 'Membership of the document\'s company is required' });
   }
-  if (!shareableLibraryDocument(doc, tenantId)) return refuse(403, 'document_not_signable', spoof);
+  if (!signableLibraryDocument(doc, tenantId)) return refuse(403, 'document_not_signable', spoof);
 
   // The request's claim and check must be the document tenant's own.
   if (claimId && !(await claimBelongsToTenant(client, claimId, tenantId))) {
@@ -128,6 +172,10 @@ export const runSignatureLibraryDocumentCopy = async ({ client, mapping, body, s
 export const handleSignatureLibraryDocumentCopy = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
+  // Listing reads only: no write transaction, no writes gate.
+  if (String(body.action || '').toLowerCase() === 'list') {
+    return withIdentity(event, (ctx) => runSignatureLibraryDocumentList(ctx), deps);
+  }
   if (deps.forceWrites !== true && !(writesEnabled() && storageWritesEnabled())) {
     return refuse(403, 'writes_disabled', spoof);
   }
