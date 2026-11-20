@@ -13,7 +13,8 @@
  *     the same pre-state (run 44614240107) as its acceptance; it is in step with the staging pin, the one-shot, the bypass
  *     inventory and the test lists;
  *   - no predecessor; one new table (device_push_tokens: RLS on, no policy, no grant) and two new SECURITY DEFINER
- *     functions (EXECUTE checksops and the owner); no existing object changed; no overlay plan entry yet; the runbook,
+ *     functions (EXECUTE checksops and the owner); no existing object changed; the overlay plan holds push-register-device.mjs
+ *     on it, recorded live; the runbook,
  *     one-shot doc and README name it;
  *   - the pending (pre-authorization) pin refuses before connecting; the committed pin allows only the manifest bound
  *     to its recorded pre-state; an approved, accepted copy evaluates for the manifest built from it,
@@ -230,7 +231,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-19
   }
 });
 
-test('order: no predecessor; one new table and two new DEFINER functions, nothing existing changed; no overlay plan entry yet; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; one new table and two new DEFINER functions, nothing existing changed; the overlay plan holds push-register-device.mjs on it, recorded live; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
@@ -252,10 +253,17 @@ test('order: no predecessor; one new table and two new DEFINER functions, nothin
     'created_tables_owned_by_login', 'at most 20 per user', 'No API, Lambda or SPA change is part of this pin', ABSENT]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // The API route that calls the functions is a later step: nothing in the overlay plan waits on SQL 171 yet.
+  // The API route that calls the functions (push-register-device, the app push registration plan of 2026-11-19, planning
+  // only) is the one member held on it; production records it verified live from this pin's applied record (#2028), staging
+  // from its apply run.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL171_FILE], undefined);
-  assert.doesNotMatch(JSON.stringify(plan), /171_device_push_tokens/);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL171_FILE), ['push-register-device.mjs']);
+  const pre = plan.sql_prerequisites[SQL171_FILE];
+  assert.equal(pre.verified_live, true);
+  assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
+  assert.ok(pre.evidence.includes('#2028'));
+  assert.equal(readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL171_FILE].verified_live, true);
   // The file: two guarded DO blocks, the table, its index, RLS, the two functions with their ACLs and comments; no other
   // object, and no row written.
   const text = fs.readFileSync(path.join(ROOT, SQL171_FILE), 'utf8').replace(/--[^\n]*/g, '');
