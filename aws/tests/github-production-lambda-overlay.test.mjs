@@ -1041,9 +1041,39 @@ const ACH_REL = 'aws/tests/fixtures/production-ach-authorization-route-manifest-
 const ACH = JSON.parse(fs.readFileSync(path.join(ROOT, ACH_REL), 'utf8'));
 const ACH_ADDS = Object.freeze(Object.keys(ACH.members).filter((name) => ACH.members[name].operation === 'add'));
 const T2B_ROUTER_BYTES = T2B.members['app-services.mjs'].accepted_sha256;
+// App push registration (2026-11-19, planning only; SQL 171), combined with the ACH router (owner 2026-11-20, "Merge 2029 and
+// 2030"): ADD push-register-device.mjs (held on SQL 171), then REPLACE app-services.mjs from the applied ACH router bytes
+// (4a66482f, recorded applied 2026-11-20) to main's router, which carries both save-ach-authorization and push-register-device;
+// its own test is at the end. pushPre restates the plan as it stood before it (the ADD row, its order place and the SQL 171
+// prerequisite absent; the router row back on the ACH applied record); PLAN_PUSH_REPLAY is the same with main's router bytes
+// accepted. pushApplied is a member's bytes before that plan. achPre, which reads further back, applies pushPre first.
+const PUSH_REL = 'aws/tests/fixtures/production-push-register-device-api-manifest-2026-11-19.json';
+const PUSH = JSON.parse(fs.readFileSync(path.join(ROOT, PUSH_REL), 'utf8'));
+const PUSH_ADD = 'push-register-device.mjs';
+const SQL171_FILE = 'aws/workflows/sql/171_device_push_tokens.sql';
+const pushApplied = (member) => (PUSH.members[member]?.operation === 'replace' ? PUSH.members[member].live_sha256 : sha(`aws/functions/api/${member}`));
+const pushPre = (plan, { replay = false } = {}) => {
+  plan.order = plan.order.filter((name) => name !== PUSH_ADD);
+  delete plan.members[PUSH_ADD];
+  delete plan.sql_prerequisites[SQL171_FILE];
+  for (const [name, entry] of Object.entries(PUSH.members)) {
+    if (entry.operation !== 'replace') continue;
+    plan.members[name] = {
+      ...plan.members[name],
+      accepted_sha256: replay ? entry.accepted_sha256 : entry.live_sha256,
+      expected_live_sha256: entry.live_sha256,
+      manifest: entry.previous_manifest,
+    };
+  }
+  return plan;
+};
+const PLAN_PRE_PUSH = pushPre(structuredClone(PLAN));
+const PLAN_PUSH_REPLAY = pushPre(structuredClone(PLAN), { replay: true });
 /** A member's bytes before the ACH authorization route plan: its live_sha256 for a REPLACE it moved on, else main's. */
 const achApplied = (member) => (ACH.members[member]?.operation === 'replace' ? ACH.members[member].live_sha256 : sha(`aws/functions/api/${member}`));
 const achPre = (plan) => {
+  // (The app push registration plan came later: undone first.)
+  pushPre(plan);
   plan.order = plan.order.filter((name) => !ACH_ADDS.includes(name));
   for (const name of ACH_ADDS) delete plan.members[name];
   for (const [name, entry] of Object.entries(ACH.members)) {
@@ -8664,7 +8694,8 @@ test('External disbursement record (owner 2026-11-09): ADD external-disbursement
   }
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
   assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('record-external-disbursement'));
-  assert.ok(WORKFLOW.includes(`          - ${DEMO_ADD}\n          - ${ADD}\n          - tenant-email-domain.mjs\n`));
+  // (The app push registration ADD, 2026-11-19, follows it in the workflow's list.)
+  assert.ok(WORKFLOW.includes(`          - ${DEMO_ADD}\n          - ${ADD}\n          - ${PUSH_ADD}\n          - tenant-email-domain.mjs\n`));
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
   // Inspect: the ADD was READY while absent (production inspect run 42878692354) and is ALREADY_ACCEPTED at its
   // accepted bytes (re-inspect run 42878952309); anything else present is a collision.
@@ -10808,14 +10839,21 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   }
   assert.deepEqual(Object.keys(ACH.members), [ADD, ROUTER]);
   const acceptedAdd = sha(`aws/functions/api/${ADD}`);
-  const acceptedRouter = sha(`aws/functions/api/${ROUTER}`);
+  // (The app push registration plan, 2026-11-19, planning only, combined with this router on 2026-11-20 ("Merge 2029 and 2030"),
+  // has since moved main's router and the row on: this plan's router bytes are read as pushApplied, the committed plan as
+  // PLAN_PRE_PUSH (the recorded row), and the runs, which read main's files, replay with main's router bytes accepted.)
+  const acceptedRouter = pushApplied(ROUTER);
+  const mainRouter = sha(`aws/functions/api/${ROUTER}`);
+  const RECORDED = PLAN_PRE_PUSH;
   // Applied 2026-11-20 (production runs 44654350821 and 44656016371, recorded): the router row now expects the applied bytes
   // and names the applied record. PLANNED is the plan as this planning change left it; the checks below run on it.
   const ACH_APPLIED_REL = 'aws/tests/fixtures/production-ach-authorization-route-applied-manifest-2026-11-20.json';
   const ACH_APPLIED = JSON.parse(fs.readFileSync(path.join(ROOT, ACH_APPLIED_REL), 'utf8'));
-  const PLANNED = structuredClone(PLAN);
-  PLANNED.members[ROUTER] = { ...PLAN.members[ROUTER], expected_live_sha256: ACH.members[ROUTER].live_sha256, manifest: ACH_REL };
-  assert.deepEqual(PLAN.members[ROUTER], { ...PLANNED.members[ROUTER], expected_live_sha256: acceptedRouter, manifest: ACH_APPLIED_REL });
+  const PLANNED = structuredClone(RECORDED);
+  PLANNED.members[ROUTER] = { ...RECORDED.members[ROUTER], expected_live_sha256: ACH.members[ROUTER].live_sha256, manifest: ACH_REL };
+  assert.deepEqual(RECORDED.members[ROUTER], { ...PLANNED.members[ROUTER], expected_live_sha256: acceptedRouter, manifest: ACH_APPLIED_REL });
+  const PLANNED_REPLAY = structuredClone(PLANNED);
+  PLANNED_REPLAY.members[ROUTER].accepted_sha256 = mainRouter;
   assert.equal(ACH_APPLIED.workstream_id, 'ach-authorization-route-applied');
   assert.equal(ACH_APPLIED.deploy_authorized, false);
   assert.match(ACH_APPLIED.authorization, /^Record only \(2026-11-20\)/);
@@ -10849,7 +10887,7 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   // Order: the ADD immediately before the router, which imports it statically; otherwise the order as it stood before.
   assert.ok(localImports(fs.readFileSync(path.join(API, ROUTER), 'utf8'), ROUTER).includes(ADD));
   assert.equal(PLAN.order.indexOf(ADD) + 1, PLAN.order.indexOf(ROUTER));
-  assert.deepEqual(PLAN.order.filter((name) => name !== ADD), PLAN_PRE_ACH.order);
+  assert.deepEqual(RECORDED.order.filter((name) => name !== ADD), PLAN_PRE_ACH.order);
   const addImports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD);
   assert.deepEqual([...addImports].sort(), ['data.mjs', 'money-write-flag.mjs', 'tenant-email-domain.mjs']);
   for (const dep of addImports) assert.ok(PLAN.order.indexOf(dep) >= 0 && PLAN.order.indexOf(dep) < PLAN.order.indexOf(ADD), dep);
@@ -10857,7 +10895,7 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   assert.equal(WORKFLOW.replace(`          - ${ADD}\n`, ''), WORKFLOW_PRE_ACH);
   for (const name of [ADD, ROUTER]) {
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
-    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLANNED }).ok, true, name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLANNED_REPLAY }).ok, true, name);
     assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
   }
   assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
@@ -10866,23 +10904,23 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   assert.match(routerSource, /'save-ach-authorization'/);
   // Inspect: the ADD READY while absent, ALREADY_ACCEPTED at main's bytes, a collision for anything else present.
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
-  const readyAdd = await run(inspect(ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ADD, { plan: PLANNED }) });
+  const readyAdd = await run(inspect(ADD), { root: ROOT, plan: PLANNED_REPLAY, inspectLive: liveFor(ADD, { plan: PLANNED_REPLAY }) });
   assert.equal(readyAdd.state, 'READY');
   assert.equal(readyAdd.mutation, false);
-  assert.equal((await run(inspect(ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ADD, { sha256: acceptedAdd, plan: PLANNED }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(ADD), { root: ROOT, plan: PLANNED_REPLAY, inspectLive: liveFor(ADD, { sha256: acceptedAdd, plan: PLANNED_REPLAY }) })).state, 'ALREADY_ACCEPTED');
   await assert.rejects(
-    run(inspect(ADD), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ADD, { sha256: 'c'.repeat(64), plan: PLANNED }) }),
+    run(inspect(ADD), { root: ROOT, plan: PLANNED_REPLAY, inspectLive: liveFor(ADD, { sha256: 'c'.repeat(64), plan: PLANNED_REPLAY }) }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   // The REPLACE: READY on the transfer to bank bytes, ALREADY_ACCEPTED on main's; the external disbursement bytes (the transfer
   // to bank REPLACE's pre-state) or anything else a reconciliation stop.
-  const readyRouter = await run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: T2B_ROUTER_BYTES, plan: PLANNED }) });
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, plan: PLANNED_REPLAY, inspectLive: liveFor(ROUTER, { sha256: T2B_ROUTER_BYTES, plan: PLANNED_REPLAY }) });
   assert.equal(readyRouter.state, 'READY');
   assert.equal(readyRouter.mutation, false);
-  assert.equal((await run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter, plan: PLANNED }) })).state, 'ALREADY_ACCEPTED');
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, plan: PLANNED_REPLAY, inspectLive: liveFor(ROUTER, { sha256: mainRouter, plan: PLANNED_REPLAY }) })).state, 'ALREADY_ACCEPTED');
   for (const other of [T2B.members[ROUTER].live_sha256, 'c'.repeat(64)]) {
     await assert.rejects(
-      run(inspect(ROUTER), { root: ROOT, plan: PLANNED, inspectLive: liveFor(ROUTER, { sha256: other, plan: PLANNED }) }),
+      run(inspect(ROUTER), { root: ROOT, plan: PLANNED_REPLAY, inspectLive: liveFor(ROUTER, { sha256: other, plan: PLANNED_REPLAY }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
       other,
     );
@@ -10891,16 +10929,16 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   // the router then passes from the transfer to bank bytes. (On the committed plan: the shared replay helpers start
   // app-services.mjs from older recorded bytes.)
   const env = applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: T2B_ROUTER_BYTES });
-  const pendingPlan = structuredClone(PLANNED);
+  const pendingPlan = structuredClone(PLANNED_REPLAY);
   await assert.rejects(
     run(env, { ...applyDeps(ROUTER, { sha256: T2B_ROUTER_BYTES, pending: [ADD], plan: pendingPlan }).deps, plan: pendingPlan }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
-  const { deps: addDeps, calls: addCalls } = applyDeps(ADD, { plan: structuredClone(PLANNED) });
+  const { deps: addDeps, calls: addCalls } = applyDeps(ADD, { plan: structuredClone(PLANNED_REPLAY) });
   const added = await run(applyEnv(ADD), addDeps);
   assert.equal(added.mutation, false);
   assert.deepEqual(addCalls.receipt.owned_member_ops, { replace: [], add: [ADD] });
-  const routerPlan = structuredClone(PLANNED);
+  const routerPlan = structuredClone(PLANNED_REPLAY);
   const { deps: routerDeps, calls: routerCalls } = applyDeps(ROUTER, { sha256: T2B_ROUTER_BYTES, plan: routerPlan });
   const replaced = await run(env, { ...routerDeps, plan: routerPlan });
   assert.equal(replaced.mutation, false);
@@ -10908,9 +10946,131 @@ test('ACH authorization route (owner 2026-11-19, "Go with A"): ADD ach-authoriza
   // On the committed (recorded) plan: both members are already accepted at the applied bytes; the transfer to bank router
   // bytes are no longer an accepted live state.
   assert.equal((await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: acceptedAdd }) })).state, 'ALREADY_ACCEPTED');
-  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) })).state, 'ALREADY_ACCEPTED');
+  // (Replayed on the plan before the app push registration plan, main's router bytes accepted: PLAN_PUSH_REPLAY.)
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, plan: PLAN_PUSH_REPLAY, inspectLive: liveFor(ROUTER, { sha256: mainRouter, plan: PLAN_PUSH_REPLAY }) })).state, 'ALREADY_ACCEPTED');
   await assert.rejects(
-    run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: T2B_ROUTER_BYTES }) }),
+    run(inspect(ROUTER), { root: ROOT, plan: PLAN_PUSH_REPLAY, inspectLive: liveFor(ROUTER, { sha256: T2B_ROUTER_BYTES, plan: PLAN_PUSH_REPLAY }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
+});
+
+test('App push registration (2026-11-19, planning only), combined with the ACH router (owner 2026-11-20, "Merge 2029 and 2030"): ADD push-register-device.mjs held on SQL 171, then app-services.mjs REPLACE from the applied ACH router bytes to the router carrying both routes', async () => {
+  const ROUTER = 'app-services.mjs';
+  const ACH_ADD = 'ach-authorization.mjs';
+  const ACH_APPLIED_REL = 'aws/tests/fixtures/production-ach-authorization-route-applied-manifest-2026-11-20.json';
+  const ACH_ROUTER = JSON.parse(fs.readFileSync(path.join(ROOT, ACH_APPLIED_REL), 'utf8')).members[ROUTER];
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  // The manifest: planning only, both members on main's bytes; the router from the ACH router bytes applied 2026-11-20
+  // (production apply run 44656016371, recorded VERIFIED) to main's router, which carries save-ach-authorization and
+  // push-register-device. The ACH manifests keep what they recorded.
+  assert.equal(PUSH.workstream_id, 'push-register-device-api');
+  assert.equal(PUSH.deploy_authorized, false);
+  assert.match(PUSH.authorization, /^Pending owner review \(2026-11-19\)\. Planning only/);
+  assert.equal(PUSH.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(PUSH.members), [PUSH_ADD, ROUTER]);
+  const imports = localImports(fs.readFileSync(path.join(API, PUSH_ADD), 'utf8'), PUSH_ADD);
+  assert.deepEqual(imports, ['data.mjs']);
+  assert.deepEqual(PUSH.members[PUSH_ADD], { live_sha256: null, accepted_sha256: sha(`aws/functions/api/${PUSH_ADD}`), operation: 'add', required_imports: imports });
+  assert.deepEqual(ACH_ROUTER, { live_sha256: ACH_ROUTER.accepted_sha256, accepted_sha256: ACH_ROUTER.accepted_sha256, operation: 'replace', previous_manifest: ACH_REL });
+  assert.deepEqual(PUSH.members[ROUTER], { live_sha256: ACH_ROUTER.accepted_sha256, accepted_sha256: sha(`aws/functions/api/${ROUTER}`), operation: 'replace', previous_manifest: ACH_APPLIED_REL });
+  assert.notEqual(PUSH.members[ROUTER].live_sha256, PUSH.members[ROUTER].accepted_sha256);
+  // The combined router: both Class A names routed, the ACH lines as the ACH router had them.
+  const routerSource = fs.readFileSync(path.join(API, ROUTER), 'utf8');
+  for (const line of ["import { handleSaveAchAuthorization } from './ach-authorization.mjs';", "import { handlePushRegisterDevice } from './push-register-device.mjs';",
+    "  'save-ach-authorization',", "  'push-register-device',", '      return handleSaveAchAuthorization(event);', '      return handlePushRegisterDevice(event);']) {
+    assert.ok(routerSource.includes(`${line}\n`), line);
+  }
+  for (const text of ['PR 2016', 'aws_push_register_device', 'aws_push_unregister_device', 'held on SQL 171', 'SOURCE_RECONCILIATION_REQUIRED', 'record #2028',
+    'Merge 2029 and 2030', 'save-ach-authorization', '44656016371', 'index.mjs is untouched', 'Nothing deployed',
+    `${ACH_ROUTER.accepted_sha256.slice(0, 8)} -> ${sha(`aws/functions/api/${ROUTER}`).slice(0, 8)}`]) {
+    assert.ok(PUSH.notes.includes(text), text);
+    assert.ok(PLAN.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Manifest ${PUSH_REL}.`));
+  assert.ok(PLAN.notes.includes('Combined router (owner 2026-11-20, "Merge 2029 and 2030")'));
+  // The plan rows: the ADD held on SQL 171, the router REPLACE on the applied ACH router bytes; the ACH ADD row as it was.
+  assert.deepEqual(PLAN.members[PUSH_ADD], { operation: 'add', accepted_sha256: PUSH.members[PUSH_ADD].accepted_sha256, expected_live_sha256: null, sql_before: SQL171_FILE, manifest: PUSH_REL });
+  assert.deepEqual(PLAN.members[ROUTER], { operation: 'replace', accepted_sha256: PUSH.members[ROUTER].accepted_sha256, expected_live_sha256: PUSH.members[ROUTER].live_sha256, sql_before: null, manifest: PUSH_REL });
+  assert.deepEqual(PLAN.members[ACH_ADD], PLAN_PRE_PUSH.members[ACH_ADD]);
+  assert.equal(PLAN.members[ACH_ADD].manifest, ACH_REL);
+  // Before this plan: the router row on the ACH applied record, no ADD row, no SQL 171 prerequisite.
+  assert.deepEqual(PLAN_PRE_PUSH.members[ROUTER], { operation: 'replace', accepted_sha256: ACH_ROUTER.accepted_sha256, expected_live_sha256: ACH_ROUTER.accepted_sha256, sql_before: null, manifest: ACH_APPLIED_REL });
+  assert.equal(PLAN_PRE_PUSH.sql_prerequisites[SQL171_FILE], undefined);
+  // SQL 171 recorded live in production and staging, with its pins' evidence.
+  const pin171 = readJson('ops/deployment-guard/sql171-device-push-tokens-production-apply.json');
+  assert.equal(pin171.applied.result, 'applied');
+  const prerequisite = PLAN.sql_prerequisites[SQL171_FILE];
+  assert.equal(prerequisite.verified_live, true);
+  for (const text of [pin171.applied.apply_ssm_command_id, pin171.applied.one_shot_run_id, pin171.applied.one_use_id, 'record #2028',
+    `receipt before ${pin171.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin171.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(prerequisite.evidence.includes(text), text);
+  }
+  const staging171 = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL171_FILE];
+  assert.equal(staging171.verified_live, true);
+  for (const text of ['run 44614240107', 'read-live run 44614848373', `${pin171.intended_replacement_sha256.slice(0, 8)}…`]) assert.ok(staging171.evidence.includes(text), text);
+  // Order and workflow: both ADDs before the router that imports them (this ADD just after external-disbursement.mjs, the ACH
+  // ADD where its plan put it, just before the router); nothing else moved.
+  for (const added of [PUSH_ADD, ACH_ADD]) {
+    assert.ok(localImports(routerSource, ROUTER).includes(added), added);
+    assert.ok(PLAN.order.indexOf(added) < PLAN.order.indexOf(ROUTER), added);
+  }
+  assert.equal(PLAN.order.indexOf(ACH_ADD) + 1, PLAN.order.indexOf(ROUTER));
+  assert.equal(PLAN.order[PLAN.order.indexOf('external-disbursement.mjs') + 1], PUSH_ADD);
+  assert.deepEqual(PLAN.order.filter((name) => name !== PUSH_ADD), PLAN_PRE_PUSH.order);
+  assert.ok(WORKFLOW.includes(`          - external-disbursement.mjs\n          - ${PUSH_ADD}\n          - tenant-email-domain.mjs\n`));
+  assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
+  assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('push-register-device'));
+  assert.ok(WORKFLOW.includes(`          - tenant-management-v2.mjs\n          - ${ACH_ADD}\n          - ${ROUTER}\n`));
+  for (const name of [PUSH_ADD, ROUTER]) {
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
+  }
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  // Inspect: the ADD READY while absent, ALREADY_ACCEPTED at its bytes, a collision for anything else present.
+  const readyAdd = await run(inspect(PUSH_ADD), { root: ROOT, inspectLive: liveFor(PUSH_ADD) });
+  assert.equal(readyAdd.state, 'READY');
+  assert.equal(readyAdd.mutation, false);
+  assert.equal((await run(inspect(PUSH_ADD), { root: ROOT, inspectLive: liveFor(PUSH_ADD, { sha256: PUSH.members[PUSH_ADD].accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect(PUSH_ADD), { root: ROOT, inspectLive: liveFor(PUSH_ADD, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  // The router: READY only from the applied ACH router bytes, ALREADY_ACCEPTED at the combined bytes; a router with only the push
+  // route (de4fb39d, this plan before the combination), the transfer to bank bytes (6735d88f), the older 8b91a644 or anything
+  // else a reconciliation stop (a read-only production inspect must confirm the live bytes first).
+  const PUSH_ONLY_ROUTER = 'de4fb39d56fc21ec5ef3070d85734d213d763fe9bd4b5dea4da67bcb201d58fb';
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: ACH_ROUTER.accepted_sha256 }) });
+  assert.equal(readyRouter.state, 'READY');
+  assert.equal(readyRouter.mutation, false);
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: PUSH.members[ROUTER].accepted_sha256 }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of [PUSH_ONLY_ROUTER, T2B.members[ROUTER].accepted_sha256, T2B.members[ROUTER].live_sha256, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // Apply (dry): the ADD is refused while SQL 171 is not recorded verified live (a copy) and passes the SQL gate on the
+  // committed plan, one receipt for this member.
+  const sql171Pending = structuredClone(PLAN);
+  sql171Pending.sql_prerequisites[SQL171_FILE] = { verified_live: false, evidence: null };
+  await assert.rejects(
+    run(applyEnv(PUSH_ADD), { ...applyDeps(PUSH_ADD, { plan: sql171Pending }).deps, plan: sql171Pending }),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL171_FILE,
+  );
+  const { deps: addDeps, calls } = applyDeps(PUSH_ADD);
+  const added = await run(applyEnv(PUSH_ADD), addDeps);
+  assert.equal(added.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [PUSH_ADD] });
+  // The router is refused while either ADD is not live (its imports), and links once both are.
+  for (const pending of [PUSH_ADD, ACH_ADD]) {
+    await assert.rejects(
+      run(applyEnv(ROUTER), applyDeps(ROUTER, { pending: [pending] }).deps),
+      (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing.includes(pending),
+      pending,
+    );
+  }
+  const router = await run(applyEnv(ROUTER), applyDeps(ROUTER).deps);
+  assert.equal(router.mutation, false);
+  assert.match(fs.readFileSync(path.join(API, ROUTER), 'utf8'), /case 'push-register-device':\n\s+return handlePushRegisterDevice\(event\);/);
 });

@@ -337,6 +337,24 @@ const SETTLEMENT_API_MANIFEST = 'aws/tests/fixtures/production-transfer-to-bank-
 // ADD, no hold. The seventh sections keep the hash they recorded as evidence (listed here as changed since).
 const ACH_AUTHORIZATION_MANIFEST = 'aws/tests/fixtures/production-ach-authorization-route-manifest-2026-11-19.json';
 const ACH_AUTHORIZATION_APPLIED_MANIFEST = 'aws/tests/fixtures/production-ach-authorization-route-applied-manifest-2026-11-20.json';
+// App push registration (2026-11-19, planning only; SQL 171), combined with the ACH router (owner 2026-11-20, "Merge 2029 and
+// 2030"): app-services.mjs REPLACEs the applied ACH router bytes (4a66482f) to also route push-register-device (a new ADD row,
+// held on SQL 171). beforePushRegister is a router file's bytes before that plan (the push manifest's live bytes when main's
+// are its accepted bytes); pushRegisterPre reads such a row as it stood before that plan (the ACH applied row).
+const PUSH_REGISTER_API_MANIFEST = 'aws/tests/fixtures/production-push-register-device-api-manifest-2026-11-19.json';
+const PUSH_REGISTER_API = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, PUSH_REGISTER_API_MANIFEST), 'utf8'));
+const beforePushRegister = (name, onMain) => {
+  const entry = PUSH_REGISTER_API.members[name];
+  if (!entry || entry.operation !== 'replace') return onMain;
+  assert.equal(entry.accepted_sha256, onMain, `${name}: main's bytes are the push registration plan's accepted bytes`);
+  return entry.live_sha256;
+};
+const pushRegisterPre = (row, name) => {
+  if (!row || row.manifest !== PUSH_REGISTER_API_MANIFEST) return row;
+  const entry = PUSH_REGISTER_API.members[name];
+  assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [entry.accepted_sha256, entry.live_sha256], name);
+  return { ...row, accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+};
 /** Members changed since the seventh sections -> the manifest whose REPLACE moved them on from the section's bytes. */
 const CHANGED_SINCE_SEVENTH_SECTION = new Map([
   ['providers/production/moov-wallet-withdraw.mjs', SETTLEMENT_API_MANIFEST],
@@ -358,7 +376,8 @@ const settlementRecordPre = (row) => {
 };
 /** A seventh-section file's bytes as that section accepted them: main's, unless listed as changed since. */
 const seventhSectionBytes = (apiRoot, name) => {
-  const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
+  // (Read through the app push registration plan first: the ACH router bytes it moves on from stand for main's.)
+  const onMain = beforePushRegister(name, sha256(fs.readFileSync(path.join(apiRoot, name))));
   if (!CHANGED_SINCE_SEVENTH_SECTION.has(name)) return onMain;
   const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CHANGED_SINCE_SEVENTH_SECTION.get(name)), 'utf8')).members[name];
   assert.equal(planned.accepted_sha256, onMain, `${name}: main's bytes are the later plan's accepted bytes`);
@@ -831,6 +850,13 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     if (overlay.members[name]?.manifest === NO_ADDITIONAL_MANIFEST) {
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
       mainBytes = noAdditionalPre(overlay.members[name]).accepted_sha256;
+    }
+    // (And the app push registration plan, 2026-11-19, planning only, combined with the ACH router on 2026-11-20: the applied ACH
+    // router bytes it moves on from stand for main's, and the row is read as it stood before that plan, on the ACH applied record.)
+    if (row && row.manifest === PUSH_REGISTER_API_MANIFEST) {
+      assert.equal(row.accepted_sha256, mainBytes, name);
+      row = pushRegisterPre(row, name);
+      mainBytes = row.accepted_sha256;
     }
     // (And the ACH authorization route plan, 2026-11-19, applied 2026-11-20 and recorded: the applied record's row is read as the
     // planning row it chains to, the transfer to bank router bytes it moved on from stand for main's, and the row is read as it
