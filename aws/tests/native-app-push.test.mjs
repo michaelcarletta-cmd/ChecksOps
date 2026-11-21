@@ -1,5 +1,5 @@
 // The iOS/Android app can receive push notifications (@capacitor/push-notifications). It is off
-// until a build lists the platform in VITE_NATIVE_PUSH_PLATFORMS: iOS needs the Push capability
+// until a build lists the platform in VITE_NATIVE_PUSH_PLATFORMS (production: ios): iOS needs the Push capability
 // and entitlement, Android needs Firebase (registering without it crashes), both need the server's
 // push-register-device function. After sign-in it asks permission, registers, sends the token and
 // opens only in-app paths from a tapped notification.
@@ -35,9 +35,13 @@ test('push is off unless the build lists the platform', () => {
   assert.deepEqual([...enabledPushPlatforms(undefined)], []);
   assert.deepEqual([...enabledPushPlatforms('')], []);
   assert.deepEqual([...enabledPushPlatforms(' iOS , android,web ')].sort(), ['android', 'ios']);
-  for (const file of ['codemagic.yaml', '.env.aws.example']) {
-    assert.doesNotMatch(read(file), /VITE_NATIVE_PUSH_PLATFORMS/, `${file} does not turn push on yet`);
-  }
+  assert.doesNotMatch(read('.env.aws.example'), /VITE_NATIVE_PUSH_PLATFORMS/, 'staging builds keep push off');
+  // Production builds turn push on for iOS only: Android waits for Firebase (google-services.json).
+  const codemagic = read('codemagic.yaml');
+  assert.deepEqual(codemagic.match(/VITE_NATIVE_PUSH_PLATFORMS=.*/g), ['VITE_NATIVE_PUSH_PLATFORMS=ios']);
+  const production = codemagic.slice(codemagic.indexOf('&build_web_production'), codemagic.indexOf('&install_capacitor'));
+  assert.match(production, /VITE_NATIVE_PUSH_PLATFORMS=ios\n/);
+  assert.ok(!fs.existsSync(path.join(ROOT, 'mobile/android/app/google-services.json')), 'no Firebase yet, so Android stays off');
 });
 
 test('only in-app paths open from a notification', () => {
@@ -98,8 +102,11 @@ test('the app shell wires push in: plugin, iOS token hand-off, signed-in registr
   const delegate = read('mobile/ios/App/App/AppDelegate.swift');
   assert.match(delegate, /didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data\) \{\s*NotificationCenter\.default\.post\(name: \.capacitorDidRegisterForRemoteNotifications, object: deviceToken\)/);
   assert.match(delegate, /didFailToRegisterForRemoteNotificationsWithError error: Error\) \{\s*NotificationCenter\.default\.post\(name: \.capacitorDidFailToRegisterForRemoteNotifications, object: error\)/);
-  // No entitlement yet: adding aps-environment before the App ID has Push breaks signing.
-  assert.doesNotMatch(read('mobile/ios/App/App.xcodeproj/project.pbxproj'), /CODE_SIGN_ENTITLEMENTS/);
+  // The App ID has Push since 2026-11-21, so the app carries the aps-environment entitlement
+  // (production: App Store and TestFlight builds) in both build configurations.
+  const pbx = read('mobile/ios/App/App.xcodeproj/project.pbxproj');
+  assert.equal(pbx.match(/CODE_SIGN_ENTITLEMENTS = App\/App\.entitlements;/g)?.length, 2);
+  assert.match(read('mobile/ios/App/App/App.entitlements'), /<key>aps-environment<\/key>\s*<string>production<\/string>/);
   assert.equal(PUSH_REGISTER_FUNCTION, 'push-register-device');
   const component = read('src/components/NativePushRegistration.tsx');
   assert.match(component, /if \(!userId\) return;/, 'only after sign-in');

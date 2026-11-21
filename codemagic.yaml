@@ -35,6 +35,8 @@ definitions:
       # The app is served from capacitor://localhost (iOS) or https://localhost (Android), so the
       # API is the full https://checksops.com/prep address, not the website's same-origin /prep.
       # Same public Cognito values as the guarded production website upload.
+      # Push is on for iOS only (APNs key stored 2026-11-21); Android waits for Firebase
+      # (google-services.json), because registering without it crashes the app.
       script: |
         bun install --frozen-lockfile
         cat > .env.aws <<'ENV'
@@ -44,6 +46,7 @@ definitions:
         VITE_AWS_REGION=us-east-1
         VITE_COGNITO_USER_POOL_ID=us-east-1_h00WorYMT
         VITE_COGNITO_USER_POOL_CLIENT_ID=3ja9fqaq2fjkv3i6up2varcqpe
+        VITE_NATIVE_PUSH_PLATFORMS=ios
         ENV
         CHECKSOPS_NATIVE_APP_BUILD=1 bun run build:aws
     - &install_capacitor
