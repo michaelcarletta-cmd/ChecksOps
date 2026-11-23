@@ -7,7 +7,7 @@
  *
  *   - the pin: staging-authorized (wave 62) from staging read-live run 44569070362 (applied in staging by run 44576208345), code-derived,
  *     selectable, packed, in step with the production pin (applied 2026-11-19 from production's own pre-state, retired); the pinned commit
- *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
+ *     authored the bytes; no predecessor, supersedes nothing; only SQL 172 names it (as its predecessor);
  *   - the file and spec: three SECURITY DEFINER functions (VOLATILE, search_path public, row_security off, EXECUTE
  *     checksops), eight columns on check_endorsements with no column grant, one partial index; nothing else; the expected
  *     pre-state (everything absent) derived from the spec;
@@ -172,10 +172,11 @@ test('pin: SQL 170 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(spec.functions.map((f) => f.identity), [EVENT, SENT, OPENED]);
   assert.deepEqual(spec.predecessors, []);
   for (const absent of ['supersedes', 'runs_before', 'refuse_after', 'production_only']) assert.equal(spec[absent], undefined, absent);
-  // Nothing supersedes, refuses after or depends on SQL 170.
+  // Nothing supersedes or refuses after SQL 170. SQL 172 (opened and clicked, 2026-11-23) adds its own columns and function
+  // and names SQL 170 as its predecessor; it changes none of SQL 170's objects.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
+    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql172']);
   const prod = productionPin();
   assert.equal(prod.migration, KEY);
   assert.equal(prod.intended_replacement_sha256, pin.intended_replacement_sha256);

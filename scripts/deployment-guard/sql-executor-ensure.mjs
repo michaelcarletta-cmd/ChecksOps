@@ -143,6 +143,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/169_check_billing_events_keep_charge_on_check_delete.sql', 'sql/169_check_billing_events_keep_charge_on_check_delete.sql'],
   ['aws/workflows/sql/170_check_endorsement_email_status.sql', 'sql/170_check_endorsement_email_status.sql'],
   ['aws/workflows/sql/171_device_push_tokens.sql', 'sql/171_device_push_tokens.sql'],
+  ['aws/workflows/sql/172_check_endorsement_email_engagement.sql', 'sql/172_check_endorsement_email_engagement.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

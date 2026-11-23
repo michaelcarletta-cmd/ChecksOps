@@ -116,6 +116,7 @@ on:
           - sql169-check-billing-events-keep-charge-on-check-delete
           - sql170-check-endorsement-email-status
           - sql171-device-push-tokens
+          - sql172-check-endorsement-email-engagement
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -288,6 +289,7 @@ jobs:
           node --test aws/tests/release-sql169-executor.test.mjs
           node --test aws/tests/release-sql170-executor.test.mjs
           node --test aws/tests/release-sql171-executor.test.mjs
+          node --test aws/tests/release-sql172-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

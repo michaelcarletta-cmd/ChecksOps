@@ -175,6 +175,7 @@ export const MIGRATIONS = Object.freeze({
   'sql169-check-billing-events-keep-charge-on-check-delete': RELEASE_2026_10_17_PENDING_SQL_PINS.sql169,
   'sql170-check-endorsement-email-status': RELEASE_2026_10_17_PENDING_SQL_PINS.sql170,
   'sql171-device-push-tokens': RELEASE_2026_10_17_PENDING_SQL_PINS.sql171,
+  'sql172-check-endorsement-email-engagement': RELEASE_2026_10_17_PENDING_SQL_PINS.sql172,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;
