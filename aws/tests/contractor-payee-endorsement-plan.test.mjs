@@ -55,8 +55,21 @@ const copyNoticePre = (plan0) => {
 // applied bytes; emailStatusPre reads the row as it stood before that plan, and PLAN_BEFORE_EMAIL_STATUS is that plan.
 const EMAIL_STATUS_REL = 'aws/tests/fixtures/production-endorsement-email-status-api-manifest-2026-11-19.json';
 const EMAIL_STATUS_APPLIED_REL = 'aws/tests/fixtures/production-endorsement-email-status-api-applied-manifest-2026-11-19.json';
+// The endorsement email engagement plan (2026-11-23, planning only) moved the row on from the email status applied
+// bytes; engagementPre reads the row as it stood before that plan (those applied bytes stand for main's).
+const ENGAGEMENT_REL = 'aws/tests/fixtures/production-endorsement-email-engagement-api-manifest-2026-11-23.json';
+const engagementPre = (plan) => {
+  const row = plan.members[HANDLER];
+  if (row?.manifest !== ENGAGEMENT_REL) return plan;
+  const entry = JSON.parse(read(ENGAGEMENT_REL)).members[HANDLER];
+  assert.equal(entry.previous_manifest, EMAIL_STATUS_APPLIED_REL);
+  assert.equal(row.expected_live_sha256, entry.live_sha256);
+  plan.members[HANDLER] = { ...row, accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+  return plan;
+};
 // emailStatusRecordPre reads the row as it stood before the email status apply (production run 44589744829).
-const emailStatusRecordPre = (plan) => {
+const emailStatusRecordPre = (plan0) => {
+  const plan = engagementPre(plan0);
   const row = plan.members[HANDLER];
   if (row?.manifest !== EMAIL_STATUS_APPLIED_REL) return plan;
   const applied = JSON.parse(read(EMAIL_STATUS_APPLIED_REL)).members[HANDLER];
