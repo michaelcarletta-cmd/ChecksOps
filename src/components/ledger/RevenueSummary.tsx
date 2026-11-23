@@ -38,6 +38,9 @@ import {
   sendExpenseTotal,
 } from "@/lib/payments/transferFinanceRows";
 import { useIncomingTransfers, useSentPaymentLegs } from "@/hooks/useTransferFinance";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { RevenueByJob } from "@/components/ledger/RevenueByJob";
+import type { JobPnlCheck, JobPnlSplit } from "@/lib/jobPnl";
 
 type RevenueCheck = DepositCustomerSource & {
   id: string;
@@ -47,11 +50,16 @@ type RevenueCheck = DepositCustomerSource & {
   check_number: string | null;
   carrier_name: string | null;
   claim_id: string | null;
+  cash_job_id: string | null;
   freedom_claim_number: string | null;
 };
 
+/** Totals: today's organization-wide P&L. By Job: the same money per claim and cash job. */
+type RevenueView = "totals" | "byJob";
+
 export function RevenueSummary() {
   const { tenant } = useTenant();
+  const [view, setView] = useState<RevenueView>("totals");
 
   const { data: revenueData, isLoading: revenueLoading } = useQuery({
     queryKey: ["revenue-summary-incoming", tenant?.id],
@@ -59,7 +67,7 @@ export function RevenueSummary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select(`id, amount, status, deposited_at, check_number, carrier_name, claim_id, freedom_claim_number, ${DEPOSIT_CUSTOMER_SELECT}`)
+        .select(`id, amount, status, deposited_at, check_number, carrier_name, claim_id, cash_job_id, freedom_claim_number, ${DEPOSIT_CUSTOMER_SELECT}`)
         .eq("tenant_id", tenant!.id)
         .in("status", ["deposited", "funds_released"])
         .order("deposited_at", { ascending: false });
@@ -144,6 +152,13 @@ export function RevenueSummary() {
     [disbursementData, payrollRuns, sentLegs],
   );
 
+  // By Job reads the same checks as Totals, with the insured name Totals shows for each.
+  const countedChecks = useMemo<JobPnlCheck[]>(
+    () => (revenueData ?? []).map((check) => ({ ...check, customer_name: depositCustomerName(check, caseInsuredNames) })),
+    [revenueData, caseInsuredNames],
+  );
+  const partnerPayments = useMemo(() => incomingRevenueRows(incomingTransfers), [incomingTransfers]);
+
   const stats = useMemo(() => {
     const checkIncoming = revenueData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
     const invoiceIncoming = (paidInvoices ?? []).reduce((sum, invoice) => sum + invoice.amountCents, 0) / 100;
@@ -179,8 +194,38 @@ export function RevenueSummary() {
     );
   }
 
+  const viewToggle = (
+    <ToggleGroup
+      type="single"
+      value={view}
+      onValueChange={(v) => v && setView(v as RevenueView)}
+      aria-label="Show totals or by job"
+      className="inline-flex justify-start gap-1 rounded-lg bg-muted/50 p-1"
+    >
+      <ToggleGroupItem value="totals" className="h-8 px-3 text-xs data-[state=on]:bg-background data-[state=on]:shadow-sm">Totals</ToggleGroupItem>
+      <ToggleGroupItem value="byJob" className="h-8 px-3 text-xs data-[state=on]:bg-background data-[state=on]:shadow-sm">By Job</ToggleGroupItem>
+    </ToggleGroup>
+  );
+
+  if (view === "byJob") {
+    return (
+      <div className="space-y-4">
+        {viewToggle}
+        <RevenueByJob
+          countedChecks={countedChecks}
+          splits={disbursementData as JobPnlSplit[] | undefined}
+          paidInvoices={paidInvoices}
+          sentLegs={sentLegs}
+          partnerPayments={partnerPayments}
+          payrollNotAllocated={stats.payrollOutgoing + stats.speedFeeOutgoing}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {viewToggle}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
