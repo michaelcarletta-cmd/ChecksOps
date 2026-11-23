@@ -18,6 +18,7 @@ import { CashJobCheckUpload } from "./CashJobCheckUpload";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { formatPhoneForDisplay } from "@/lib/utils";
 import { isAwsStaging } from "@/lib/awsStaging";
+import { JobPnlCard } from "@/components/jobs/JobPnlCard";
 
 const PAYMENT_METHODS: Record<string, string> = {
   cash: "Cash", check: "Check", zelle: "Zelle",
@@ -385,6 +386,9 @@ export function CashJobDetail({ jobId, onBack }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Job P&L: payments and deposited checks in, payouts, sends and ChecksOps fees out (jobPnl.ts). */}
+      <JobPnlCard job={{ kind: "cash_job", id: jobId }} />
 
       {/* Notes */}
       {job.notes && (

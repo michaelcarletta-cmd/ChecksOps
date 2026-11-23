@@ -13,11 +13,15 @@
 import { PAYROLL_SOURCE_LABEL, isPayrollPaid, payrollAmount, payrollRecipientName, type PayrollRun } from "./payrollRows.ts";
 import { PAYROLL_SPEED_LABELS, isPayrollSpeed, payrollSpeedFee } from "./payrollSpeedFees.ts";
 
-/** The columns the Revenue & Profit split query selects (the display subset of Payment History's select). */
+/**
+ * The columns the Revenue & Profit split query selects (the display subset of Payment History's
+ * select). recipient_type, the batch's check id and that check's claim / case / cash job tie a payout
+ * to its job for the By Job view and the Job P&L card (jobPnl.ts).
+ */
 export const REVENUE_EXPENSE_SPLIT_COLUMNS = `
-  id, amount, status, settled_at, created_at, method, recipient_name, external_check_number,
+  id, amount, status, settled_at, created_at, method, recipient_name, recipient_type, external_check_number,
   stakeholder_accounts (id, nickname, custname),
-  disbursement_batches (id, check_intake_items:check_intake_item_id (check_number))
+  disbursement_batches (id, check_intake_item_id, check_intake_items:check_intake_item_id (check_number, claim_id, case_id, cash_job_id))
 `;
 
 export const PAYROLL_SPEED_FEE_ROW_LABEL = "Payroll speed fee";
