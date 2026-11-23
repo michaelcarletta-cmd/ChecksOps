@@ -4,7 +4,8 @@
  * opened and clicked" (Resend's opened and clicked events for a payee's endorsement request email, next to Delivered).
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 172 included); this file covers what is new:
  *
- *   - the pin: staging-authorized (wave 64) from staging read-live run 45267758829, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 64) from staging read-live run 45267758829 (applied in staging by run 45276313813), code-derived,
+ *     selectable, packed, in step with the execute-authorized production pin (production's own pre-state); the pinned commit
  *     authored the bytes; predecessor SQL 170, supersedes nothing; nothing names it;
  *   - the file and spec: one SECURITY DEFINER function (VOLATILE, search_path public, row_security off, EXECUTE
  *     checksops), six columns on check_endorsements with no column grant; nothing else; no SQL 170 object; the expected
@@ -128,7 +129,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; predecessor SQL 170; the derived pre-state', () => {
+test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; predecessor SQL 170; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -146,7 +147,7 @@ test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-23: staging apply (wave 64) from staging read-live run 45267758829');
   assert.equal(pin.expected_live_definition_sha256, ABSENT_PRE);
   assert.equal(pin.expected_live_definition_sha256, 'dbf6a7240cfc5dd737cd47e7f0f765cf6349c0a3a8625a39e02f4901c2e29897');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-172-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 64\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-172-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 64, 2026-11-23, apply run 45276313813\); staging acceptance: the staging apply under the owner's run approval \("run the SQL 172 staging apply"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `03050f81-bebc-4566-a116-35147b3410f6`, 2026-11-23\) by the owner-reviewed pin change; not applied in production\./);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-172-apply.md'), 'utf8'), /read-live \(2026-11-23\)\.\*\* Run 45267758829/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT_PRE, pin.intended_replacement_sha256);
@@ -156,7 +157,7 @@ test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectab
   for (const value of [ABSENT_PRE, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 64\); not applied anywhere\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 64, 2026-11-23, apply run 45276313813\);/);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
   assert.equal(resolveAuthorizedMigration({ filename: pin.filename }), pin);
   assert.equal(MIGRATIONS[spec.choice], pin);
@@ -179,12 +180,18 @@ test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [...pin.function_identities]);
   assert.deepEqual(prod.predecessors, ['sql170']);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-23) on the staging apply from the same pre-state.
+  // Its pre-state is production's own (read-only inspect SSM 03050f81): the six columns and the function absent, equal to the staging pin's.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-23 /);
   assert.equal(prod.authorization_phrase, 'SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
-  assert.equal(prod.staging_acceptance.ok, false);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, ABSENT_PRE);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
+  assert.equal(prod.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45276313813');
   assert.ok(prod.production_inspect.note.includes(ABSENT_PRE));
   assert.ok(prod.order_note.includes(ABSENT_PRE));
   assert.ok(prod.intended_post_state.note.includes(pin.intended_replacement_sha256));
