@@ -109,3 +109,14 @@ test('vite guard: the website keeps /prep; only the app build takes https://chec
     /^ERR /,
   );
 });
+
+test('a failed iOS archive prints Xcode errors and keeps the xcodebuild log', () => {
+  const yaml = read('codemagic.yaml');
+  for (const id of ['ios-staging', 'ios-production']) {
+    const block = workflowBlock(yaml, id);
+    assert.match(block, /if ! xcode-project build-ipa/, id);
+    assert.match(block, /grep -h -E "error:[^"]*" \/tmp\/xcodebuild_logs\/\*\.log/, id);
+    assert.match(block, /exit 65/, id);
+    assert.match(block, /- \/tmp\/xcodebuild_logs\/\*\.log/, id);
+  }
+});
