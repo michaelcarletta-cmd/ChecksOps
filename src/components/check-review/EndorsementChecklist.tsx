@@ -31,7 +31,7 @@ import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
   Landmark, PenTool, Eye, ShieldCheck, Loader2, Upload, FileImage,
-  Plus, Trash2, MailCheck, MailWarning, MousePointerClick,
+  Plus, Trash2, MailCheck, MailOpen, MailWarning, MousePointerClick,
 } from "lucide-react";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { InPersonSignatureDialog } from "./InPersonSignatureDialog";
@@ -942,8 +942,8 @@ function EndorsementCard({
         </p>
       )}
 
-      {/* Email delivery and link opened (SQL 170). Absent columns: nothing more than the line above. */}
-      {emailStatus.tracked && (emailStatus.delivery || emailStatus.linkOpenedAt) && (
+      {/* Email delivery and link opened (SQL 170), email opened and clicked (SQL 172). Absent columns: nothing more than the line above. */}
+      {emailStatus.tracked && (emailStatus.delivery || emailStatus.linkOpenedAt || emailStatus.emailOpenedAt || emailStatus.emailClickedAt) && (
         <div data-endorsement-email-status="" className="space-y-0.5 text-[10px]">
           {emailStatus.delivery === "bounced" && endorsement.status !== "signed" && (
             <p className="flex items-start gap-1 text-red-400">
@@ -969,6 +969,20 @@ function EndorsementCard({
             <p className="flex items-center gap-1 text-muted-foreground">
               <Clock className="h-3 w-3 shrink-0" />
               Delivery pending
+            </p>
+          )}
+          {emailStatus.emailOpenedAt && endorsement.status !== "signed" && (
+            <p className="flex items-center gap-1 text-muted-foreground" title="Reported by the email provider. Some mail apps open emails automatically, so this can show before the payee reads it.">
+              <MailOpen className="h-3 w-3 shrink-0 text-sky-400" />
+              Email opened {format(new Date(emailStatus.emailOpenedAt), "MMM d h:mm a")}
+              {emailStatus.emailOpenCount > 1 && ` (${emailStatus.emailOpenCount}×)`}
+            </p>
+          )}
+          {emailStatus.emailClickedAt && endorsement.status !== "signed" && (
+            <p className="flex items-center gap-1 text-muted-foreground">
+              <MousePointerClick className="h-3 w-3 shrink-0 text-violet-400" />
+              Email link clicked {format(new Date(emailStatus.emailClickedAt), "MMM d h:mm a")}
+              {emailStatus.emailClickCount > 1 && ` (${emailStatus.emailClickCount}×)`}
             </p>
           )}
           {emailStatus.linkOpenedAt && (
