@@ -41,8 +41,16 @@ the Resend webhook handler to pass `email.opened` and `email.clicked` to the fun
 turned on for the sending domain in Resend), then the website (opened and clicked beside Delivered), each after this pin
 is applied in production. No API, Lambda or SPA change is part of this pin.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 64 when approved (wave 63 is SQL 171, the highest on main).
+**Status:** staging pin execute-authorized (wave 64); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-23).** Run 45267758829 (main `6a5c0b746`, after executor inspect run 45266777439 and executor deploy
+run 45267274234 (executor CodeSha256 `gGHt9f/X…` -> `seM6qqQs…`)), under the owner's words "run the staging SQL executor
+deploy, then the SQL 172 read-live": `already_applied` false, `precondition_failures` `[]`, predecessors `{ sql170: true }`;
+the six columns and the function absent. Live
+`dbf6a7240cfc5dd737cd47e7f0f765cf6349c0a3a8625a39e02f4901c2e29897`, equal to the derived pre-state; intended `fc4119aa…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 64) on the owner's "approve the SQL 172 staging apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words
+for that run. The production pin stays pending.
 
 ## Order
 
