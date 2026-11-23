@@ -4010,6 +4010,31 @@ export const AUTHORIZED_SQL172_CHECK_ENDORSEMENT_EMAIL_ENGAGEMENT = Object.freez
   ]),
 });
 
+// Job expenses staging pin: SQL 173 (owner 2026-11-23, "Proceed with the per job build. Make sure it is for insurance
+// jobs and cash jobs": job costs paid outside ChecksOps recorded against an insurance job (a claim) or a cash job). One
+// new table, public.job_expenses (RLS on, one tenant-scoped SELECT policy, SELECT for checksops and authenticated only),
+// and two new SECURITY DEFINER functions, aws_job_expense_add and aws_job_expense_delete, EXECUTE checksops and the
+// owner. No predecessor (release-sql-specs.mjs). Pending until a reviewed pin change records a staging read-live;
+// staging wave 65 when approved (ops/production-sql-173-apply.md).
+export const AUTHORIZED_SQL173_JOB_EXPENSES = Object.freeze({
+  key: 'sql173',
+  filename: 'aws/workflows/sql/173_job_expenses.sql',
+  migration_id: '173_job_expenses',
+  // The commit that last authored the file bytes.
+  commit: 'b727c13a6e6bd7dc551c8d2925ba4954ed2791b6',
+  source_sha256: '88e0ddff2b315b3e430350fc52dadaee9af1f6bab7d0981373b67bff768a3b45',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql173', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'b593bc24cefeae9f174cf1e8ba23bca7db6387f96c9dcf777ffe6358b2a4522a',
+  // The file creates and sets the ACL of these functions.
+  function_identities: Object.freeze([
+    'public.aws_job_expense_add(uuid, uuid, uuid, text, bigint, date, text, text, text, text, text, uuid)',
+    'public.aws_job_expense_delete(uuid, uuid, uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -4090,6 +4115,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql170: AUTHORIZED_SQL170_CHECK_ENDORSEMENT_EMAIL_STATUS,
   sql171: AUTHORIZED_SQL171_DEVICE_PUSH_TOKENS,
   sql172: AUTHORIZED_SQL172_CHECK_ENDORSEMENT_EMAIL_ENGAGEMENT,
+  sql173: AUTHORIZED_SQL173_JOB_EXPENSES,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -4106,7 +4132,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168, sql169, sql170, sql171, sql172; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168, sql169, sql170, sql171, sql172, sql173; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

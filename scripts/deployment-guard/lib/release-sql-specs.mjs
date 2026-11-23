@@ -10535,6 +10535,121 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_endorsements"
     ]
   },
+  // SQL 173 (owner 2026-11-23, "Proceed with the per job build. Make sure it is for insurance jobs and cash jobs"; step 3
+  // of the per-job design): job costs paid outside ChecksOps recorded against an insurance job (a claim) or a cash job,
+  // for per-job profit. One table, public.job_expenses (exactly one of claim_id / cash_job_id, each a foreign key ON
+  // DELETE CASCADE; category, amount, paid_by, text-length and idempotency-key CHECKs; soft delete; a per-tenant partial
+  // unique idempotency key and two partial job indexes), RLS on, not forced, one SELECT policy TO authenticated in the
+  // form of aws/rls/sql/12_final_select_policies.sql (aws_is_cross_tenant_reader() OR aws_can_access_tenant(tenant_id)),
+  // no write policy, table ACL exactly SELECT for checksops and authenticated (every other non-owner grant revoked,
+  // default privileges included, as SQL 141). Two SECURITY DEFINER functions (search_path public, row_security off;
+  // EXECUTE checksops and the owner): aws_job_expense_add (p_user_id = auth.uid() and a member by SQL 90's
+  // aws_can_write_tenant, as SQL 147; the claim by the API's claimBelongsToTenant rule, the cash job by its tenant_id;
+  // idempotent on the key) returning jsonb, and aws_job_expense_delete (soft delete) returning boolean. They write only
+  // the file's own table, which the login owns. definer_writes lists the three existing relations the file's own
+  // sql173_definer_cannot_read check names (the add function reads claims, cash_jobs and check_intake_items past RLS),
+  // as SQL 141 lists the relations its DEFINER reads; the new table cannot be listed (absent in the pre-state). The
+  // foreign keys add only PostgreSQL's internal referential triggers on claims and cash_jobs (no altered_relations, as
+  // SQL 141's on tenants). No predecessor in the release engine (SQL 90's aws_can_write_tenant(uuid) is a prerequisite).
+  sql173: {
+    "key": "sql173",
+    "label": "SQL 173",
+    "choice": "sql173-job-expenses",
+    "production_pin_rel": "ops/deployment-guard/sql173-job-expenses-production-apply.json",
+    "script": "sql173-job-expenses-production-apply",
+    "prerequisites": [
+      "public.claims",
+      "public.cash_jobs",
+      "public.check_intake_items",
+      "public.tenant_users",
+      "public.aws_can_write_tenant(uuid)",
+      "public.aws_can_access_tenant(uuid)",
+      "public.aws_is_cross_tenant_reader()",
+      "auth.uid()",
+      "gen_random_uuid()",
+      "role checksops",
+      "role authenticated",
+      "column public.cash_jobs.id",
+      "column public.cash_jobs.tenant_id",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.tenant_id",
+      "column public.claims.id",
+      "column public.claims.org_id",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_job_expense_add(uuid, uuid, uuid, text, bigint, date, text, text, text, text, text, uuid)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_job_expense_delete(uuid, uuid, uuid)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      }
+    ],
+    "policies": [
+      {
+        "table": "public.job_expenses",
+        "name": "aws_select_job_expenses",
+        "cmd": "SELECT",
+        "roles": ["authenticated"],
+        "permissive": true,
+        "qual": "(public.aws_is_cross_tenant_reader() OR public.aws_can_access_tenant(tenant_id))",
+        "with_check": null
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.job_expenses",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          ["id", "uuid", true, "gen_random_uuid()"],
+          ["tenant_id", "uuid", true, null],
+          ["claim_id", "uuid", false, null],
+          ["cash_job_id", "uuid", false, null],
+          ["category", "text", true, null],
+          ["amount_cents", "bigint", true, null],
+          ["expense_date", "date", true, null],
+          ["paid_to", "text", false, null],
+          ["paid_by", "text", false, null],
+          ["notes", "text", false, null],
+          ["receipt_path", "text", false, null],
+          ["created_by", "uuid", false, null],
+          ["created_at", "timestamp with time zone", true, "now()"],
+          ["updated_at", "timestamp with time zone", true, "now()"],
+          ["deleted_at", "timestamp with time zone", false, null],
+          ["deleted_by", "uuid", false, null],
+          ["idempotency_key", "text", false, null]
+        ],
+        "constraints": [
+          ["job_expenses_amount", "CHECK (((amount_cents > 0) AND (amount_cents <= '100000000000'::bigint)))"],
+          ["job_expenses_cash_job_id_fkey", "FOREIGN KEY (cash_job_id) REFERENCES public.cash_jobs(id) ON DELETE CASCADE"],
+          ["job_expenses_category", "CHECK ((category = ANY (ARRAY['materials'::text, 'labor'::text, 'subcontractor'::text, 'permit'::text, 'equipment'::text, 'other'::text])))"],
+          ["job_expenses_claim_id_fkey", "FOREIGN KEY (claim_id) REFERENCES public.claims(id) ON DELETE CASCADE"],
+          ["job_expenses_idempotency_key_shape", "CHECK ((idempotency_key ~ '^[A-Za-z0-9_:-]{8,100}$'::text))"],
+          ["job_expenses_one_job", "CHECK ((num_nonnulls(claim_id, cash_job_id) = 1))"],
+          ["job_expenses_paid_by", "CHECK ((paid_by = ANY (ARRAY['company_card'::text, 'supplier_account'::text, 'cash'::text, 'check'::text, 'ach'::text, 'other'::text])))"],
+          ["job_expenses_pkey", "PRIMARY KEY (id)"],
+          ["job_expenses_text_lengths", "CHECK (((length(paid_to) <= 200) AND (length(notes) <= 2000) AND (length(receipt_path) <= 500)))"]
+        ],
+        "indexes": [
+          ["job_expenses_pkey", "CREATE UNIQUE INDEX job_expenses_pkey ON public.job_expenses USING btree (id)"],
+          ["job_expenses_tenant_cash_job_idx", "CREATE INDEX job_expenses_tenant_cash_job_idx ON public.job_expenses USING btree (tenant_id, cash_job_id) WHERE (deleted_at IS NULL)"],
+          ["job_expenses_tenant_claim_idx", "CREATE INDEX job_expenses_tenant_claim_idx ON public.job_expenses USING btree (tenant_id, claim_id) WHERE (deleted_at IS NULL)"],
+          ["job_expenses_tenant_idempotency_key", "CREATE UNIQUE INDEX job_expenses_tenant_idempotency_key ON public.job_expenses USING btree (tenant_id, idempotency_key) WHERE (idempotency_key IS NOT NULL)"]
+        ],
+        "acl": ["authenticated SELECT", "checksops SELECT"]
+      }
+    ],
+    "definer_writes": [
+      "public.claims",
+      "public.cash_jobs",
+      "public.check_intake_items"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
