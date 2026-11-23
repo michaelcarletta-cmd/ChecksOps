@@ -1,0 +1,65 @@
+{
+  "id": "sql173-job-expenses-production-apply",
+  "migration": "sql173",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/173_job_expenses.sql",
+  "migration_id": "173_job_expenses",
+  "staging_pin_commit": "b727c13a6e6bd7dc551c8d2925ba4954ed2791b6",
+  "source_sha256": "88e0ddff2b315b3e430350fc52dadaee9af1f6bab7d0981373b67bff768a3b45",
+  "function_identities": [
+    "public.aws_job_expense_add(uuid, uuid, uuid, text, bigint, date, text, text, text, text, text, uuid)",
+    "public.aws_job_expense_delete(uuid, uuid, uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "b593bc24cefeae9f174cf1e8ba23bca7db6387f96c9dcf777ffe6358b2a4522a",
+  "authorization_phrase": "RECORD_JOB_EXPENSES",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 173 creates one table and two functions and replaces nothing (owner 2026-11-23, \"Proceed with the per job build. Make sure it is for insurance jobs and cash jobs\"; step 3 of the per-job design: job costs paid outside ChecksOps, such as materials on a supplier account, card purchases, permits, dumpsters and labor, recorded against an insurance job or a cash job so per-job profit includes them). public.job_expenses (tenant_id; exactly one of claim_id, a foreign key to public.claims(id), and cash_job_id, a foreign key to public.cash_jobs(id), both ON DELETE CASCADE; category materials, labor, subcontractor, permit, equipment or other; amount_cents 1 to 100000000000; expense_date; paid_to <= 200; paid_by NULL or company_card, supplier_account, cash, check, ach or other; notes <= 2000; receipt_path <= 500; created_by, created_at, updated_at; soft delete deleted_at, deleted_by; idempotency_key unique per tenant where present; two partial indexes for a job's live expenses), RLS on (not forced), one SELECT policy aws_select_job_expenses TO authenticated in the form of aws/rls/sql/12_final_select_policies.sql (aws_is_cross_tenant_reader() OR aws_can_access_tenant(tenant_id)), no write policy, every non-owner grant revoked (default privileges included, as SQL 118 and SQL 141) and SELECT granted to checksops and authenticated only. Two SECURITY DEFINER functions, plpgsql, VOLATILE, search_path public, row_security off, EXECUTE checksops and the owner (revoked from PUBLIC, anon, authenticated and service_role): aws_job_expense_add(uuid, uuid, uuid, text, bigint, date, text, text, text, text, text, uuid) returning jsonb (p_user_id must be auth.uid() and a member of the tenant by SQL 90's aws_can_write_tenant, as SQL 147, else 42501 job_expense_forbidden; inputs 22023 job_expense_invalid; the claim must be the tenant's by the API's claimBelongsToTenant rule, org_id the tenant, or org_id NULL and one of the tenant's checks carries the claim, and the cash job by its tenant_id, else P0002 job_expense_job_not_found; the same idempotency key returns the recorded row with duplicate true, a different expense under it is 23505 job_expense_key_reused) and aws_job_expense_delete(uuid, uuid, uuid) returning boolean (soft delete of one of the tenant's live expenses, members only). The file refuses (55000) sql173_prerequisite_missing (claims, cash_jobs, check_intake_items, tenant_users, the columns the functions read, aws_can_write_tenant(uuid), aws_can_access_tenant(uuid), aws_is_cross_tenant_reader(), auth.uid(), gen_random_uuid(), roles checksops and authenticated), sql173_definer_cannot_read (the applying login must own claims, cash_jobs and check_intake_items without FORCE ROW LEVEL SECURITY, or be a superuser or BYPASSRLS; the engine's definer_can_write_relations) and sql173_unexpected_table (a job_expenses table with other columns); a table with these columns but another shape is refused by the engine (created_tables_absent_or_intended). The applying login owns the new table and functions (created_tables_owned_by_login, functions_owned_by_login). No existing table, column, constraint, trigger, policy, grant or row changes (the two foreign keys add only PostgreSQL's internal referential triggers on claims and cash_jobs). Expected pre-state in both environments: the table, its policy and both functions absent (release sql173 v1: 4cc4506d60b103ff058ea7ed83009159e501ac46b03165a6dc0dc11dae8f5df2, releaseStateHash('sql173', {})). The API route that calls the functions and the website that shows a job's expenses and per-job profit are later, separate changes (a Lambda overlay and a website upload, after this pin is applied in production). No API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql173-job-expenses-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql173-job-expenses",
+    "one_shot_migration": "sql173",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-173-apply.md",
+    "tests": [
+      "aws/tests/release-sql173-executor.test.mjs",
+      "aws/tests/release-sql173-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql173-job-expenses-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 173: sql173-job-expenses-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql173-job-expenses); production-sql-one-shot.mjs --migration sql173. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two functions' attributes, body hashes and EXECUTE ACLs, the policy, and the table's columns, constraints, indexes, RLS, policies, triggers and grants. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 173 yet. Expected: prerequisites_missing [], predecessors {} (none), claims, cash_jobs and check_intake_items owned by checksops_admin without FORCE ROW LEVEL SECURITY (definer_can_write_relations), the table job_expenses, its policy and both functions absent, already_applied false. Expected release-engine fingerprint of that pre-state under sql173: 4cc4506d60b103ff058ea7ed83009159e501ac46b03165a6dc0dc11dae8f5df2. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, predecessors, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (the table, the policy or a function present), prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "b593bc24cefeae9f174cf1e8ba23bca7db6387f96c9dcf777ffe6358b2a4522a",
+    "note": "public.job_expenses: seventeen columns (id uuid default gen_random_uuid(), tenant_id, claim_id, cash_job_id, category, amount_cents bigint, expense_date date, paid_to, paid_by, notes, receipt_path, created_by, created_at and updated_at default now(), deleted_at, deleted_by, idempotency_key), primary key, the two foreign keys ON DELETE CASCADE, the one-job, category, amount, paid_by, text-length and idempotency-key CHECKs, the partial unique index on (tenant_id, idempotency_key) and the two partial job indexes, RLS on (not forced), the one SELECT policy aws_select_job_expenses TO authenticated, no trigger, grants exactly SELECT for checksops and authenticated. aws_job_expense_add(uuid, uuid, uuid, text, bigint, date, text, text, text, text, text, uuid) returns jsonb and aws_job_expense_delete(uuid, uuid, uuid) returns boolean: plpgsql, VOLATILE, SECURITY DEFINER, search_path public, row_security off, EXECUTE checksops and the owner. No other object changes; no row written by the apply. The fingerprint is releaseIntendedHash('sql173', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): b593bc24cefeae9f174cf1e8ba23bca7db6387f96c9dcf777ffe6358b2a4522a."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 173 (choice sql173-job-expenses) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql173-job-expenses-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
