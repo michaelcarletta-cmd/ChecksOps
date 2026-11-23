@@ -751,10 +751,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // "approve the SQL 171 production pin", #2027: the read-only production inspect SSM ffa9f784 recorded as its pre-state, the guarded
 // staging apply run 44614240107 from the same pre-state) until its record-and-retire change after its 2026-11-19 apply
 // ("REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS").
-// SQL 172's pin is execute-authorized (owner-approved pin change of 2026-11-23, "Run the SQL 172 production inspect" /
-// "Open the SQL 172 production pin PR": the read-only production inspect SSM 03050f81 recorded as its pre-state, the guarded
-// staging apply run 45276313813 from the same pre-state) until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql172']);
+// SQL 172's pin was execute-authorized (owner-approved pin change of 2026-11-23, "Run the SQL 172 production inspect" /
+// "Open the SQL 172 production pin PR", #2049: the read-only production inspect SSM 03050f81 recorded as its pre-state, the guarded
+// staging apply run 45276313813 from the same pre-state) until its record-and-retire change after its 2026-11-23 apply
+// ("SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED").
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -864,6 +865,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql170: Object.freeze({ ssm: 'd3acdfce-755f-498c-9d88-d35fa645b43e', run: 'ec7cfd44-a912-49c9-b908-0c4b0269c201', one_use_id: 'sql170-prod-0c205621-fa88-41f5-9903-b12cd1465b28', workstream: 'prod-sql170-endorsement-email-status-20261119', approval: 'apply SQL 170 in production SHOW_ENDORSEMENT_EMAIL_STATUS' }),
   // SQL 171's production apply of 2026-11-19 (main d3bd9476f), on the owner's "REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS".
   sql171: Object.freeze({ ssm: '64a77757-c18c-4b10-bdfe-b0555632e893', run: '6a62cd62-ede8-40bf-a096-3ba44bdd9fbe', one_use_id: 'sql171-prod-19a5dee9-0cde-4c6b-833d-b7754cecd65a', workstream: 'prod-sql171-device-push-tokens-20261119', approval: 'REGISTER_PHONES_FOR_PUSH_NOTIFICATIONS' }),
+  // SQL 172's production apply of 2026-11-23 (main 25b6c54ce), on the owner's "SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED".
+  sql172: Object.freeze({ ssm: 'a071df6d-ac5d-42fc-a10c-5acd8e6e6d0b', run: '3f8c6c95-03dd-4a03-82c2-343480bf62a4', one_use_id: 'sql172-prod-9684d2f2-1fdb-4fb9-be08-d833dcfd09ad', workstream: 'prod-sql172-endorsement-email-engagement-20261123', approval: 'SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb), on the owner's "apply SQL 136 in production".
   sql136: Object.freeze({ ssm: 'd52b099a-56c7-4148-828c-2530b48c40fb', run: 'b47f4c29-c5bf-4288-82ff-870f057489d9', one_use_id: 'sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673', workstream: 'prod-sql136-money-write-restrictive-20261102', approval: 'apply SQL 136 in production' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).
@@ -1222,7 +1225,7 @@ test('the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 1
       // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 115, SQL 118, SQL 119, SQL 120 and SQL 121: 2026-10-27, SQL 122, SQL 123 and SQL 124: 2026-10-28, SQL 125, SQL 126 and SQL 127: 2026-10-29, SQL 128, SQL 130, SQL 131 and SQL 132: 2026-10-30, SQL 133 and SQL 134: 2026-10-31, SQL 137 and SQL 138: 2026-11-01, SQL 136, SQL 139 and SQL 140: 2026-11-02, SQL 142 and SQL 143: 2026-11-05, SQL 144, SQL 145 and SQL 146: 2026-11-07, SQL 147 and SQL 148: 2026-11-10, SQL 150, SQL 152, SQL 76, SQL 154 and SQL 156: 2026-11-11, SQL 153 and SQL 158: 2026-11-12) and retired: execute false, the one apply run recorded in applied.
       const run = APPLIED_2026_10_21[key];
       assert.equal(real.execute, false, key);
-      assert.match(real.authorization, /^Applied to production on 2026-(10-(2[12356789]|3[01])|11-(0[1257]|1[0123469])); execute is false again/, key);
+      assert.match(real.authorization, /^Applied to production on 2026-(10-(2[12356789]|3[01])|11-(0[1257]|1[0123469]|23)); execute is false again/, key);
       assert.ok(real.authorization.includes(`"${run.approval}"`), key);
       assert.equal(real.applied.owner_approval, run.approval, key);
       assert.equal(real.applied.result, 'applied', key);
