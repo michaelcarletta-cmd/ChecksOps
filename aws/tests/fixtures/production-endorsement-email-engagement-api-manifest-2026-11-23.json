@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-email-engagement-api",
+  "authorization": "Pending owner review (2026-11-23). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Endorsement email engagement (owner 2026-11-23: \"for emails that are sent, delivered, opened, clicked, I am only seeing Delivered on ChecksOps. Not if they were opened or clicked\", then \"Yes build opened and clicked\"). check-endorsement.mjs handleEndorsementEmailWebhook acknowledged and dropped Resend's email.opened and email.clicked reports (only delivered, bounced and complained were recorded, SQL 170). These bytes pass email.opened and email.clicked, once the Svix signature checks out, to public.aws_endorsement_email_engagement(email id, 'opened'|'clicked', event time) (SQL 172), which stamps the first and last time and counts them on the check_endorsements row whose latest request carries that Resend email id; an id that is not an endorsement request matches no row. Until SQL 172 is applied the function is missing (42883): those two reports are acknowledged (200, engagement_not_ready) and nothing changes, so Resend does not retry them; any other database failure answers 500 as before, and a missing SQL 170 function is still a 500. Delivered, bounced, complained and the payee's link_opened record are unchanged. No hold: sql_before stays null because the code works without SQL 172, but nothing is recorded until SQL 172 is applied. live_sha256 is the bytes production run 44589744829 applied 2026-11-19 (VERIFIED, re-inspect 44590482759), recorded in the endorsement email status applied manifest; a read-only production overlay inspect must confirm them before any apply. No SQL change in this manifest. No release-lock change. The website change that shows opened and clicked is a separate PR.",
+  "members": {
+    "check-endorsement.mjs": {
+      "live_sha256": "c3a6e218ccbff647192fc20cc70b9d08fb2aba7f33dc24805fac9869ad65612e",
+      "accepted_sha256": "2fbb0bccfaf37d996004e1863ef6a6fdd0d1f5a1decbeafec2cfee21740b87b0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-endorsement-email-status-api-applied-manifest-2026-11-19.json"
+    }
+  }
+}
