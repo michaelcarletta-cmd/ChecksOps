@@ -132,13 +132,20 @@ workflows:
         # CURRENT_PROJECT_VERSION feeds CFBundleVersion. PROJECT_BUILD_NUMBER counts builds across
         # every workflow of this Codemagic app, so staging and production uploads of
         # com.checksops.app never reuse a number (the per-workflow BUILD_NUMBER did).
+        # On failure, print Xcode's own error lines (Codemagic only reports "Failed to archive")
+        # and keep the full xcodebuild log as an artifact.
         script: |
-          xcode-project build-ipa \
+          if ! xcode-project build-ipa \
             --project mobile/ios/App/App.xcodeproj \
             --scheme App \
-            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER"
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER"; then
+            echo "Xcode errors from /tmp/xcodebuild_logs:"
+            grep -h -E "error:|Provisioning profile|entitlement|Code Signing Error|requires a provisioning profile" /tmp/xcodebuild_logs/*.log | sort -u | head -80 || true
+            exit 65
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
         auth: integration
@@ -197,13 +204,20 @@ workflows:
       - name: Apply the signing profile
         script: xcode-project use-profiles
       - name: Build the signed IPA
+        # On failure, print Xcode's own error lines (Codemagic only reports "Failed to archive")
+        # and keep the full xcodebuild log as an artifact.
         script: |
-          xcode-project build-ipa \
+          if ! xcode-project build-ipa \
             --project mobile/ios/App/App.xcodeproj \
             --scheme App \
-            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER"
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER"; then
+            echo "Xcode errors from /tmp/xcodebuild_logs:"
+            grep -h -E "error:|Provisioning profile|entitlement|Code Signing Error|requires a provisioning profile" /tmp/xcodebuild_logs/*.log | sort -u | head -80 || true
+            exit 65
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
         auth: integration
