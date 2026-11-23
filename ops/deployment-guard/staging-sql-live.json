@@ -147,6 +147,10 @@
     "aws/workflows/sql/171_device_push_tokens.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql171-device-push-tokens on 2026-11-19 (run 44614240107, wave 63, executor deploy run 44613639425; read-live run 44614848373 already_applied true, precondition_failures [], prerequisites_missing [], live 254a44e1\u2026 = the pin's intended_replacement_sha256)."
+    },
+    "aws/workflows/sql/173_job_expenses.sql": {
+      "verified_live": false,
+      "evidence": null
     }
   }
 }

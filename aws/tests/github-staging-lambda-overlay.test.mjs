@@ -539,11 +539,12 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // applied, so the hold was SQL 154's until its record change (staging run 43063499920, production 2026-11-11). No SQL
   // is pending everywhere now. SQL 167 (the Claim Ledger relink, 2026-11-14, which holds workflow-rpc.mjs) was staging
   // first (run 43628481801, recorded below and in its production pin's staging_acceptance) until its production record
-  // change (SSM 83892c35, production 2026-11-14, record #1910). No SQL is pending in production now.
+  // change (SSM 83892c35, production 2026-11-14, record #1910). SQL 173 (the job expenses, 2026-11-23) is pending
+  // everywhere now: job-expenses.mjs waits for it in both environments until its record change.
   const pendingInProduction = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
-  assert.deepEqual(pendingInProduction, []);
+  assert.deepEqual(pendingInProduction, ['aws/workflows/sql/173_job_expenses.sql']);
   const pendingEverywhere = pendingInProduction.filter((file) => STAGING_SQL.sql[file]?.verified_live !== true);
-  assert.deepEqual(pendingEverywhere, []);
+  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/173_job_expenses.sql']);
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !pendingEverywhere.includes(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and

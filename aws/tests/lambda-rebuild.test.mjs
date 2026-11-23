@@ -346,7 +346,27 @@ const PUSH_REGISTER_API = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, PUSH_R
 // Applied 2026-11-20 (production runs 44746906815 and 44748599628, VERIFIED) and recorded: the router row expects the applied
 // bytes and names the applied record, whose previous_manifest is the planning manifest.
 const PUSH_REGISTER_APPLIED_MANIFEST = 'aws/tests/fixtures/production-push-register-device-applied-manifest-2026-11-20.json';
-const beforePushRegister = (name, onMain) => {
+// Job expenses API (owner 2026-11-23, "Proceed with the per job build. Make sure it is for insurance jobs and cash jobs";
+// planning only; SQL 173): app-services.mjs REPLACEs the applied push registration router bytes (b235327f) to also route
+// job-expenses (a new ADD row, held on SQL 173). beforeJobExpenses is a router file's bytes before that plan (the job expenses
+// manifest's live bytes when main's are its accepted bytes); jobExpensesPre reads such a row as it stood before that plan
+// (the push registration applied row). beforePushRegister, which reads further back, applies beforeJobExpenses first.
+const JOB_EXPENSES_API_MANIFEST = 'aws/tests/fixtures/production-job-expenses-api-manifest-2026-11-23.json';
+const JOB_EXPENSES_API = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, JOB_EXPENSES_API_MANIFEST), 'utf8'));
+const beforeJobExpenses = (name, onMain) => {
+  const entry = JOB_EXPENSES_API.members[name];
+  if (!entry || entry.operation !== 'replace') return onMain;
+  assert.equal(entry.accepted_sha256, onMain, `${name}: main's bytes are the job expenses plan's accepted bytes`);
+  return entry.live_sha256;
+};
+const jobExpensesPre = (row, name) => {
+  if (!row || row.manifest !== JOB_EXPENSES_API_MANIFEST) return row;
+  const entry = JOB_EXPENSES_API.members[name];
+  assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [entry.accepted_sha256, entry.live_sha256], name);
+  return { ...row, accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+};
+const beforePushRegister = (name, onMain0) => {
+  const onMain = beforeJobExpenses(name, onMain0);
   const entry = PUSH_REGISTER_API.members[name];
   if (!entry || entry.operation !== 'replace') return onMain;
   assert.equal(entry.accepted_sha256, onMain, `${name}: main's bytes are the push registration plan's accepted bytes`);
@@ -862,6 +882,13 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     if (overlay.members[name]?.manifest === NO_ADDITIONAL_MANIFEST) {
       assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
       mainBytes = noAdditionalPre(overlay.members[name]).accepted_sha256;
+    }
+    // (And the job expenses API plan, 2026-11-23, planning only: the applied push registration router bytes it moves on from
+    // stand for main's, and the row is read as it stood before that plan, on the push registration applied record.)
+    if (row && row.manifest === JOB_EXPENSES_API_MANIFEST) {
+      assert.equal(row.accepted_sha256, mainBytes, name);
+      row = jobExpensesPre(row, name);
+      mainBytes = row.accepted_sha256;
     }
     // (And the app push registration plan, 2026-11-19, combined with the ACH router and applied 2026-11-20, recorded: the applied
     // record's row is read as the planning row it chains to, the applied ACH router bytes it moved on from stand for main's, and

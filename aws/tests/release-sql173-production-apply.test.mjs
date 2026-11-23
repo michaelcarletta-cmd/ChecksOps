@@ -8,8 +8,8 @@
  *   - the pin has the release pin shape, is pending (execute false, no pre-state, no approval) and is in step with the
  *     staging pin, the one-shot, the bypass inventory and the test lists;
  *   - no predecessor; one new table (RLS on, one tenant SELECT policy, SELECT for checksops and authenticated) and two
- *     new SECURITY DEFINER functions (EXECUTE checksops and the owner); no existing object changed; no overlay plan entry
- *     yet; the runbook, one-shot doc and README name it;
+ *     new SECURITY DEFINER functions (EXECUTE checksops and the owner); no existing object changed; the overlay plan holds
+ *     job-expenses.mjs on it, recorded not live in production or staging; the runbook, one-shot doc and README name it;
  *   - the pending pin refuses before connecting; an approved, accepted copy evaluates for the manifest built from it,
  *     and refuses with execute false, another live hash, another staging reference or a wrong phrase; the CLI spends no
  *     receipt.
@@ -157,7 +157,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   }
 });
 
-test('order: no predecessor; one new table with one tenant SELECT policy and two new DEFINER functions, nothing existing changed; no overlay plan entry yet; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; one new table with one tenant SELECT policy and two new DEFINER functions, nothing existing changed; the overlay plan holds job-expenses.mjs on it, recorded not live; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
@@ -190,10 +190,12 @@ test('order: no predecessor; one new table with one tenant SELECT policy and two
     'definer_can_write_relations', 'claimBelongsToTenant', 'No API, Lambda or SPA change is part of this pin', ABSENT_PRE]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // The API that calls the functions is a later step: nothing in the overlay plan waits on SQL 173 yet.
+  // The API route that calls the functions (job-expenses, the job expenses API plan of 2026-11-23, planning only) is the one
+  // member held on it; SQL 173 is not applied, so production and staging record it not live until its record changes.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL173_FILE], undefined);
-  assert.doesNotMatch(JSON.stringify(plan), /173_job_expenses/);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL173_FILE), ['job-expenses.mjs']);
+  assert.deepEqual(plan.sql_prerequisites[SQL173_FILE], { verified_live: false, evidence: null });
+  assert.deepEqual(readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL173_FILE], { verified_live: false, evidence: null });
   // The file: three guarded DO blocks, the table, its three indexes, RLS, the policy, the grants, the two functions with
   // their ACLs and comments; no other object, and no row written outside the functions.
   const text = fileText.replace(/--[^\n]*/g, '');

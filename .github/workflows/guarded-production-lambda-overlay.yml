@@ -94,6 +94,7 @@ on:
           - mortgage-desk-esign.mjs
           - tenant-management-v2.mjs
           - ach-authorization.mjs
+          - job-expenses.mjs
           - app-services.mjs
           - mortgage-agent-compensation.mjs
           - ingest-shared-check.mjs
