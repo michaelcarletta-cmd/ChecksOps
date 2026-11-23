@@ -10446,6 +10446,95 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       }
     ]
   },
+  // SQL 172 (owner 2026-11-23, "Yes build opened and clicked": Resend's opened and clicked events for a payee's
+  // endorsement request email, next to Delivered): six columns on public.check_endorsements (the latest request email's
+  // first and last opened time and open count, first and last clicked time and click count; the two counts NOT NULL
+  // DEFAULT 0, the times nullable with no default; no column grant) and one SECURITY DEFINER function (search_path public,
+  // row_security off; EXECUTE checksops and the owner) the API calls with Resend's verified events:
+  // aws_endorsement_email_engagement. definer_writes: the table the function updates past RLS (the file's
+  // sql172_definer_cannot_write check). Predecessor SQL 170 (its email_message_id and aws_endorsement_email_event, which
+  // the file's own sql172_prerequisite_missing check also requires); none of SQL 170's objects is named or changed here.
+  // No policy, trigger, index, table grant or other column change.
+  sql172: {
+    "key": "sql172",
+    "label": "SQL 172",
+    "choice": "sql172-check-endorsement-email-engagement",
+    "production_pin_rel": "ops/deployment-guard/sql172-check-endorsement-email-engagement-production-apply.json",
+    "script": "sql172-check-endorsement-email-engagement-production-apply",
+    "prerequisites": [
+      "public.check_endorsements",
+      "role checksops",
+      "column public.check_endorsements.id"
+    ],
+    "predecessors": [
+      "sql170"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_endorsement_email_engagement(text, text, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_endorsements"
+    ],
+    "added_columns": [
+      {
+        "table": "public.check_endorsements",
+        "column": "email_first_opened_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_last_opened_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_open_count",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_first_clicked_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_last_clicked_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.check_endorsements",
+        "column": "email_click_count",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      }
+    ],
+    "altered_relations": [
+      "public.check_endorsements"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
