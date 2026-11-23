@@ -1,4 +1,7 @@
 // Build bump: refresh published bundle with production backend config
+// First import: browsers that refuse localStorage (blocked site data, in-app browsers) get an in-memory
+// stand-in before any other module touches it, so public pages like /endorse do not crash.
+import "./lib/safeWebStorage";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
