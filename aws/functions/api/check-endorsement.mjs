@@ -1605,8 +1605,16 @@ export const runAuthenticatedEndorsement = async ({
  *
  * email.delivered, email.bounced and email.complained are passed to public.aws_endorsement_email_event
  * (SQL 170), which stamps the check_endorsements row whose latest request carries that Resend email id;
- * an id that is not an endorsement request matches no row and changes nothing. Every other event type is
- * acknowledged and ignored. A database failure answers 500 so Resend retries the delivery.
+ * an id that is not an endorsement request matches no row and changes nothing.
+ *
+ * email.opened and email.clicked (owner 2026-11-23: "Yes build opened and clicked") are passed to
+ * public.aws_endorsement_email_engagement (SQL 172), which stamps the first and last time and counts them on the
+ * same row. They are Resend's reports: an open is a tracking image the mail app loaded (some apps load it
+ * themselves) and a click can come from a mail security scanner; the payee reaching the signing page is the
+ * separate link_opened record. Until SQL 172 is applied the function is missing: those two reports are
+ * acknowledged (engagement_not_ready) and nothing changes, so Resend does not retry them.
+ *
+ * Every other event type is acknowledged and ignored. A database failure answers 500 so Resend retries.
  *
  * The signing secret is RESEND_WEBHOOK_SECRET in the provider secrets JSON (PROVIDER_SECRETS_ARN), or the
  * environment variable of the same name. Without it every report is refused (503) and nothing is read.
@@ -1617,6 +1625,12 @@ export const RESEND_WEBHOOK_EVENTS = Object.freeze({
   'email.bounced': 'bounced',
   'email.complained': 'complained',
 });
+/** Resend engagement reports, recorded by SQL 172's aws_endorsement_email_engagement. */
+export const RESEND_ENGAGEMENT_EVENTS = Object.freeze({
+  'email.opened': 'opened',
+  'email.clicked': 'clicked',
+});
+const UNDEFINED_FUNCTION = '42883';
 
 const headerValue = (headers, name) => {
   if (!headers || typeof headers !== 'object') return '';
@@ -1709,8 +1723,9 @@ export const handleEndorsementEmailWebhook = async (event, deps = {}) => {
   }
   const type = typeof body?.type === 'string' ? body.type : null;
   const kind = RESEND_WEBHOOK_EVENTS[type];
+  const engagement = RESEND_ENGAGEMENT_EVENTS[type];
   const emailId = typeof body?.data?.email_id === 'string' ? body.data.email_id.trim() : '';
-  if (!kind || !emailId) {
+  if ((!kind && !engagement) || !emailId) {
     return { ok: true, statusCode: 200, received: true, type, ignored: true };
   }
   let client;
@@ -1724,6 +1739,22 @@ export const handleEndorsementEmailWebhook = async (event, deps = {}) => {
       client = createClient(buildWriteClientConfig(await loadCredentials(), { queryTimeoutMillis: 8000 }));
       owned = true;
       await client.connect();
+    }
+    if (engagement) {
+      let engaged;
+      try {
+        engaged = await client.query(
+          'SELECT public.aws_endorsement_email_engagement($1, $2, $3::timestamptz) AS updated',
+          [emailId, engagement, eventTime(body)],
+        );
+      } catch (error) {
+        // SQL 172 not applied yet: acknowledge, change nothing.
+        if (error?.code === UNDEFINED_FUNCTION) {
+          return { ok: true, statusCode: 200, received: true, type, ignored: true, reason: 'engagement_not_ready' };
+        }
+        throw error;
+      }
+      return { ok: true, statusCode: 200, received: true, type, updated: engaged.rows?.[0]?.updated === true ? 1 : 0 };
     }
     const result = await client.query(
       'SELECT public.aws_endorsement_email_event($1, $2, $3::timestamptz, $4) AS updated',

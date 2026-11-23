@@ -8,6 +8,7 @@ import { createHmac } from 'node:crypto';
 import fs from 'node:fs';
 import { test } from 'node:test';
 import {
+  RESEND_ENGAGEMENT_EVENTS,
   RESEND_WEBHOOK_EVENTS,
   handleCheckEndorsement,
   handleEndorsementEmailWebhook,
@@ -47,7 +48,7 @@ const webhookEvent = (payload, { headers = {}, base64 = false, signWith } = {}) 
   };
 };
 
-const recordingDb = ({ fail = false } = {}) => {
+const recordingDb = ({ fail = false, failCode = '42P01', rows = [{ updated: 1 }] } = {}) => {
   const calls = [];
   return {
     calls,
@@ -56,8 +57,8 @@ const recordingDb = ({ fail = false } = {}) => {
       end: async () => {},
       query: async (sql, params = []) => {
         calls.push({ sql: String(sql).replace(/\s+/g, ' ').trim(), params });
-        if (fail) throw Object.assign(new Error('relation does not exist'), { code: '42P01' });
-        return { rows: [{ updated: 1 }], rowCount: 1 };
+        if (fail) throw Object.assign(new Error('database error'), { code: failCode });
+        return { rows, rowCount: rows.length };
       },
     },
   };
@@ -163,8 +164,6 @@ test('delivered, bounced and complained reach aws_endorsement_email_event with t
 
 test('other event types and reports without an email id are acknowledged and ignored', async () => {
   for (const payload of [
-    { ...delivered, type: 'email.opened' },
-    { ...delivered, type: 'email.clicked' },
     { ...delivered, type: 'email.sent' },
     { ...delivered, type: 'email.delivery_delayed' },
     { type: 'email.delivered', data: {} },
@@ -347,9 +346,18 @@ test('overlay plan (2026-11-19, planning only): check-endorsement.mjs moves on f
   const name = 'check-endorsement.mjs';
   const rel = 'aws/tests/fixtures/production-endorsement-email-status-api-manifest-2026-11-19.json';
   const appliedRel = 'aws/tests/fixtures/production-endorsement-copy-notice-api-applied-manifest-2026-11-18.json';
-  const plan = JSON.parse(read('ops/deployment-guard/production-api-overlay-plan.json'));
+  const currentPlan = JSON.parse(read('ops/deployment-guard/production-api-overlay-plan.json'));
+  const plan = structuredClone(currentPlan);
   const manifest = JSON.parse(read(rel));
-  const onMain = sha(read(`aws/functions/api/${name}`));
+  // The engagement plan (2026-11-23, planning only) has since moved check-endorsement.mjs on: the bytes this plan
+  // accepted are read from its applied record, and the row as it stood before that plan.
+  const LATER_REL = 'aws/tests/fixtures/production-endorsement-email-engagement-api-manifest-2026-11-23.json';
+  const later = JSON.parse(read(LATER_REL)).members[name];
+  const onMain = later.live_sha256;
+  assert.notEqual(sha(read(`aws/functions/api/${name}`)), onMain);
+  assert.equal(later.accepted_sha256, sha(read(`aws/functions/api/${name}`)));
+  assert.deepEqual(currentPlan.members[name], { operation: 'replace', accepted_sha256: later.accepted_sha256, expected_live_sha256: onMain, sql_before: null, manifest: LATER_REL });
+  plan.members[name] = { ...currentPlan.members[name], accepted_sha256: onMain, manifest: later.previous_manifest };
   const applied = JSON.parse(read(appliedRel)).members[name];
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review \(2026-11-19\)\. Planning only/);
@@ -363,7 +371,8 @@ test('overlay plan (2026-11-19, planning only): check-endorsement.mjs moves on f
   const record = JSON.parse(read(statusAppliedRel));
   const beforeApply = { ...plan.members[name], expected_live_sha256: manifest.members[name].live_sha256, manifest: record.members[name].previous_manifest };
   assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied.accepted_sha256, sql_before: null, manifest: rel });
-  assert.equal(resolvePlannedMember(name, { root, plan }).ok, true);
+  // (resolvePlannedMember checks main's bytes, so it reads the committed plan.)
+  assert.equal(resolvePlannedMember(name, { root, plan: currentPlan }).ok, true);
   assert.ok(plan.notes.includes(`Manifest ${rel}. Nothing deployed.`));
   assert.equal(record.workstream_id, 'endorsement-email-status-api-applied');
   assert.equal(record.deploy_authorized, false);
@@ -390,4 +399,63 @@ test('overlay plan (2026-11-19, planning only): check-endorsement.mjs moves on f
   const appServices = read('aws/functions/api/app-services.mjs').toString('utf8');
   assert.match(appServices, /\n {2}'check-endorsement',\n/);
   assert.match(appServices, /case 'check-endorsement':/);
+});
+
+test('opened and clicked (owner 2026-11-23: "Yes build opened and clicked") reach aws_endorsement_email_engagement with the event time', async () => {
+  assert.deepEqual(RESEND_ENGAGEMENT_EVENTS, { 'email.opened': 'opened', 'email.clicked': 'clicked' });
+  for (const [type, kind] of [['email.opened', 'opened'], ['email.clicked', 'clicked']]) {
+    const db = recordingDb({ rows: [{ updated: true }] });
+    const payload = { ...delivered, type };
+    const result = await handleCheckEndorsement(webhookEvent(payload), webhookDeps({ client: db.client }));
+    assert.deepEqual(result, { ok: true, statusCode: 200, received: true, type, updated: 1 }, type);
+    assert.deepEqual(db.calls, [{
+      sql: 'SELECT public.aws_endorsement_email_engagement($1, $2, $3::timestamptz) AS updated',
+      params: ['re_abc123', kind, '2026-11-19T03:59:30.000Z'],
+    }], type);
+    // An email id that is not an endorsement request matches no row.
+    const none = recordingDb({ rows: [{ updated: false }] });
+    assert.equal((await handleCheckEndorsement(webhookEvent(payload), webhookDeps({ client: none.client }))).updated, 0, type);
+  }
+});
+
+test('before SQL 172 the engagement function is missing: opened and clicked are acknowledged and change nothing; other failures still answer 500', async () => {
+  const missing = recordingDb({ fail: true, failCode: '42883' });
+  const result = await handleCheckEndorsement(webhookEvent({ ...delivered, type: 'email.opened' }), webhookDeps({ client: missing.client }));
+  assert.deepEqual(result, { ok: true, statusCode: 200, received: true, type: 'email.opened', ignored: true, reason: 'engagement_not_ready' });
+  const broken = recordingDb({ fail: true });
+  const failed = await handleCheckEndorsement(webhookEvent({ ...delivered, type: 'email.clicked' }), webhookDeps({ client: broken.client }));
+  assert.equal(failed.statusCode, 500);
+  assert.equal(failed.error, 'webhook_record_failed');
+  // A missing delivery function (SQL 170) is still a 500, as before.
+  const delivery = recordingDb({ fail: true, failCode: '42883' });
+  assert.equal((await handleCheckEndorsement(webhookEvent(delivered), webhookDeps({ client: delivery.client }))).statusCode, 500);
+});
+
+test('overlay plan (2026-11-23, planning only): check-endorsement.mjs moves on from the endorsement email status applied bytes', async () => {
+  const { createHash } = await import('node:crypto');
+  const path = await import('node:path');
+  const { resolvePlannedMember } = await import('../../scripts/deployment-guard/github-production-lambda-overlay.mjs');
+  const root = path.resolve(new URL('../..', import.meta.url).pathname);
+  const read = (rel) => fs.readFileSync(path.join(root, rel));
+  const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+  const name = 'check-endorsement.mjs';
+  const rel = 'aws/tests/fixtures/production-endorsement-email-engagement-api-manifest-2026-11-23.json';
+  const appliedRel = 'aws/tests/fixtures/production-endorsement-email-status-api-applied-manifest-2026-11-19.json';
+  const plan = JSON.parse(read('ops/deployment-guard/production-api-overlay-plan.json'));
+  const manifest = JSON.parse(read(rel));
+  const onMain = sha(read(`aws/functions/api/${name}`));
+  const applied = JSON.parse(read(appliedRel)).members[name];
+  assert.equal(manifest.workstream_id, 'endorsement-email-engagement-api');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-23\)\. Planning only/);
+  for (const text of ['Yes build opened and clicked', 'aws_endorsement_email_engagement', 'SQL 172', 'engagement_not_ready', '44589744829',
+    'read-only production overlay inspect must confirm', 'No release-lock change']) {
+    assert.ok(manifest.notes.includes(text), text);
+  }
+  assert.deepEqual(manifest.members, { [name]: { live_sha256: applied.accepted_sha256, accepted_sha256: onMain, operation: 'replace', previous_manifest: appliedRel } });
+  assert.notEqual(onMain, applied.accepted_sha256);
+  assert.deepEqual(plan.members[name], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied.accepted_sha256, sql_before: null, manifest: rel });
+  assert.equal(resolvePlannedMember(name, { root, plan }).ok, true);
+  assert.ok(plan.notes.includes(`check-endorsement.mjs REPLACE ${applied.accepted_sha256.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
+  assert.ok(plan.notes.includes(`Manifest ${rel}. Nothing deployed.`));
 });
