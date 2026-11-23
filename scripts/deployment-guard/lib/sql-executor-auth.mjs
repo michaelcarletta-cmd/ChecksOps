@@ -3987,8 +3987,9 @@ export const AUTHORIZED_SQL171_DEVICE_PUSH_TOKENS = Object.freeze({
 // and clicked events for a payee's endorsement request email, next to Delivered). Six columns on
 // public.check_endorsements (first and last opened time and open count, first and last clicked time and click count)
 // and one SECURITY DEFINER function, aws_endorsement_email_engagement(text, text, timestamp with time zone), EXECUTE
-// checksops and the owner. Predecessor SQL 170 (release-sql-specs.mjs). Pending until a reviewed pin change records a
-// staging read-live; staging wave 64 when approved (ops/production-sql-172-apply.md).
+// checksops and the owner. Predecessor SQL 170 (release-sql-specs.mjs). Staging apply authorized (wave 64) from
+// staging read-live run 45267758829: the six columns and the function absent, SQL 170 applied, equal to the derived
+// pre-state (ops/production-sql-172-apply.md).
 export const AUTHORIZED_SQL172_CHECK_ENDORSEMENT_EMAIL_ENGAGEMENT = Object.freeze({
   key: 'sql172',
   filename: 'aws/workflows/sql/172_check_endorsement_email_engagement.sql',
@@ -3996,9 +3997,11 @@ export const AUTHORIZED_SQL172_CHECK_ENDORSEMENT_EMAIL_ENGAGEMENT = Object.freez
   // The commit that last authored the file bytes.
   commit: '1bfb02bbea4ab0b14b3fee4c88fadab91310d138',
   source_sha256: 'd0f860f034158d621ea6de9173fd53d4ec60467e229f16cfba4a42c7104435c3',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-23: staging apply (wave 64) from staging read-live run 45267758829',
+  execute: true,
+  // Staging read-live run 45267758829 (main 6a5c0b746, executor deploy run 45267274234): already_applied false,
+  // precondition_failures [], predecessors { sql170: true }. Equal to the derived pre-state (everything absent).
+  expected_live_definition_sha256: 'dbf6a7240cfc5dd737cd47e7f0f765cf6349c0a3a8625a39e02f4901c2e29897',
   // Code-derived: releaseIntendedHash('sql172', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'fc4119aa53c9652fa4bd9774f2e0c3add752e70ce1aa8bb9fe302981a7b38dce',
   // The file creates and sets the ACL of this function.

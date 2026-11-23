@@ -210,7 +210,7 @@ test('order: predecessor SQL 170; one DEFINER function and six columns on check_
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, ABSENT_PRE, 'SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 64\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql172` \|/);
   assert.match(oneShot, /`sql170`, `sql171`, `sql172`\) \|/);
