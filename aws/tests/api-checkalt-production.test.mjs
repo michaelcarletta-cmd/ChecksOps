@@ -815,7 +815,9 @@ test('duplicate submission and simultaneous claim do not create a second provide
 
   const race = createStore();
   grantStepUp(race);
-  const [a, b] = await Promise.all([submitOnce(race), submitOnce(race)]);
+  // Two overlapping withEnv calls restore in completion order, so the later one can put the
+  // production flags back after the race. The outer withEnv restores the environment last.
+  const [a, b] = await withEnv(productionFlags, () => Promise.all([submitOnce(race), submitOnce(race)]));
   assert.equal(race.processPosts, 1);
   assert.equal(race.deposits.length, 1);
   assert.ok([a, b].some((row) => row.checkalt_reference === '9001' || row.duplicate === true));
@@ -835,6 +837,191 @@ test('provider accepted + DB failure does not blind-resubmit; Lambda/browser ret
   const retry = await submitOnce(store);
   assert.equal(retry.duplicate || retry.replayed || retry.reconciled, true);
   assert.equal(store.processPosts, 1);
+});
+
+// 2026-11-24: a CheckAlt sign-in 504 came after markHttpAttempted and left the row
+// 'submitting' with provider_http_attempted_at set and no deposit POST. Each test loads
+// its own copy of the submit module so its module-level JWT cache starts empty and the
+// sign-in really runs.
+let freshSubmitSeq = 0;
+const freshSubmitHandler = async () => (await import(
+  `../functions/api/providers/production/checkalt-submit.mjs?auth-before-attempt=${freshSubmitSeq += 1}`
+)).handleProductionCheckAltSubmit;
+
+const orderedClient = (store) => {
+  const base = identityClient(store);
+  return {
+    ...base,
+    query: async (sql, params = []) => {
+      const text = String(sql);
+      if (text.includes('UPDATE public.checkalt_deposits') && text.includes('provider_http_attempted_at = now()')) {
+        (store.order = store.order || []).push('CLAIM');
+      }
+      return base.query(sql, params);
+    },
+  };
+};
+
+const orderedFetch = (store) => {
+  const base = fetchImpl(store);
+  return async (url, options = {}) => {
+    const target = String(url);
+    const order = (store.order = store.order || []);
+    if (target.includes('/public/fincapture/authenticate')) {
+      order.push('AUTH');
+      store.authCalls = (store.authCalls || 0) + 1;
+      if (store.authFailures > 0) {
+        store.authFailures -= 1;
+        if (store.authThrow) throw store.authThrow;
+        return { ok: false, status: 504, text: async () => 'Gateway Time-out' };
+      }
+    }
+    if (target.includes('getUserAccountInformation')) {
+      order.push('SSO_LOOKUP');
+      if (store.ssoLookupThrow) throw store.ssoLookupThrow;
+      if (store.ssoLookupStatus) return { ok: false, status: store.ssoLookupStatus, text: async () => 'down' };
+    }
+    if (target.includes('/fincapture/deposit/process')) order.push('PROCESS');
+    return base(url, options);
+  };
+};
+
+const pressDeposit = (handle, store) => withEnv(productionFlags, async () => {
+  const client = orderedClient(store);
+  await client.query('BEGIN');
+  return handle({
+    client,
+    mapping,
+    claims: LOGIN_CLAIMS,
+    body: { check_intake_item_id: CHECK_ID },
+    spoof: {},
+    fetchImpl: orderedFetch(store),
+    deps: submitDeps(store),
+  });
+});
+
+const assertAuthUnavailable = (result, store, stage = 'sign_in') => {
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.equal(result.statusCode, 503);
+  assert.equal(result.error, 'checkalt_auth_unavailable');
+  assert.equal(result.stage, stage);
+  assert.equal(result.retryable, true);
+  assert.equal(result.failure_class, 'provider_auth_unavailable');
+  assert.equal(result.liveProviderCalled, true);
+  assert.equal(result.depositPosted, false);
+  assert.equal(result.deposit_id, DEPOSIT_ID);
+  assert.equal(result.status, 'queued');
+  assert.match(result.message, /Nothing was sent to Check Alt/);
+  assert.equal(JSON.stringify(result).includes('Gateway'), false);
+  assert.equal(store.processPosts, 0);
+  assert.equal((store.order || []).includes('CLAIM'), false);
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.deposits[0].status, 'queued');
+  assert.equal(store.deposits[0].provider_http_attempted_at, null);
+  assert.equal(store.deposits[0].checkalt_reference, null);
+};
+
+test('CheckAlt sign-in 504 before the claim leaves the row queued; the next press claims it and POSTs once', async () => {
+  const handle = await freshSubmitHandler();
+  const store = createStore();
+  grantStepUp(store);
+  store.authFailures = 1;
+
+  const failed = await pressDeposit(handle, store);
+  assertAuthUnavailable(failed, store);
+  assert.equal(failed.productionRecordsMutated, true);
+  assert.deepEqual(store.order, ['AUTH']);
+  // The idempotency rules still treat the row as never posted.
+  const { pickBlockingDeposit, shouldReconcileInsteadOfPost } = await import(
+    '../functions/api/providers/production/checkalt-idempotency.mjs'
+  );
+  assert.equal(shouldReconcileInsteadOfPost(store.deposits[0]), false);
+  assert.equal(pickBlockingDeposit(store.deposits), null);
+
+  store.order = [];
+  const retried = await pressDeposit(handle, store);
+  assert.equal(retried.statusCode, 200, JSON.stringify(retried));
+  assert.equal(retried.error, undefined);
+  assert.equal(retried.deposit_id, DEPOSIT_ID);
+  assert.equal(retried.checkalt_reference, '9001');
+  assert.equal(store.deposits.length, 1);
+  assert.equal(store.processPosts, 1);
+  assert.equal(store.authCalls, 2);
+  assert.deepEqual(store.order, ['AUTH', 'CLAIM', 'PROCESS']);
+
+  store.order = [];
+  const again = await pressDeposit(handle, store);
+  assert.equal(again.duplicate, true);
+  assert.equal(again.liveProviderCalled, false);
+  assert.equal(store.processPosts, 1);
+  assert.deepEqual(store.order, []);
+});
+
+test('CheckAlt sign-in network error before the claim returns the same retryable error, not provider_timeout', async () => {
+  const handle = await freshSubmitHandler();
+  const store = createStore();
+  grantStepUp(store);
+  store.authFailures = 1;
+  store.authThrow = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ETIMEDOUT' } });
+
+  const failed = await pressDeposit(handle, store);
+  assertAuthUnavailable(failed, store);
+  assert.notEqual(failed.error, 'provider_timeout');
+
+  store.order = [];
+  const retried = await pressDeposit(handle, store);
+  assert.equal(retried.statusCode, 200, JSON.stringify(retried));
+  assert.equal(store.processPosts, 1);
+  assert.deepEqual(store.order, ['AUTH', 'CLAIM', 'PROCESS']);
+});
+
+test('ssoKey lookup runs before the claim; a failed lookup keeps the sso_user_id fallback and POSTs once', async () => {
+  for (const failure of [{ ssoLookupStatus: 504 }, { ssoLookupThrow: new TypeError('fetch failed') }]) {
+    const handle = await freshSubmitHandler();
+    const store = createStore();
+    store.tenantRegisterPayload = {};
+    Object.assign(store, failure);
+    grantStepUp(store);
+    const result = await pressDeposit(handle, store);
+    assert.equal(result.statusCode, 200, JSON.stringify(result));
+    assert.equal(store.processPosts, 1);
+    assert.equal(store.processBodies[0].ssoKey, 'depositor-prod');
+    assert.deepEqual(store.order, ['AUTH', 'SSO_LOOKUP', 'CLAIM', 'PROCESS']);
+  }
+});
+
+test('success and db_after_provider paths are unchanged: the claim is the last step before the one process POST', async () => {
+  const handle = await freshSubmitHandler();
+  const ok = createStore();
+  ok.tenantRegisterPayload = {};
+  grantStepUp(ok);
+  const accepted = await pressDeposit(handle, ok);
+  assert.equal(accepted.statusCode, 200, JSON.stringify(accepted));
+  assert.equal(accepted.liveProviderCalled, true);
+  assert.equal(accepted.checkalt_reference, '9001');
+  assert.equal(accepted.status, 'submitted');
+  assert.equal(ok.processPosts, 1);
+  assert.equal(ok.processBodies[0].ssoKey, 'sso-prod');
+  assert.equal(ok.processBodies[0].userAmount, 1234);
+  assert.deepEqual(ok.order, ['AUTH', 'SSO_LOOKUP', 'CLAIM', 'PROCESS']);
+
+  const dbFails = createStore();
+  dbFails.persistOutcomeFails = 1;
+  grantStepUp(dbFails);
+  const first = await pressDeposit(handle, dbFails);
+  assert.equal(first.failure_class, 'db_after_provider');
+  assert.equal(first.status, 'submitting');
+  assert.equal(first.checkalt_reference, '9001');
+  assert.equal(dbFails.processPosts, 1);
+  assert.equal(dbFails.deposits[0].status, 'submitting');
+  assert.ok(dbFails.deposits[0].provider_http_attempted_at);
+  // JWT cached from the first store: no sign-in, the claim still directly precedes the POST.
+  assert.deepEqual(dbFails.order, ['CLAIM', 'PROCESS']);
+  dbFails.order = [];
+  const retry = await pressDeposit(handle, dbFails);
+  assert.equal(retry.duplicate || retry.replayed || retry.reconciled, true);
+  assert.equal(dbFails.processPosts, 1);
+  assert.equal(dbFails.order.includes('CLAIM'), false);
 });
 
 test('status poll cannot create deposits and is tenant-safe', async () => {
