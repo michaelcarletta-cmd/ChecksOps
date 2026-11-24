@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-email-engagement-api-applied",
+  "authorization": "Record only (2026-11-23): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Endorsement email engagement API (#2043, merged as 7736cf528989fefee2ebb8ad3a26f8e8014df90b) applied. Owner 2026-11-23: \"DEPLOY check-endorsement.mjs TO PRODUCTION\". Applied 2026-11-23 from main 25b6c54ce28beb314a76df8b5aa073525516e974, after SQL 172 was applied in production the same day (SSM a071df6d-ac5d-42fc-a10c-5acd8e6e6d0b, its record #2052). The apply run concluded success including its verify step (state VERIFIED). check-endorsement.mjs REPLACE c3a6e218 -> 2fbb0bcc. Staging (checksops-staging-api): inspect run 45289456440 (job 138094187257) read c3a6e218 live (CodeSha256 WAphWG++inADoWBdv+l0rTEE7ep+LNpadPS8iSMJPOM=, RevisionId 0819f955-92ae-4a10-a5e0-33ff290fce2c); apply run 45289633913 (job 138094787198, expected live c3a6e218), errors [], after CodeSha256 lS4Nu/Vn8lEH8f9hePemxQA5P2jzbUat2YuS7VgV5wA=, with the public staging smoke /health, /db-health and /db-readonly-validate 200. Production (checksops-production-prep-api): inspect run 45289639122 (job 138094801406) read c3a6e218 live, READY (CodeSha256 WAphWG++inADoWBdv+l0rTEE7ep+LNpadPS8iSMJPOM=, RevisionId fba7b7c8-ec62-46e3-b44c-55749d4d7a6c); apply run 45290080896 (job 138096287893) on the owner's \"DEPLOY check-endorsement.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45289633913, expected live c3a6e218: lease acquired 2026-11-23T23:35:42.671Z, receipt mac 55f9521a5dc258e832641702bcbabffa9156efae321e24d48c13e40500573c9c consumed, immediately before CodeSha256 WAphWG++inADoWBdv+l0rTEE7ep+LNpadPS8iSMJPOM= RevisionId fba7b7c8-ec62-46e3-b44c-55749d4d7a6c, compare-and-swap update, errors [], after CodeSha256 lS4Nu/Vn8lEH8f9hePemxQA5P2jzbUat2YuS7VgV5wA= RevisionId f34d0cb7-08c1-4caa-aeaf-7b49a87ef6db; the verify step (2026-11-23T23:35:52Z) read 2fbb0bcc live, VERIFIED (CodeSha256 lS4Nu/Vn8lEH8f9hePemxQA5P2jzbUat2YuS7VgV5wA=, RevisionId c77e3ba0-f6d4-48c4-ac77-2b57d98adcfc); the public production smoke /health and /db-health 200. Only this member changed; index.mjs is untouched. No hold. Not verified by this record: a production re-inspect after the apply, or a Resend email.opened or email.clicked report reaching production after the apply. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains the member to the manifest that planned it (previous_manifest).",
+  "members": {
+    "check-endorsement.mjs": {
+      "live_sha256": "2fbb0bccfaf37d996004e1863ef6a6fdd0d1f5a1decbeafec2cfee21740b87b0",
+      "accepted_sha256": "2fbb0bccfaf37d996004e1863ef6a6fdd0d1f5a1decbeafec2cfee21740b87b0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-endorsement-email-engagement-api-manifest-2026-11-23.json"
+    }
+  }
+}

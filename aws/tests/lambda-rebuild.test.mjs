@@ -810,6 +810,13 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     // (Applied 2026-11-19, production run 44589744829: its applied record is read back to the plan it applied.)
     // (And the endorsement email engagement plan, 2026-11-23, planning only: the email status applied bytes it moves on
     // from stand for main's, and the row is read as it stood before that plan.)
+    // (Applied 2026-11-23, production run 45290080896: its applied record is read back to the plan it applied.)
+    if (copyNoticeRow?.manifest === 'aws/tests/fixtures/production-endorsement-email-engagement-api-applied-manifest-2026-11-23.json') {
+      const appliedEngagement = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, copyNoticeRow.manifest), 'utf8')).members[name];
+      assert.deepEqual([appliedEngagement.live_sha256, appliedEngagement.accepted_sha256], [copyNoticeRow.accepted_sha256, copyNoticeRow.expected_live_sha256], name);
+      const plannedEngagement = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, appliedEngagement.previous_manifest), 'utf8')).members[name];
+      copyNoticeRow = { ...copyNoticeRow, expected_live_sha256: plannedEngagement.live_sha256, manifest: appliedEngagement.previous_manifest };
+    }
     if (copyNoticeRow?.manifest === 'aws/tests/fixtures/production-endorsement-email-engagement-api-manifest-2026-11-23.json') {
       assert.equal(copyNoticeRow.accepted_sha256, mainBytes, name);
       const engagement = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, copyNoticeRow.manifest), 'utf8')).members[name];
