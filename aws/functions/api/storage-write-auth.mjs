@@ -190,6 +190,26 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
       };
     }
     const looked = await lookupWritableCheck(client, checkId);
+    // Lovable/Supabase-era uploads live under checks/<uploader user id>/<claim>/, so the uuid
+    // in the path names no check. The bank-ready (.checkalt.jpg) and .deposit2.jpg copies must
+    // sit next to those stored photos (officialCheckAltFrontPath), so allow exactly a check's
+    // own stored image path or its siblings, as for non-check-scoped legacy paths, and only
+    // when the caller may write that check.
+    if (looked.error === 'rls_denied' && bucket === 'claim-files') {
+      const existing = await lookupWritableCheckByImagePath(client, rel);
+      if (existing && existing.id !== checkId) {
+        if (!(await canWriteCheck(client, existing.id))) {
+          return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not authorized to write this check' };
+        }
+        return {
+          ok: true,
+          rel,
+          check: existing,
+          key: s3KeyFor(bucket, rel),
+          strategy: 'existing_check_image_or_deposit2',
+        };
+      }
+    }
     // A check the caller sees but may not write (a partner's shared check, the platform owner)
     // is treated as not found here.
     if (!looked.error && !(await canWriteCheck(client, looked.check.id))) {
