@@ -73,7 +73,8 @@ test('FundsTab incoming path uses the recipient RPC, not owner disbursement tabl
   assert.doesNotMatch(incomingFn, /\.from\("disbursement_splits"\)/);
   assert.doesNotMatch(incomingFn, /\.from\("disbursement_batches"\)/);
   assert.match(tab, /readOnly/);
-  assert.match(tab, /if \(readOnly\) return;/);
+  // The one write left in the tab (recording a payment made outside ChecksOps) refuses a read-only view.
+  assert.match(tab, /if \(readOnly \|\| extSaving\) return;/);
 });
 
 test('CheckCommandCenter lane maps Funds Received through the array-safe helper', () => {
