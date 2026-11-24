@@ -229,3 +229,13 @@ test('the button is not shown in the shared / read-only view', () => {
 test('website only: no API or Lambda source references the new helper', () => {
   assert.doesNotMatch(read('aws/functions/api/check-endorsement.mjs'), /finishEndorsement\.ts/);
 });
+
+test('voided, returned and cancelled checks do not show the button (the server never advances them)', async () => {
+  const { INELIGIBLE_CHECK_STATUSES, hasCheckAdvancedPastEndorsing } = await import('../../src/lib/finishEndorsement.ts');
+  const { INELIGIBLE_AUTO_ADVANCE_STATUSES } = await import(`../../aws/functions/api/endorsement-parity.mjs`);
+  assert.deepEqual([...INELIGIBLE_CHECK_STATUSES].sort(), [...INELIGIBLE_AUTO_ADVANCE_STATUSES].sort());
+  for (const status of ['voided', 'returned', 'cancelled']) {
+    assert.equal(hasCheckAdvancedPastEndorsing({ status }), true, status);
+  }
+  assert.equal(hasCheckAdvancedPastEndorsing({ status: 'pending_endorsement' }), false);
+});

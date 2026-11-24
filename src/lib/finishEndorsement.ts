@@ -29,6 +29,17 @@ export const ADVANCED_CHECK_STATUSES: ReadonlySet<string> = new Set([
   "branch_deposit_required",
 ]);
 
+/** Statuses the server never auto-advances (INELIGIBLE_AUTO_ADVANCE_STATUSES in
+ *  aws/functions/api/endorsement-parity.mjs); the button would only be refused there. */
+export const INELIGIBLE_CHECK_STATUSES: ReadonlySet<string> = new Set([
+  "deposited",
+  "voided",
+  "returned",
+  "cancelled",
+  "funds_released",
+  "disbursed_externally",
+]);
+
 export const ADVANCED_CHECK_STAGES: ReadonlySet<string> = new Set([
   "ready_for_deposit",
   "branch",
@@ -44,6 +55,7 @@ export function hasCheckAdvancedPastEndorsing(check: FinishEndorsementCheck | nu
   if (!check) return true; // unknown state: fail closed, no button
   if (isCheckDeposited(check)) return true;
   if (ADVANCED_CHECK_STATUSES.has(norm(check.status))) return true;
+  if (INELIGIBLE_CHECK_STATUSES.has(norm(check.status))) return true;
   if (ADVANCED_CHECK_STAGES.has(norm(check.check_stage))) return true;
   return false;
 }
