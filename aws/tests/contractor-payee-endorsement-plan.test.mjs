@@ -58,7 +58,19 @@ const EMAIL_STATUS_APPLIED_REL = 'aws/tests/fixtures/production-endorsement-emai
 // The endorsement email engagement plan (2026-11-23, planning only) moved the row on from the email status applied
 // bytes; engagementPre reads the row as it stood before that plan (those applied bytes stand for main's).
 const ENGAGEMENT_REL = 'aws/tests/fixtures/production-endorsement-email-engagement-api-manifest-2026-11-23.json';
-const engagementPre = (plan) => {
+const ENGAGEMENT_APPLIED_REL = 'aws/tests/fixtures/production-endorsement-email-engagement-api-applied-manifest-2026-11-23.json';
+// engagementRecordPre reads the row as it stood before the email engagement apply (production run 45290080896).
+const engagementRecordPre = (plan) => {
+  const row = plan.members[HANDLER];
+  if (row?.manifest !== ENGAGEMENT_APPLIED_REL) return plan;
+  const applied = JSON.parse(read(ENGAGEMENT_APPLIED_REL)).members[HANDLER];
+  assert.equal(applied.previous_manifest, ENGAGEMENT_REL);
+  const planned = JSON.parse(read(ENGAGEMENT_REL)).members[HANDLER];
+  plan.members[HANDLER] = { ...row, expected_live_sha256: planned.live_sha256, manifest: ENGAGEMENT_REL };
+  return plan;
+};
+const engagementPre = (plan0) => {
+  const plan = engagementRecordPre(plan0);
   const row = plan.members[HANDLER];
   if (row?.manifest !== ENGAGEMENT_REL) return plan;
   const entry = JSON.parse(read(ENGAGEMENT_REL)).members[HANDLER];

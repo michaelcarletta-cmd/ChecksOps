@@ -356,8 +356,12 @@ test('overlay plan (2026-11-19, planning only): check-endorsement.mjs moves on f
   const onMain = later.live_sha256;
   assert.notEqual(sha(read(`aws/functions/api/${name}`)), onMain);
   assert.equal(later.accepted_sha256, sha(read(`aws/functions/api/${name}`)));
-  assert.deepEqual(currentPlan.members[name], { operation: 'replace', accepted_sha256: later.accepted_sha256, expected_live_sha256: onMain, sql_before: null, manifest: LATER_REL });
-  plan.members[name] = { ...currentPlan.members[name], accepted_sha256: onMain, manifest: later.previous_manifest };
+  // (Applied 2026-11-23, production run 45290080896: the row expects the engagement bytes and names the applied
+  // record, which chains to the engagement plan.)
+  const LATER_APPLIED_REL = 'aws/tests/fixtures/production-endorsement-email-engagement-api-applied-manifest-2026-11-23.json';
+  assert.equal(JSON.parse(read(LATER_APPLIED_REL)).members[name].previous_manifest, LATER_REL);
+  assert.deepEqual(currentPlan.members[name], { operation: 'replace', accepted_sha256: later.accepted_sha256, expected_live_sha256: later.accepted_sha256, sql_before: null, manifest: LATER_APPLIED_REL });
+  plan.members[name] = { ...currentPlan.members[name], accepted_sha256: onMain, expected_live_sha256: onMain, manifest: later.previous_manifest };
   const applied = JSON.parse(read(appliedRel)).members[name];
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review \(2026-11-19\)\. Planning only/);
@@ -454,8 +458,28 @@ test('overlay plan (2026-11-23, planning only): check-endorsement.mjs moves on f
   }
   assert.deepEqual(manifest.members, { [name]: { live_sha256: applied.accepted_sha256, accepted_sha256: onMain, operation: 'replace', previous_manifest: appliedRel } });
   assert.notEqual(onMain, applied.accepted_sha256);
-  assert.deepEqual(plan.members[name], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied.accepted_sha256, sql_before: null, manifest: rel });
+  // Applied 2026-11-23 (production run 45290080896): the row expects main's bytes and names the applied record, which
+  // chains to this planning manifest; read the row back as it stood before the apply.
+  const engagementAppliedRel = 'aws/tests/fixtures/production-endorsement-email-engagement-api-applied-manifest-2026-11-23.json';
+  const record = JSON.parse(read(engagementAppliedRel));
+  const beforeApply = { ...plan.members[name], expected_live_sha256: manifest.members[name].live_sha256, manifest: record.members[name].previous_manifest };
+  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied.accepted_sha256, sql_before: null, manifest: rel });
   assert.equal(resolvePlannedMember(name, { root, plan }).ok, true);
   assert.ok(plan.notes.includes(`check-endorsement.mjs REPLACE ${applied.accepted_sha256.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
   assert.ok(plan.notes.includes(`Manifest ${rel}. Nothing deployed.`));
+  assert.equal(record.workstream_id, 'endorsement-email-engagement-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-23\)/);
+  assert.deepEqual(record.members, { [name]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: rel } });
+  assert.deepEqual(plan.members[name], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: engagementAppliedRel });
+  for (const runId of ['45289456440', '45289633913', '45289639122', '45290080896']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(plan.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['25b6c54ce28beb314a76df8b5aa073525516e974', '"DEPLOY check-endorsement.mjs TO PRODUCTION"', 'SQL 172 was applied',
+    'a071df6d-ac5d-42fc-a10c-5acd8e6e6d0b', 'lS4Nu/Vn8lEH8f9hePemxQA5P2jzbUat2YuS7VgV5wA=', 'c77e3ba0-f6d4-48c4-ac77-2b57d98adcfc', 'VERIFIED',
+    'errors []', 'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(plan.notes.includes(`Recorded in ${engagementAppliedRel}. The row expects the applied bytes and names the endorsement email engagement applied record.`));
 });
