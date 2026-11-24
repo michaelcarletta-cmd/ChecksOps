@@ -8,7 +8,7 @@ import {
 } from "@/lib/partnerSafeReads";
 import { compressCheckImage } from "@/lib/compressCheckImage";
 import { displayCase } from "@/lib/displayCase";
-import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
+import { getFunctionErrorDetails, getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,13 @@ import { format } from "date-fns";
 import { CheckStatusTimeline } from "./CheckStatusTimeline";
 import { evaluateEndorsementMath } from "@/lib/endorsementCompletion";
 import { endorsementEmailStatus, type EndorsementEmailFields } from "@/lib/endorsementEmailStatus";
+import {
+  FINISH_ENDORSEMENT_ACTION,
+  describeFinishEndorsementResult,
+  shouldShowFinishEndorsement,
+  type FinishEndorsementCheck,
+  type FinishEndorsementResult,
+} from "@/lib/finishEndorsement";
 
 // Hidden for now (owner 2026-11-18): "Mark All Endorsements Received" gives an error. The tenant marks each payee with
 // "Endorsed on Check", which works. The button and its handler stay in the code so it can be switched back on once fixed.
@@ -210,9 +217,21 @@ interface EndorsementChecklistProps {
   /** Partner-mode: hides send-request controls but keeps mark-signed/waive,
    *  performing them as direct DB updates (no staff-only edge function). */
   partnerMode?: boolean;
+  /** The viewer's tenant owns the check (CheckCommandCenter's isOwner). Defaults to false, so
+   *  the owner-only "Finish endorsement" button stays hidden unless the page says otherwise. */
+  isOwner?: boolean;
+  /** The check's workflow state, for "Finish endorsement": hidden once the check advanced. */
+  checkWorkflow?: FinishEndorsementCheck | null;
 }
 
-export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, partnerMode = false }: EndorsementChecklistProps) {
+export function EndorsementChecklist({
+  checkId,
+  onRefresh,
+  readOnly = false,
+  partnerMode = false,
+  isOwner = false,
+  checkWorkflow = null,
+}: EndorsementChecklistProps) {
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -365,6 +384,7 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
 
 
   const [forceCompleting, setForceCompleting] = useState(false);
+  const [finishingEndorsement, setFinishingEndorsement] = useState(false);
 
 
   const allComplete = evaluateEndorsementMath(endorsements).allRequiredSatisfied;
@@ -472,6 +492,57 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
     }
   };
 
+  // "Finish endorsement" (owner 2026-11-24): every signature is in but the endorsed back image
+  // was not made when the last payee signed, so the check never advanced. Re-runs the server's
+  // completion path (composite the back, then advance to ready) through the authenticated
+  // check-endorsement action finalize_existing_endorsements.
+  const showFinishEndorsement = shouldShowFinishEndorsement({
+    isOwner,
+    readOnly,
+    partnerMode,
+    endorsements,
+    check: checkWorkflow,
+  });
+
+  const finishEndorsement = async () => {
+    setFinishingEndorsement(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session?.access_token) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase.functions.invoke("check-endorsement", {
+        body: { action: FINISH_ENDORSEMENT_ACTION, checkId },
+        headers: { Authorization: `Bearer ${session.session.access_token}` },
+      });
+
+      let result = (data ?? null) as FinishEndorsementResult | null;
+      if (error) {
+        const details = await getFunctionErrorDetails(error, "Failed to finish endorsement");
+        const payload = details.payload;
+        result = payload && typeof payload === "object"
+          ? (payload as FinishEndorsementResult)
+          : { ok: false, error: details.message };
+      }
+
+      const outcome = describeFinishEndorsementResult(result);
+      toast({
+        title: outcome.advanced ? outcome.message : outcome.title,
+        description: outcome.advanced ? undefined : outcome.message,
+        variant: outcome.advanced ? undefined : "destructive",
+      });
+    } catch (e: unknown) {
+      console.error("Finish endorsement failed:", e);
+      toast({
+        title: "Endorsement not finished",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setFinishingEndorsement(false);
+      refresh();
+    }
+  };
+
   if (isLoading) {
     return <div className="p-4 text-sm text-muted-foreground">Loading endorsements...</div>;
   }
@@ -554,6 +625,28 @@ export function EndorsementChecklist({ checkId, onRefresh, readOnly = false, par
             button at the top of the check file instead. */}
       </div>
 
+
+      {showFinishEndorsement && (
+        <div className="px-1 space-y-1.5">
+          <p className="text-[10px] text-muted-foreground">
+            Every payee has signed. If the check did not move to Ready for Deposit, finish the endorsement here.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full text-xs h-8 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+            onClick={finishEndorsement}
+            disabled={finishingEndorsement}
+          >
+            {finishingEndorsement ? (
+              <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+            ) : (
+              <FileCheck className="h-3 w-3 mr-1.5" />
+            )}
+            {finishingEndorsement ? "Finishing endorsement..." : "Finish endorsement"}
+          </Button>
+        </div>
+      )}
 
       {!allComplete && !readOnly && !partnerMode && (
         <div className="px-1 space-y-2">
