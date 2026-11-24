@@ -38,7 +38,6 @@ import {
 import { runtimeHostname, shouldUseAwsChecksOpsBackendFor } from "@/lib/backendMode";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { displayCase } from "@/lib/displayCase";
-import { JobPnlCard } from "@/components/jobs/JobPnlCard";
 
 interface Props {
   checkIntakeItemId: string;
@@ -69,43 +68,7 @@ const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e)
 const fmt = (n: number) =>
   `$${(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/**
- * The Claim Ledger, then the claim's Job P&L (JobPnlCard: money in and out with where each amount came
- * from). The Job P&L shows only on the organization's own view of a linked claim: a partner viewing a
- * shared check (readOnly) cannot read the claim's money and gets the ledger alone. The link is the same
- * live check read the ledger uses (same query key, so it is read once).
- */
-export function ClaimLedgerCard(props: Props) {
-  const { checkIntakeItemId, claimId, readOnly = false } = props;
-  const { data: liveCheckLink } = useQuery({
-    queryKey: ["claim-ledger-check-link", checkIntakeItemId],
-    enabled: !!checkIntakeItemId && !readOnly,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("check_intake_items")
-        .select("id, claim_id")
-        .eq("id", checkIntakeItemId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-  const jobClaimId = readOnly
-    ? null
-    : resolveAuthoritativeClaimId({ liveCheckClaimId: liveCheckLink?.claim_id ?? null, loadedClaimId: null, claimIdProp: claimId });
-  return (
-    <>
-      <ClaimLedgerCardBody {...props} />
-      {jobClaimId ? (
-        <div className="mt-4">
-          <JobPnlCard job={{ kind: "claim", id: jobClaimId }} />
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-function ClaimLedgerCardBody({ checkIntakeItemId, claimId, detectedClaimNumber, readOnly = false, onLinked }: Props) {
+export function ClaimLedgerCard({ checkIntakeItemId, claimId, detectedClaimNumber, readOnly = false, onLinked }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(!claimId && !readOnly);
