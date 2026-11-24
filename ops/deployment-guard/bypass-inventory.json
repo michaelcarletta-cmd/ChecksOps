@@ -185,6 +185,12 @@
       "note": "Read-only production inspect of one check whose endorsements are signed but which did not advance to ready for deposit; there is no apply. Accepts exactly --inspect --check-id <uuid> (every other argument, a check id that is not a uuid, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/check-endorsement-state-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs on that check: its status and image columns, its endorsements (signature columns reduced in SQL to a drawn/other/empty class), its CheckAlt deposits, its composite audit paths and its 20 latest audit event types; the decisions are the Lambda's own pure helpers (finalizeEndorsementState, compositeEndorsementSignatures). No S3 call. Returns labels and booleans only: never an id, a name, an amount, an image path, a token or signature data."
     },
     {
+      "path": "scripts/deployment-guard/check-ownership-inspect.mjs",
+      "classification": "SAFE",
+      "capabilities": ["check-ownership-inspect"],
+      "note": "Read-only production inspect of check ownership; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/check-ownership-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs over all checks: ownership class (tenant_id NULL, tenant_id not in tenants, uploaded_by NULL, uploader without a tenant_users row in the check's tenant) by the uploader's tenant count, deposited, created month, status and stage, claim organization, and the check-scoped uuid of each image path. Returns counts and code labels only: never an id, a name, an amount or an image path."
+    },
+    {
       "path": "scripts/deployment-guard/billing-trigger-inspect.mjs",
       "classification": "SAFE",
       "capabilities": ["billing-trigger-inspect"],
