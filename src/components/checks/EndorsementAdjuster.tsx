@@ -32,7 +32,11 @@ import {
   SignatureAsset,
 } from "@/lib/endorsementDepositRender";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
-import { assertCleanBackOriginalPath, depositImagePersistPatch } from "@/lib/checkImageInvariants";
+import {
+  assertCleanBackOriginalPath,
+  depositImagePathForCheck,
+  depositImagePersistPatch,
+} from "@/lib/checkImageInvariants";
 import { logAudit } from "@/hooks/useAuditLog";
 import { displayCase } from "@/lib/displayCase";
 import { SIGNATURE_FONT_FAMILY } from "@/lib/signatureFont";
@@ -546,10 +550,11 @@ export function EndorsementAdjuster({
         );
       }
 
-      // Official CheckAlt artifact next to the original rear image. Original file is not overwritten.
-      const folder = originalImagePath.replace(/\/[^/]+$/, "");
+      // Official CheckAlt artifact in this check's own folder (next to the original when the
+      // original is already there; old uploads live under the uploader's folder, which the
+      // storage gate refuses). Original file is not moved or overwritten.
       const version = (Date.now() % 1_000_000).toString(36);
-      const depositPath = `${folder}/endorsed_deposit_${version}.checkalt.jpg`;
+      const depositPath = depositImagePathForCheck(checkId, originalImagePath, version);
 
       const { error: uploadErr } = await supabase.storage
         .from(CHECK_IMAGES_BUCKET)

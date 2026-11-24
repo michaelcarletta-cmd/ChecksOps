@@ -394,6 +394,41 @@ export async function resolveCleanBackOriginalPath(opts: {
   return result as RecoverCleanBackOriginalSuccess;
 }
 
+const CHECK_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Where the browser writes the generated deposit image (Generate Deposit Image).
+ *
+ * Both the storage write gate (authorizeStorageWritePath) and the check update
+ * (asImagePath in write-check-workflow.mjs) accept only a path under the check's own
+ * `checks/<check id>/` folder. Older checks keep their original back photo under
+ * `checks/<uploader user id>/<claim>/` (the Lovable/Supabase-era upload prefix), so writing
+ * the deposit image "next to the original" was refused with "check not found or not
+ * writable". Keep the original's folder when it is already this check's folder; otherwise
+ * write into `checks/<check id>/`. The original photo is never moved or overwritten.
+ */
+export function depositImagePathForCheck(
+  checkId: string,
+  originalPath: string,
+  version: string,
+): string {
+  const id = String(checkId ?? "").trim().toLowerCase();
+  if (!CHECK_UUID_RE.test(id)) throw new Error("Check id is not valid for a deposit image path.");
+  const v = String(version ?? "").trim();
+  if (!/^[A-Za-z0-9]+$/.test(v)) throw new Error("Deposit image version is not valid.");
+  const original = String(originalPath ?? "").trim().split("?")[0].replace(/^\/+/, "");
+  const folder = original.includes("/") ? original.replace(/\/[^/]+$/, "") : "";
+  const target = isFolderScopedToCheck(folder, id) ? folder : `checks/${id}`;
+  return `${target}/endorsed_deposit_${v}.checkalt.jpg`;
+}
+
+/** Mirrors CHECK_WRITE_PREFIXES in aws/functions/api/storage-paths.mjs. */
+function isFolderScopedToCheck(folder: string, checkId: string): boolean {
+  const probe = `${folder.toLowerCase()}/`;
+  return [`check-intake/${checkId}/files/`, `checks/reupload/${checkId}/`, `checks/${checkId}/`]
+    .some((prefix) => probe.startsWith(prefix));
+}
+
 export function depositImagePersistPatch(
   depositPath: string,
   originalPath: string,
