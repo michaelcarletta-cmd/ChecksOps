@@ -221,7 +221,7 @@ test('order: no predecessor; one new owner-only DEFINER function called once for
     'checkalt_stranded_attempts_in_window', 'checkalt_stranded_attempt_in_window']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 66\); not applied anywhere\. The production pin is pending\./);
   assert.match(runbook, /\*\*exactly 1 on production\*\* and \*\*0 on staging\*\*/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql174` \|/);

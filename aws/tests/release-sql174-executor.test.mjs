@@ -4,7 +4,7 @@
  * (clear the one Check Alt deposit attempt stranded before the provider sign-in). release-sql90-97-executor.test.mjs
  * runs what every release key shares (SQL 174 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 66) from staging read-live run 45496290311, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the file and spec: one owner-only SECURITY DEFINER function (search_path public, pg_temp; row_security off) with
  *     the stranded-attempt rule and the queued_before_http reset, called once for the minute 2026-11-24 19:58 UTC; the
@@ -126,7 +126,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 174 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor; the derived pre-state', () => {
+test('pin: SQL 174 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -137,11 +137,15 @@ test('pin: SQL 174 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql174-checkalt-reset-stranded-attempt');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending until a reviewed pin change records a staging read-live.
+  // Staging apply authorized (owner approved 2026-11-24) from staging read-live run 45496290311: already_applied false,
+  // precondition_failures [], counts 0 and 0. It read the derived pre-state (the function absent).
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-24: staging apply (wave 66) from staging read-live run 45496290311');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT);
+  assert.equal(pin.expected_live_definition_sha256, '51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-174-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 66\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-174-apply.md'), 'utf8'), /read-live \(2026-11-24\)\.\*\* Run 45496290311/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
@@ -150,7 +154,7 @@ test('pin: SQL 174 pending, code-derived, selectable, packed, in step with the p
   for (const value of [ABSENT, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
-  assert.match(runbook, /Staging\s+wave 66 when approved \(wave 65 is SQL 173's, also pending; wave 64, SQL 172, is the highest applied\)/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 66\); not applied anywhere\./);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
   assert.equal(resolveAuthorizedMigration({ filename: pin.filename }), pin);
   assert.equal(MIGRATIONS[spec.choice], pin);
@@ -392,9 +396,11 @@ test('PostgreSQL 16: SQL 174 through the executor: the absent state as derived, 
     assert.deepEqual(r.release_sql_inspect.counts, { checkalt_stranded_attempts_in_window: 0, checkalt_reset_attempts_in_window: 0 });
     assert.equal(r.already_applied, false);
     assert.equal(r.live_definition_sha256, ABSENT);
-    assert.equal(r.apply_preconditions_met, false);
-    // The committed staging pin is pending: it cannot apply, even on exactly this pre-state.
-    assert.equal(r.pin_executable, false);
+    // The committed staging pin is authorized on exactly this pre-state (wave 66, read-live run 45496290311); the
+    // fixture holds no stranded attempt, so the read is apply-ready as in staging.
+    assert.equal(r.pin_executable, true);
+    assert.equal(r.apply_preconditions_met, true);
+    // A pending pin cannot apply: a pending copy of the committed pin (the committed pin is staging-authorized, wave 66).
     const pendingCopy = Object.freeze({ ...pendingPin(PINS[KEY]), expected_live_definition_sha256: ABSENT });
     assert.equal((await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy }))).ok, false);
     assert.equal((await admin.query(`SELECT to_regprocedure('${FN}') AS f`)).rows[0].f, null);

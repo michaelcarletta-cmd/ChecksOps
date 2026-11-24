@@ -337,6 +337,12 @@ export const STAGING_WAVE1 = Object.freeze({
   // 45267274234, CodeSha256 gGHt9f/X... -> seM6qqQs...): already_applied false, precondition_failures [], predecessors
   // { sql170: true }, the six columns and the function absent. Equal to the derived pre-state.
   sql172: Object.freeze({ wave: 64, approved: '2026-11-23', run: '45267758829', live: 'dbf6a7240cfc5dd737cd47e7f0f765cf6349c0a3a8625a39e02f4901c2e29897' }),
+  // Wave 66 (owner approved 2026-11-24, "run the SQL 174 staging apply"; wave 65 stays SQL 173's, still pending): SQL
+  // 174, the one Check Alt attempt stranded before the provider sign-in back to queued. Read at main bc57c431f with the
+  // executor current (inspect run 45495103813, deploy run 45495585761, CodeSha256 qJPry/Ig... -> xQkGHnWN...):
+  // already_applied false, precondition_failures [], prerequisites_missing [], counts checkalt_stranded_attempts_in_window
+  // 0 and checkalt_reset_attempts_in_window 0, the function absent. Equal to the derived pre-state.
+  sql174: Object.freeze({ wave: 66, approved: '2026-11-24', run: '45496290311', live: '51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -348,7 +354,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-64 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-64 and 66 recorded and approved (wave 65, SQL 173, pending), wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */
