@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158, SQL 159, SQL 160, SQL 162, SQL 163, SQL 164, SQL 165, SQL 166, SQL 167, SQL 168, SQL 169, SQL 170, SQL 171, SQL 172, SQL 173), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158, SQL 159, SQL 160, SQL 162, SQL 163, SQL 164, SQL 165, SQL 166, SQL 167, SQL 168, SQL 169, SQL 170, SQL 171, SQL 172, SQL 173, SQL 174), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -1020,6 +1020,14 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {
       checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);
+    }
+    // SQL 174: the one-time data rule differs by environment, as SQL 98's fee destination: production must hold exactly
+    // the one stranded Check Alt attempt the read-only inspect found (the file then resets it), staging none (the row
+    // exists only in production; the file's function then returns 0). Any other count, or an unreadable one (null),
+    // refuses before the file runs. An aggregate count only (never ids or row data).
+    if (extra === 'checkalt_stranded_attempt_in_window') {
+      const n = s.counts?.checkalt_stranded_attempts_in_window;
+      checks.push(['checkalt_stranded_attempt_in_window', environment === 'staging' ? n === 0 : n === 1]);
     }
   }
   return failed(checks);

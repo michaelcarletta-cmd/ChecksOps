@@ -4035,6 +4035,30 @@ export const AUTHORIZED_SQL173_JOB_EXPENSES = Object.freeze({
   ]),
 });
 
+// Check Alt stranded attempt staging pin: SQL 174 (owner 2026-11-24, "start step 3": clear the one stranded CheckAlt
+// deposit attempt). One new owner-only SECURITY DEFINER function, aws_checkalt_reset_stranded_attempt, which the file
+// calls once for the minute 2026-11-24 19:58 UTC: the one attempt marked before the Check Alt sign-in answered 504 goes
+// back to queued. No predecessor (release-sql-specs.mjs); staging must hold no stranded attempt in the window
+// (checkalt_stranded_attempt_in_window), production exactly one. Pending until a reviewed pin change records a staging
+// read-live; staging wave 66 when approved (ops/production-sql-174-apply.md).
+export const AUTHORIZED_SQL174_CHECKALT_RESET_STRANDED_ATTEMPT = Object.freeze({
+  key: 'sql174',
+  filename: 'aws/workflows/sql/174_checkalt_reset_stranded_attempt.sql',
+  migration_id: '174_checkalt_reset_stranded_attempt',
+  // The commit that last authored the file bytes.
+  commit: '1118ba3cd95551c535cd046ed9ec671b18e871ac',
+  source_sha256: '7e69502ed9b7ced71feb95b7e7ed457518c33cfb43d9a7f40dde8f2c17edfc4b',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql174', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c',
+  // The file creates and sets the ACL of this function.
+  function_identities: Object.freeze([
+    'public.aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -4116,6 +4140,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql171: AUTHORIZED_SQL171_DEVICE_PUSH_TOKENS,
   sql172: AUTHORIZED_SQL172_CHECK_ENDORSEMENT_EMAIL_ENGAGEMENT,
   sql173: AUTHORIZED_SQL173_JOB_EXPENSES,
+  sql174: AUTHORIZED_SQL174_CHECKALT_RESET_STRANDED_ATTEMPT,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -4132,7 +4157,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168, sql169, sql170, sql171, sql172, sql173; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165, sql166, sql167, sql168, sql169, sql170, sql171, sql172, sql173, sql174; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

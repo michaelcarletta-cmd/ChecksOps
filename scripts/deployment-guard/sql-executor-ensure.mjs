@@ -145,6 +145,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/171_device_push_tokens.sql', 'sql/171_device_push_tokens.sql'],
   ['aws/workflows/sql/172_check_endorsement_email_engagement.sql', 'sql/172_check_endorsement_email_engagement.sql'],
   ['aws/workflows/sql/173_job_expenses.sql', 'sql/173_job_expenses.sql'],
+  ['aws/workflows/sql/174_checkalt_reset_stranded_attempt.sql', 'sql/174_checkalt_reset_stranded_attempt.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

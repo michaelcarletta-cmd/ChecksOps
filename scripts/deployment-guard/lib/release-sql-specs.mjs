@@ -10650,6 +10650,75 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_intake_items"
     ]
   },
+  // SQL 174: the one Check Alt deposit attempt stranded before the provider sign-in goes back to queued (owner
+  // 2026-11-24, "start step 3"). Before PR 2068 markHttpAttempted ran before the Check Alt sign-in; the sign-in answered
+  // 504 at 19:58 UTC, no deposit request was sent, and the row stayed 'submitting' with provider_http_attempted_at set.
+  // One owner-only SECURITY DEFINER function, aws_checkalt_reset_stranded_attempt(timestamptz, timestamptz) (search_path
+  // public, pg_temp; row_security off; EXECUTE for the owner only), which the file calls once for the minute 2026-11-24
+  // 19:58 UTC: exactly one stranded attempt is reset, none is a no-op, more than one raises. The fingerprint is the
+  // function's (the row is data); the data rule is the declared count checkalt_stranded_attempts_in_window (the
+  // function's own matching rule, aggregate only: never ids, amounts or names) and the per-environment precondition
+  // checkalt_stranded_attempt_in_window, as SQL 98's fee destination rule differs by environment: production must hold
+  // exactly one such attempt before the apply (the PR 2067 inspect found one of 92), staging none (the row exists only in
+  // production; the staging apply proves the file, the owner-only function and the zero-row path, owner 2026-11-24).
+  // checkalt_reset_attempts_in_window counts the rows the function has already reset (informational, for the record).
+  // definer_writes: the function updates checkalt_deposits and reads check_intake_items past RLS (row_security off). No
+  // predecessor; the four status triggers on checkalt_deposits (SQL 120, 121, 123, 152) do nothing for submitting ->
+  // queued, so none is a predecessor.
+  sql174: {
+    "key": "sql174",
+    "label": "SQL 174",
+    "choice": "sql174-checkalt-reset-stranded-attempt",
+    "production_pin_rel": "ops/deployment-guard/sql174-checkalt-reset-stranded-attempt-production-apply.json",
+    "script": "sql174-checkalt-reset-stranded-attempt-production-apply",
+    "prerequisites": [
+      "public.checkalt_deposits",
+      "public.check_intake_items",
+      "column public.check_intake_items.deposited_at",
+      "column public.check_intake_items.id",
+      "column public.checkalt_deposits.check_intake_item_id",
+      "column public.checkalt_deposits.checkalt_reference",
+      "column public.checkalt_deposits.created_at",
+      "column public.checkalt_deposits.failure_class",
+      "column public.checkalt_deposits.id",
+      "column public.checkalt_deposits.last_error",
+      "column public.checkalt_deposits.last_status_payload",
+      "column public.checkalt_deposits.provider_http_attempted_at",
+      "column public.checkalt_deposits.status",
+      "column public.checkalt_deposits.updated_at"
+    ],
+    "predecessors": [],
+    "counts": {
+      "checkalt_stranded_attempts_in_window": {
+        "requires": [
+          "public.checkalt_deposits",
+          "public.check_intake_items"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.checkalt_deposits d\nJOIN public.check_intake_items c ON c.id = d.check_intake_item_id\nWHERE d.checkalt_reference IS NULL AND d.status = 'submitting'\nAND d.provider_http_attempted_at >= '2026-11-24 19:58:00+00'::timestamptz AND d.provider_http_attempted_at < '2026-11-24 19:59:00+00'::timestamptz\nAND d.created_at >= '2026-11-24 19:58:00+00'::timestamptz AND d.created_at < '2026-11-24 19:59:00+00'::timestamptz\nAND d.failure_class IS NULL AND d.last_error IS NULL AND d.last_status_payload->>'phase' = 'submitting'\nAND c.deposited_at IS NULL\nAND NOT EXISTS (SELECT 1 FROM public.checkalt_deposits o WHERE o.check_intake_item_id = d.check_intake_item_id AND o.id <> d.id)"
+      },
+      "checkalt_reset_attempts_in_window": {
+        "requires": [
+          "public.checkalt_deposits"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM public.checkalt_deposits d\nWHERE d.status = 'queued' AND d.provider_http_attempted_at IS NULL AND d.checkalt_reference IS NULL\nAND d.created_at >= '2026-11-24 19:58:00+00'::timestamptz AND d.created_at < '2026-11-24 19:59:00+00'::timestamptz\nAND d.last_status_payload ? 'stranded_reset'"
+      }
+    },
+    "extra_preconditions": [
+      "checkalt_stranded_attempt_in_window"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.checkalt_deposits",
+      "public.check_intake_items"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",

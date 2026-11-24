@@ -223,7 +223,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-23
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql172-check-endorsement-email-engagement-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql172-production-apply"\]/);
-  assert.match(rows, /sql169, sql170, sql171, sql172, sql173\)/);
+  assert.match(rows, /sql169, sql170, sql171, sql172, sql173, sql174\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql172-executor.test.mjs', 'aws/tests/release-sql172-production-apply.test.mjs', 'aws/tests/sql172-check-endorsement-email-engagement-pg.test.mjs']) {
@@ -291,7 +291,7 @@ test('order: predecessor SQL 170; one DEFINER function and six columns on check_
   assert.match(runbook, /\*\*Production inspect \(2026-11-23\)\.\*\* Read-only `--inspect` through SSM `03050f81-bebc-4566-a116-35147b3410f6`/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql172` \|/);
-  assert.match(oneShot, /`sql170`, `sql171`, `sql172`, `sql173`\) \|/);
+  assert.match(oneShot, /`sql170`, `sql171`, `sql172`, `sql173`, `sql174`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql172-check-endorsement-email-engagement-production-apply\.mjs --inspect/);
 });
 
