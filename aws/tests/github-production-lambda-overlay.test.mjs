@@ -114,7 +114,22 @@ const SECURITY_HARDENING_APPLIED_REL = 'aws/tests/fixtures/production-security-h
 const STORAGE_LEGACY_UPLOADER_REL = 'aws/tests/fixtures/production-storage-legacy-uploader-folder-api-manifest-2026-11-24.json';
 const STORAGE_LEGACY_UPLOADER = JSON.parse(fs.readFileSync(path.join(ROOT, STORAGE_LEGACY_UPLOADER_REL), 'utf8'));
 const STORAGE_WRITE_AUTH_APPLIED_BYTES = STORAGE_LEGACY_UPLOADER.members['storage-write-auth.mjs'].live_sha256;
-const legacyUploaderPre = (plan) => {
+// Applied 2026-11-24 (production run 45473553080, VERIFIED): the row expects the applied bytes and names the applied
+// record, which chains to the planning manifest. legacyUploaderRecordPre reads the row as it stood before that apply;
+// STORAGE_LEGACY_UPLOADER_RELS names the row in either state.
+const STORAGE_LEGACY_UPLOADER_APPLIED_REL = 'aws/tests/fixtures/production-storage-legacy-uploader-folder-api-applied-manifest-2026-11-24.json';
+const STORAGE_LEGACY_UPLOADER_RELS = [STORAGE_LEGACY_UPLOADER_REL, STORAGE_LEGACY_UPLOADER_APPLIED_REL];
+const legacyUploaderRecordPre = (plan) => {
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, STORAGE_LEGACY_UPLOADER_APPLIED_REL), 'utf8'));
+  for (const [name, entry] of Object.entries(record.members)) {
+    if (plan.members[name]?.manifest !== STORAGE_LEGACY_UPLOADER_APPLIED_REL) continue;
+    assert.equal(entry.previous_manifest, STORAGE_LEGACY_UPLOADER_REL, name);
+    plan.members[name] = { ...plan.members[name], expected_live_sha256: STORAGE_LEGACY_UPLOADER.members[name].live_sha256, manifest: entry.previous_manifest };
+  }
+  return plan;
+};
+const legacyUploaderPre = (plan0) => {
+  const plan = legacyUploaderRecordPre(plan0);
   for (const [name, entry] of Object.entries(STORAGE_LEGACY_UPLOADER.members)) {
     if (plan.members[name]?.manifest !== STORAGE_LEGACY_UPLOADER_REL) continue;
     plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
@@ -1675,7 +1690,8 @@ test('partner storage writes: storage-write-auth.mjs then storage-write.mjs repl
     // storage-write-auth.mjs has moved on to the storage legacy uploader folder REPLACE (2026-11-24, planning only) from
     // the bytes this plan put live (production run 40908770516): its row is read as it stood before that plan, and
     // those applied bytes stand for main's.
-    const authMovedOn = member === AUTH && PLAN.members[member].manifest === STORAGE_LEGACY_UPLOADER_REL;
+    // (Applied 2026-11-24, production run 45473553080: the applied record is read back to the plan it applied.)
+    const authMovedOn = member === AUTH && STORAGE_LEGACY_UPLOADER_RELS.includes(PLAN.members[member].manifest);
     const row = legacyUploaderPre(structuredClone(PLAN)).members[member];
     // From the bytes the previous manifest recorded applied, to main's bytes.
     const applied = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256;
@@ -1701,10 +1717,11 @@ test('partner storage writes: storage-write-auth.mjs then storage-write.mjs repl
       assert.equal((await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before }) })).state, 'READY', member);
     }
     if (authMovedOn) {
-      // The bytes this plan applied are the legacy uploader folder REPLACE's expected live bytes: READY for it, and
-      // main's bytes ALREADY_ACCEPTED.
-      assert.equal(PLAN.members[member].expected_live_sha256, thisPlan, member);
-      assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: thisPlan }) })).state, 'READY', member);
+      // The bytes this plan applied were the legacy uploader folder REPLACE's expected live bytes: READY for it as it
+      // stood before its apply (production run 45473553080), and main's bytes ALREADY_ACCEPTED.
+      const beforeLegacyApply = legacyUploaderRecordPre(structuredClone(PLAN));
+      assert.equal(beforeLegacyApply.members[member].expected_live_sha256, thisPlan, member);
+      assert.equal((await run(inspect, { root: ROOT, plan: beforeLegacyApply, inspectLive: liveFor(member, { sha256: thisPlan }) })).state, 'READY', member);
       assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: sha(`aws/functions/api/${member}`) }) })).state, 'ALREADY_ACCEPTED', member);
     } else {
       assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: row.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED', member);
@@ -4329,7 +4346,7 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   // (storage-write-auth.mjs has moved on once more, to the storage legacy uploader folder REPLACE, 2026-11-24, planning
   // only: its row is read as it stood before that plan, and the bytes that plan moves on from stand for main's.)
   const preLegacyUploader = legacyUploaderPre(structuredClone(PLAN_PRE_T2B));
-  const legacyUploaderApplied = (member) => (PLAN.members[member].manifest === STORAGE_LEGACY_UPLOADER_REL ? STORAGE_LEGACY_UPLOADER.members[member].live_sha256 : t2bApplied(member));
+  const legacyUploaderApplied = (member) => (STORAGE_LEGACY_UPLOADER_RELS.includes(PLAN.members[member].manifest) ? STORAGE_LEGACY_UPLOADER.members[member].live_sha256 : t2bApplied(member));
   for (const member of REPLACES) {
     const row = preLegacyUploader.members[member];
     assert.equal(row.operation, 'replace', member);
@@ -5050,7 +5067,8 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     const writeMovedOn = member === 'storage-write.mjs';
     // storage-write-auth.mjs now follows the storage legacy uploader folder REPLACE (2026-11-24, planning only) from the
     // bytes applied here: those bytes are its expected live bytes, and main's are newer.
-    const authMovedOn = member === 'storage-write-auth.mjs' && PLAN.members[member].manifest === STORAGE_LEGACY_UPLOADER_REL;
+    // (Applied 2026-11-24, production run 45473553080: the row is read back through the applied record to that plan.)
+    const authMovedOn = member === 'storage-write-auth.mjs' && STORAGE_LEGACY_UPLOADER_RELS.includes(PLAN.members[member].manifest);
     const accepted = movedOn.has(member) ? applied.members[member].accepted_sha256 : dataMovedOn ? DATA_GATES_APPLIED : writeMovedOn ? STORAGE_WRITE_APPLIED_BYTES : authMovedOn ? STORAGE_WRITE_AUTH_APPLIED_BYTES : sha(`aws/functions/api/${member}`);
     const row = PLAN.members[member];
     assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: planningRel }, member);
@@ -5071,7 +5089,7 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     } else if (authMovedOn) {
       assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
       assert.notEqual(row.accepted_sha256, accepted, member);
-      assert.equal(row.expected_live_sha256, accepted, member);
+      assert.equal(legacyUploaderRecordPre(structuredClone(PLAN)).members[member].expected_live_sha256, accepted, member);
       assert.equal(STORAGE_LEGACY_UPLOADER.members[member].previous_manifest, SECURITY_HARDENING_APPLIED_REL, member);
     } else {
       assert.equal(row.accepted_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
@@ -5108,8 +5126,9 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
         member,
       );
     }
-    // storage-write-auth.mjs: the bytes applied here are READY for the legacy uploader folder REPLACE.
-    if (authMovedOn) assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) })).state, 'READY', member);
+    // storage-write-auth.mjs: the bytes applied here were READY for the legacy uploader folder REPLACE (as the row stood
+    // before its apply, production run 45473553080).
+    if (authMovedOn) assert.equal((await run(inspect, { root: ROOT, plan: legacyUploaderRecordPre(structuredClone(PLAN)), inspectLive: liveFor(member, { sha256: accepted }) })).state, 'READY', member);
   }
   // Staging inspect and apply, production inspect and apply for each member, plus the two refused runs.
   for (const runId of [
@@ -11176,14 +11195,21 @@ test('Storage legacy uploader folder (2026-11-24, planning only): storage-write-
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: onMain, operation: 'replace', previous_manifest: SECURITY_HARDENING_APPLIED_REL } });
   assert.notEqual(onMain, applied);
   // No new hold: SQL 94 stays first, recorded verified live.
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: 'aws/workflows/sql/94_document_library_restore.sql', manifest: STORAGE_LEGACY_UPLOADER_REL });
+  // Applied 2026-11-24 (production run 45473553080): the row expects main's bytes and names the applied record, which
+  // chains to this planning manifest; read the row back as it stood before the apply.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, STORAGE_LEGACY_UPLOADER_APPLIED_REL), 'utf8'));
+  const beforeApply = { ...PLAN.members[MEMBER], expected_live_sha256: manifest.members[MEMBER].live_sha256, manifest: record.members[MEMBER].previous_manifest };
+  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: 'aws/workflows/sql/94_document_library_restore.sql', manifest: STORAGE_LEGACY_UPLOADER_REL });
   assert.equal(PLAN.sql_prerequisites['aws/workflows/sql/94_document_library_restore.sql'].verified_live, true);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.notes.includes(`storage-write-auth.mjs REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes(`Manifest ${STORAGE_LEGACY_UPLOADER_REL}. Nothing deployed.`));
-  // Inspect: the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other bytes a reconciliation stop.
+  // Inspect (as the row stood before the apply): the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other
+  // bytes a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) });
+  const planBeforeApply = legacyUploaderRecordPre(structuredClone(PLAN));
+  assert.deepEqual(planBeforeApply.members[MEMBER], beforeApply);
+  const ready = await run(inspect, { root: ROOT, plan: planBeforeApply, inspectLive: liveFor(MEMBER, { sha256: applied }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
@@ -11194,4 +11220,28 @@ test('Storage legacy uploader folder (2026-11-24, planning only): storage-write-
   );
   // storage-write.mjs, which imports it, still follows it in plan order.
   assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('storage-write.mjs'));
+  // The record (2026-11-24): main's bytes are live and the row expects them; the bytes it replaced are now refused.
+  assert.equal(record.workstream_id, 'storage-legacy-uploader-folder-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-24\)/);
+  assert.equal(record.live_lambda, 'checksops-production-prep-api');
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: STORAGE_LEGACY_UPLOADER_REL } });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: 'aws/workflows/sql/94_document_library_restore.sql', manifest: STORAGE_LEGACY_UPLOADER_APPLIED_REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  for (const runId of ['45472305667', '45472476695', '45472773814', '45473313699', '45473553080']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['92d84da8a24408d0917a996c5506e3f445e46be6', '"DEPLOY storage-write-auth.mjs TO PRODUCTION"',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45472476695', 'lS4Nu/Vn8lEH8f9hePemxQA5P2jzbUat2YuS7VgV5wA=',
+    'c77e3ba0-f6d4-48c4-ac77-2b57d98adcfc', 'UdTxHKGrUt/YfxIQTzC4Ezm9o19BPRfygoW7zTNMmtI=', 'f10c4ade-5175-48af-8294-c20badad78fa', 'VERIFIED',
+    'errors []', 'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${STORAGE_LEGACY_UPLOADER_APPLIED_REL}. The row expects the applied bytes and names the storage legacy uploader folder applied record.`));
 });
