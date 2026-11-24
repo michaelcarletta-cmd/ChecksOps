@@ -54,7 +54,7 @@ The read-only production inspect of PR 2067 (`checkalt-deposit-state-inspect`, S
 **Not changed:** no table, column, constraint, index, trigger, policy or grant; `check_intake_items` is only read; no
 other `checkalt_deposits` row. No API, Lambda or SPA change.
 
-**Status:** staging pin execute-authorized (wave 66); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 66, 2026-11-24, apply run 45500686914; the zero-row path); staging acceptance: the staging apply under the owner's run approval ("run the SQL 174 staging apply"), the zero-row path accepted by the owner ("Yes, acceptable"); production pin execute-authorized on production's own pre-state (read-only inspect SSM `c67d45d5-0101-4e45-ac6f-0acc4b24dfb6`, 2026-11-24) by the owner-reviewed pin change; not applied in production.
 
 **Staging read-live (2026-11-24).** Run 45496290311 (main `bc57c431f`, after executor inspect run 45495103813 and executor
 deploy run 45495585761 (executor CodeSha256 `qJPry/Ig…` -> `xQkGHnWN…`, RevisionId `09a7de53-7894-4a06-a83f-0b84c5a79dfd`)):
@@ -65,6 +65,35 @@ Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`,
 pending) on the owner's "run the SQL 174 staging apply" (the zero-row staging acceptance: "Yes, acceptable"). The
 staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's
 words for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-24).** The staging pin for SQL 174 (wave 66, PR #2071) merged as
+`0b4f4b789f4f1c31b9a604cef713755376ce749e`. Deploy run 45499584688 updated the staging guarded SQL executor (CodeSha256 `xQkGHnWN…` ->
+`1DN3MzgqtsCmm63XUmZ6f8vGvywYrp9rQRWwKWiWNEo=`, RevisionId `20041fcc-360f-46c9-9201-6c8639534ae7`). Read-live run 45500179495:
+`pin_executable` true, `apply_preconditions_met` true, `matches_pinned_expected` true, live `51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f`, counts 0 and 0.
+Apply run 45500686914 (job 138822846295, main `0b4f4b789`) under the owner's words "run the SQL 174 staging apply": `result` applied,
+`before_hash` `51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f`, `after_hash` `ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c` (the intended hash); the function `intended`,
+`function_acl` `owner EXECUTE`, `definer_writes` `checkalt_deposits` ok and `check_intake_items` ok, counts
+`checkalt_stranded_attempts_in_window` 0 and `checkalt_reset_attempts_in_window` 0 (staging holds no stranded attempt: the function returned 0,
+no row written). Read-live run 45501136748: `already_applied` true, live `ad7969b5…`, `precondition_failures` `[]`. The owner accepted the
+zero-row staging acceptance ("Yes, acceptable"). There is no separate staging record PR for SQL 174: these staging runs are recorded here
+and in the production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-24).** Read-only `--inspect`
+(`node scripts/deployment-guard/sql174-checkalt-reset-stranded-attempt-production-apply.mjs --inspect`) through SSM
+`c67d45d5-0101-4e45-ac6f-0acc4b24dfb6` (AWS-RunShellScript) on `i-0c35557c4e5385406` (under the owner's words "run the SQL 174 production
+inspect"; runner started from stopped with no command in progress and stopped again afterwards), main `0b4f4b789` (tarball sha256
+`1602ac9030e411871d5b7dd33bd2046f8e9c7946df5ee2dee4f2d4ed175b9c75`, checked by `sha256sum -c` on the runner, `SOURCE_COMMIT` matched,
+staged by `sql53-temporary-transfer.yml` run 45502123569): `ok` true, `read_only` true, `source_ok` true, `current_user` `checksops_admin`,
+`predecessors_applied` true: live `51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f` (the function absent: the derived pre-state, equal to
+staging's before its apply), predecessors `{}`, `prerequisites_missing` `[]`, `successors_applied` `[]`, `definer_writes`
+`checkalt_deposits` ok and `check_intake_items` ok, counts `checkalt_stranded_attempts_in_window` 1 and `checkalt_reset_attempts_in_window` 0,
+`already_applied` false, `precondition_failures` `[]`, `apply_preconditions_met` false (no pre-state recorded yet). An earlier attempt
+the same day through `production-sql-one-shot.mjs --phase inspect` (SSM `57b460fc-b796-4e78-a2d3-86f67f544635`) refused at its pin step
+with `GUARD_APPLY_FORBIDDEN` (execute false) before any connection: no read. Production's catalog pre-state equals staging's (read-live run
+45496290311 and the staging apply's `before_hash`), so the staging apply took the catalog transition production will. Recorded in the
+production pin with the staging apply (run 45500686914) as its staging acceptance and `execute: true` under the owner's words "open the
+SQL 174 pin PR". The owner merges the pin change; the apply runs only after that merge is on main and staged, under the owner's words
+for that run (phrase `RESET_STRANDED_CHECKALT_ATTEMPT`).
 
 ## Order
 
@@ -136,8 +165,9 @@ Each step is its own reviewed PR or run and waits for the owner's words for that
    `[]`, `prerequisites_missing` `[]`, `predecessors` `{}`, counts `checkalt_stranded_attempts_in_window` 0, live
    `51db2d26…`. Otherwise stop. Record `LIVE_DEFINITION_SHA256` in the staging pin (`expected_live_definition_sha256`,
    owner-approved `authorization`, `execute: true`, wave 66) in a reviewed change, `apply`, then `read-live` again.
-2. Production: with the owner's OK for that read, the read-only inspect on the runner
-   (`node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql174 … --phase inspect`). Expected counts
+2. Production: with the owner's OK for that read, the tool's own read-only inspect on the runner
+   (`node scripts/deployment-guard/sql174-checkalt-reset-stranded-attempt-production-apply.mjs --inspect`; the one-shot's
+   `--phase inspect` refuses at its pin step while the pin is `execute: false`). Expected counts
    `checkalt_stranded_attempts_in_window` 1, `checkalt_reset_attempts_in_window` 0, `precondition_failures` `[]`, live
    `51db2d26…`; otherwise stop. Record `production_inspect`, copy `live_definition_sha256` into
    `expected_live_definition_sha256`, record the staging runs in `staging_acceptance`, set an owner-approved
