@@ -54,8 +54,17 @@ The read-only production inspect of PR 2067 (`checkalt-deposit-state-inspect`, S
 **Not changed:** no table, column, constraint, index, trigger, policy or grant; `check_intake_items` is only read; no
 other `checkalt_deposits` row. No API, Lambda or SPA change.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read. Staging
-wave 66 when approved (wave 65 is SQL 173's, also pending; wave 64, SQL 172, is the highest applied).
+**Status:** staging pin execute-authorized (wave 66); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-24).** Run 45496290311 (main `bc57c431f`, after executor inspect run 45495103813 and executor
+deploy run 45495585761 (executor CodeSha256 `qJPry/Ig…` -> `xQkGHnWN…`, RevisionId `09a7de53-7894-4a06-a83f-0b84c5a79dfd`)):
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, counts
+`checkalt_stranded_attempts_in_window` 0 and `checkalt_reset_attempts_in_window` 0; the function absent. Live
+`51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f`, equal to the derived pre-state; intended `ad7969b5…`.
+Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 66; wave 65 stays SQL 173's, still
+pending) on the owner's "run the SQL 174 staging apply" (the zero-row staging acceptance: "Yes, acceptable"). The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's
+words for that run. The production pin stays pending.
 
 ## Order
 

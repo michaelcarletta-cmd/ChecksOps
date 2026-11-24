@@ -4039,8 +4039,9 @@ export const AUTHORIZED_SQL173_JOB_EXPENSES = Object.freeze({
 // deposit attempt). One new owner-only SECURITY DEFINER function, aws_checkalt_reset_stranded_attempt, which the file
 // calls once for the minute 2026-11-24 19:58 UTC: the one attempt marked before the Check Alt sign-in answered 504 goes
 // back to queued. No predecessor (release-sql-specs.mjs); staging must hold no stranded attempt in the window
-// (checkalt_stranded_attempt_in_window), production exactly one. Pending until a reviewed pin change records a staging
-// read-live; staging wave 66 when approved (ops/production-sql-174-apply.md).
+// (checkalt_stranded_attempt_in_window), production exactly one. Staging apply authorized (wave 66) from staging
+// read-live run 45496290311: the function absent, no stranded attempt in the window (counts 0 and 0), equal to the
+// derived pre-state (ops/production-sql-174-apply.md).
 export const AUTHORIZED_SQL174_CHECKALT_RESET_STRANDED_ATTEMPT = Object.freeze({
   key: 'sql174',
   filename: 'aws/workflows/sql/174_checkalt_reset_stranded_attempt.sql',
@@ -4048,9 +4049,12 @@ export const AUTHORIZED_SQL174_CHECKALT_RESET_STRANDED_ATTEMPT = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '1118ba3cd95551c535cd046ed9ec671b18e871ac',
   source_sha256: '7e69502ed9b7ced71feb95b7e7ed457518c33cfb43d9a7f40dde8f2c17edfc4b',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-24: staging apply (wave 66) from staging read-live run 45496290311',
+  execute: true,
+  // Staging read-live run 45496290311 (main bc57c431f, executor deploy run 45495585761): already_applied false,
+  // precondition_failures [], prerequisites_missing [], counts checkalt_stranded_attempts_in_window 0 and
+  // checkalt_reset_attempts_in_window 0. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: '51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f',
   // Code-derived: releaseIntendedHash('sql174', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c',
   // The file creates and sets the ACL of this function.
