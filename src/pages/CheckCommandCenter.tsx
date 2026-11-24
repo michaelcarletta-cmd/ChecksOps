@@ -4583,6 +4583,8 @@ function CheckDetailPanel({
                   checkId={checkId}
                   onRefresh={onRefresh}
                   partnerMode={isSharedView}
+                  isOwner={isOwner}
+                  checkWorkflow={check}
                 />
               </Suspense>
 
