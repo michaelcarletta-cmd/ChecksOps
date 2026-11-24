@@ -644,6 +644,65 @@ export async function handleProductionCheckAltSubmit({
   }
 
   await commitDurableAttempt(client, mapping, claims);
+
+  // Sign in and resolve the ssoKey before the row is claimed. A sign-in or
+  // lookup failure sends no deposit, so the row must stay 'queued' with
+  // provider_http_attempted_at NULL and the next Deposit press can claim it
+  // (2026-11-24: a sign-in 504 after the claim left a row that only
+  // reconciliation could clear although nothing had been posted).
+  let jwt;
+  let processBody;
+  let preClaimStage = 'sign_in';
+  try {
+    jwt = await getCheckAltJwt({
+      cfg: loadedCfg.cfg,
+      credentials: loadedCfg.credentials,
+      fetchImpl,
+      jwtCache,
+    });
+    preClaimStage = 'sso_lookup';
+    const ssoKey = await resolveSsoKey({
+      cfg: loadedCfg.cfg,
+      credentials: loadedCfg.credentials,
+      acct,
+      fetchImpl,
+      jwtCache,
+    });
+    processBody = buildDepositProcessBody({
+      fiKey: loadedCfg.cfg.fi_key,
+      ssoKey,
+      depositAccountNumber: acct.deposit_account_number,
+      captureDateTime: new Date().toISOString(),
+      userAmount,
+      frontImage: images.frontImage,
+      rearImage: images.rearImage,
+      performRiskAssessment: true,
+    });
+  } catch (error) {
+    const httpStatus = /\[(\d{3})\]/.exec(String(error?.message || ''))?.[1] || null;
+    console.warn(JSON.stringify({
+      event: 'checkalt_submit_auth_unavailable',
+      stage: preClaimStage,
+      deposit_id: queued.row.id,
+      http_status: httpStatus ? Number(httpStatus) : null,
+      network_error: isProviderNetworkError(error),
+    }));
+    return fail('checkalt_auth_unavailable', 503, {
+      deposit_id: queued.row.id,
+      status: queued.row.status,
+      stage: preClaimStage,
+      retryable: true,
+      failure_class: 'provider_auth_unavailable',
+      liveProviderCalled: true,
+      depositPosted: false,
+      productionExecution: true,
+      productionRecordsMutated: queued.inserted === true,
+      message: 'Check Alt sign-in is unavailable right now. Nothing was sent to Check Alt for this deposit. Press Deposit again in a minute.',
+      spoofFieldsIgnored: spoof,
+      applicationUserId: mapping.application_user_id,
+    });
+  }
+
   const claimedHttp = await markHttpAttempted(client, queued.row.id);
   await commitDurableAttempt(client, mapping, claims);
   if (!claimedHttp.claimed) {
@@ -676,35 +735,13 @@ export async function handleProductionCheckAltSubmit({
   const submitting = claimedHttp.row;
 
   try {
-    await getCheckAltJwt({
-      cfg: loadedCfg.cfg,
-      credentials: loadedCfg.credentials,
-      fetchImpl,
-      jwtCache,
-    });
-    const ssoKey = await resolveSsoKey({
-      cfg: loadedCfg.cfg,
-      credentials: loadedCfg.credentials,
-      acct,
-      fetchImpl,
-      jwtCache,
-    });
-    const processBody = buildDepositProcessBody({
-      fiKey: loadedCfg.cfg.fi_key,
-      ssoKey,
-      depositAccountNumber: acct.deposit_account_number,
-      captureDateTime: new Date().toISOString(),
-      userAmount,
-      frontImage: images.frontImage,
-      rearImage: images.rearImage,
-      performRiskAssessment: true,
-    });
     const resp = await checkAltFetch({
       cfg: loadedCfg.cfg,
       credentials: loadedCfg.credentials,
       path: '/fincapture/deposit/process',
       body: processBody,
       fetchImpl,
+      jwt,
       jwtCache,
     });
     const { json } = await parseProviderJson(resp);

@@ -124,10 +124,13 @@ test('the stranded rule is the Lambda\'s own: with an HTTP attempt and no refere
   for (const sql of [Q.stranded, Q.strandedByDate, Q.recent]) {
     assert.match(sql, /provider_http_attempted_at IS NOT NULL AND [a-z]\.checkalt_reference IS NULL AND [a-z]\.status::text IN \('queued', 'pending', 'submitting', 'error'\)/);
   }
-  // The submit path marks the attempt (and commits it) before it signs in to CheckAlt.
+  // Until #2068 the submit path marked the attempt (and committed it) before it signed in to
+  // CheckAlt, so a sign-in failure stranded the row (2026-11-24 19:58 UTC). Since #2068 it signs
+  // in first and marks the attempt only right before the deposit POST; rows stranded earlier
+  // still match the rule above.
   const submit = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-submit.mjs'), 'utf8');
   assert.ok(submit.indexOf('await markHttpAttempted(client') > 0);
-  assert.ok(submit.indexOf('await markHttpAttempted(client') < submit.indexOf('await getCheckAltJwt('));
+  assert.ok(submit.indexOf('await getCheckAltJwt(') < submit.indexOf('await markHttpAttempted(client'));
 });
 
 // --- CLI refusals ------------------------------------------------------------------------
