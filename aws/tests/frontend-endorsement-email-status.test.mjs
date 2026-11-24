@@ -2,7 +2,8 @@
  * Endorsement request email status in the Endorsements card (owner 2026-11-19):
  *   "Is there anyway for tenants to see if an email has been delivered and opened? For this to show up near the payee
  *   signature request", then "Yeah build 1 and 2": delivered or bounced from Resend's delivery reports, and when the
- *   payee opened the signing link. No tracking pixel ("email opened" is not shown).
+ *   payee opened the signing link. Owner 2026-11-23, "Yes build opened and clicked", then "Build the opened and clicked
+ *   display on the website": Resend's email opened and link clicked reports (SQL 172), for the current request only.
  *
  * The fields are SQL 170's check_endorsements columns. Until SQL 170 is applied they are absent and the card shows
  * only what it showed before ("Last sent ...").
@@ -70,12 +71,54 @@ test('the card renders the line under "Last sent", only for tracked rows, with t
   const lastSent = list.indexOf('Last sent {format(new Date(endorsement.request_sent_at), "MMM d h:mm a")}');
   const block = list.indexOf('data-endorsement-email-status=""');
   assert.ok(lastSent > 0 && block > lastSent, 'status line sits under "Last sent"');
-  assert.match(list, /\{emailStatus\.tracked && \(emailStatus\.delivery \|\| emailStatus\.linkOpenedAt\) && \(/);
   for (const label of ['Check the email address and resend.', 'Marked as spam by the recipient', 'Delivered {format(', 'Delivery pending', 'Link opened {format(']) {
     assert.ok(list.includes(label), label);
   }
-  // No "email opened" (tracking pixel) state is shown.
-  assert.doesNotMatch(list, /Email opened/);
+  // Since SQL 172 (owner 2026-11-23, "Build the opened and clicked display on the website"), Resend's opened and clicked
+  // reports show too, with a note that a mail app can open an email automatically.
+  for (const label of ['Email opened {format(', 'Email link clicked {format(', 'Some mail apps open emails automatically']) {
+    assert.ok(list.includes(label), label);
+  }
+  assert.match(list, /\{emailStatus\.tracked && \(emailStatus\.delivery \|\| emailStatus\.linkOpenedAt \|\| emailStatus\.emailOpenedAt \|\| emailStatus\.emailClickedAt\) && \(/);
   // The card reads every column of the row, so SQL 170's columns arrive without a query change.
   assert.match(list, /selectOwnerThenPartner\("check_endorsements", PARTNER_CHECK_ENDORSEMENTS, \(from\) =>\s*\n\s*from\s*\n?\s*\.select\("\*"\)/);
+});
+
+const SENT2 = '2026-11-20T10:00:00Z';
+
+test('SQL 172: opened and clicked after the latest send show with their counts', () => {
+  const status = endorsementEmailStatus({
+    request_sent_at: SENT, email_message_id: 're_1', email_delivered_at: '2026-11-18T13:36:52Z',
+    email_first_opened_at: '2026-11-18T14:00:00Z', email_last_opened_at: '2026-11-18T16:00:00Z', email_open_count: 3,
+    email_first_clicked_at: '2026-11-18T14:05:00Z', email_last_clicked_at: '2026-11-18T14:05:00Z', email_click_count: 1,
+  });
+  assert.equal(status.emailOpenedAt, '2026-11-18T16:00:00Z');
+  assert.equal(status.emailOpenCount, 3);
+  assert.equal(status.emailClickedAt, '2026-11-18T14:05:00Z');
+  assert.equal(status.emailClickCount, 1);
+});
+
+test('SQL 172: reports older than the latest send are hidden; a count mixing two sends is not shown', () => {
+  const old = endorsementEmailStatus({
+    request_sent_at: SENT2, email_message_id: 're_2',
+    email_first_opened_at: '2026-11-18T14:00:00Z', email_last_opened_at: '2026-11-18T16:00:00Z', email_open_count: 2,
+  });
+  assert.equal(old.emailOpenedAt, null);
+  assert.equal(old.emailOpenCount, 0);
+  const mixed = endorsementEmailStatus({
+    request_sent_at: SENT2, email_message_id: 're_2',
+    email_first_opened_at: '2026-11-18T14:00:00Z', email_last_opened_at: '2026-11-20T11:00:00Z', email_open_count: 4,
+  });
+  assert.equal(mixed.emailOpenedAt, '2026-11-20T11:00:00Z');
+  assert.equal(mixed.emailOpenCount, 0);
+});
+
+test('SQL 172: before the columns exist, or with no report, nothing new shows', () => {
+  const before = endorsementEmailStatus({ request_sent_at: SENT, email_message_id: 're_1', email_delivered_at: '2026-11-18T13:36:52Z' });
+  assert.equal(before.emailOpenedAt, null);
+  assert.equal(before.emailClickedAt, null);
+  const none = endorsementEmailStatus({ request_sent_at: SENT, email_message_id: 're_1', email_open_count: 0, email_click_count: 0, email_first_opened_at: null, email_last_opened_at: null });
+  assert.equal(none.emailOpenedAt, null);
+  assert.equal(none.emailClickCount, 0);
+  assert.equal(endorsementEmailStatus(null).emailOpenedAt, null);
 });
