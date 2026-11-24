@@ -142,7 +142,22 @@ const legacyUploaderPre = (plan0) => {
 const CHECKALT_AUTH_BEFORE_ATTEMPT_REL = 'aws/tests/fixtures/production-checkalt-auth-before-attempt-api-manifest-2026-11-24.json';
 const CHECKALT_AUTH_BEFORE_ATTEMPT = JSON.parse(fs.readFileSync(path.join(ROOT, CHECKALT_AUTH_BEFORE_ATTEMPT_REL), 'utf8'));
 const CHECKALT_SUBMIT_APPLIED_BYTES = CHECKALT_AUTH_BEFORE_ATTEMPT.members['providers/production/checkalt-submit.mjs'].live_sha256;
-const authBeforeAttemptPre = (plan) => {
+// Applied 2026-11-24 (production run 45487777493, VERIFIED): the row expects the applied bytes and names the applied
+// record, which chains to the planning manifest. authBeforeAttemptRecordPre reads the row as it stood before that apply;
+// CHECKALT_AUTH_BEFORE_ATTEMPT_RELS names the row in either state.
+const CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL = 'aws/tests/fixtures/production-checkalt-auth-before-attempt-api-applied-manifest-2026-11-24.json';
+const CHECKALT_AUTH_BEFORE_ATTEMPT_RELS = [CHECKALT_AUTH_BEFORE_ATTEMPT_REL, CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL];
+const authBeforeAttemptRecordPre = (plan) => {
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL), 'utf8'));
+  for (const [name, entry] of Object.entries(record.members)) {
+    if (plan.members[name]?.manifest !== CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL) continue;
+    assert.equal(entry.previous_manifest, CHECKALT_AUTH_BEFORE_ATTEMPT_REL, name);
+    plan.members[name] = { ...plan.members[name], expected_live_sha256: CHECKALT_AUTH_BEFORE_ATTEMPT.members[name].live_sha256, manifest: entry.previous_manifest };
+  }
+  return plan;
+};
+const authBeforeAttemptPre = (plan0) => {
+  const plan = authBeforeAttemptRecordPre(plan0);
   for (const [name, entry] of Object.entries(CHECKALT_AUTH_BEFORE_ATTEMPT.members)) {
     if (plan.members[name]?.manifest !== CHECKALT_AUTH_BEFORE_ATTEMPT_REL) continue;
     plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
@@ -2606,7 +2621,8 @@ test('Check Alt hold Option 1 (owner 2026-11-02): checkalt-submit.mjs REPLACE fr
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
   // The row has moved on to the Check Alt sign-in before the claim REPLACE (2026-11-24, planning only) from the bytes
   // this plan applied: the row is read as it stood before that plan, and those applied bytes stand for main's.
-  const authMovedOn = PLAN.members[SUBMIT].manifest === CHECKALT_AUTH_BEFORE_ATTEMPT_REL;
+  // (Applied 2026-11-24, production run 45487777493: the applied record is read back to the plan it applied.)
+  const authMovedOn = CHECKALT_AUTH_BEFORE_ATTEMPT_RELS.includes(PLAN.members[SUBMIT].manifest);
   const onMain = sha(`aws/functions/api/${SUBMIT}`);
   const accepted = authMovedOn ? CHECKALT_SUBMIT_APPLIED_BYTES : onMain;
   const row = authBeforeAttemptPre(structuredClone(PLAN)).members[SUBMIT];
@@ -2631,10 +2647,11 @@ test('Check Alt hold Option 1 (owner 2026-11-02): checkalt-submit.mjs REPLACE fr
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(SUBMIT, { sha256: LIVE, plan: before }) });
   assert.equal(ready.state, 'READY');
   if (authMovedOn) {
-    // The bytes this plan applied are the sign-in before the claim REPLACE's expected live bytes: READY for it, and
-    // main's bytes ALREADY_ACCEPTED.
-    assert.equal(PLAN.members[SUBMIT].expected_live_sha256, accepted);
-    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: accepted }) })).state, 'READY');
+    // The bytes this plan applied were the sign-in before the claim REPLACE's expected live bytes: READY for it as it
+    // stood before its apply (production run 45487777493), and main's bytes ALREADY_ACCEPTED.
+    const beforeAuthApply = authBeforeAttemptRecordPre(structuredClone(PLAN));
+    assert.equal(beforeAuthApply.members[SUBMIT].expected_live_sha256, accepted);
+    assert.equal((await run(inspect, { root: ROOT, plan: beforeAuthApply, inspectLive: liveFor(SUBMIT, { sha256: accepted }) })).state, 'READY');
     assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
   } else {
     const done = await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: accepted }) });
@@ -11296,14 +11313,21 @@ test('Check Alt sign-in before the claim (2026-11-24, planning only): checkalt-s
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: onMain, operation: 'replace', previous_manifest: PREVIOUS_REL } });
   assert.notEqual(onMain, applied);
   // No hold: no SQL before it.
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: CHECKALT_AUTH_BEFORE_ATTEMPT_REL });
+  // Applied 2026-11-24 (production run 45487777493): the row expects main's bytes and names the applied record, which
+  // chains to this planning manifest; read the row back as it stood before the apply.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL), 'utf8'));
+  const beforeApply = { ...PLAN.members[MEMBER], expected_live_sha256: manifest.members[MEMBER].live_sha256, manifest: record.members[MEMBER].previous_manifest };
+  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: CHECKALT_AUTH_BEFORE_ATTEMPT_REL });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
   assert.ok(PLAN.notes.includes(`checkalt-submit.mjs REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes(`Manifest ${CHECKALT_AUTH_BEFORE_ATTEMPT_REL}. Nothing deployed.`));
-  // Inspect: the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other bytes a reconciliation stop.
+  // Inspect (as the row stood before the apply): the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other
+  // bytes a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) });
+  const planBeforeApply = authBeforeAttemptRecordPre(structuredClone(PLAN));
+  assert.deepEqual(planBeforeApply.members[MEMBER], beforeApply);
+  const ready = await run(inspect, { root: ROOT, plan: planBeforeApply, inspectLive: liveFor(MEMBER, { sha256: applied }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
@@ -11319,4 +11343,28 @@ test('Check Alt sign-in before the claim (2026-11-24, planning only): checkalt-s
   assert.ok(at('jwt = await getCheckAltJwt(') > 0);
   assert.ok(at('jwt = await getCheckAltJwt(') < at('await markHttpAttempted(client, queued.row.id)'));
   assert.ok(at('await markHttpAttempted(client, queued.row.id)') < at("path: '/fincapture/deposit/process'"));
+  // The record (2026-11-24): main's bytes are live and the row expects them; the bytes it replaced are now refused.
+  assert.equal(record.workstream_id, 'checkalt-auth-before-attempt-api-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-24\)/);
+  assert.equal(record.live_lambda, 'checksops-production-prep-api');
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: CHECKALT_AUTH_BEFORE_ATTEMPT_REL } });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  for (const runId of ['45486738591', '45486931546', '45487109921', '45487546112', '45487777493']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['9b3c9d49e2f48cd9ef0c2eb0ad6f1ef27d9e688d', '"DEPLOY providers/production/checkalt-submit.mjs TO PRODUCTION"',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45486931546', 'UdTxHKGrUt/YfxIQTzC4Ezm9o19BPRfygoW7zTNMmtI=',
+    'f10c4ade-5175-48af-8294-c20badad78fa', 'wyne27HeTJzvUw4QxG6UF50pW2isbcard0/RRMkx3/8=', '816840fe-6c3e-4587-9b05-6ebc2897bb9c', 'VERIFIED',
+    'errors []', 'index.mjs is untouched', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL}. The row expects the applied bytes and names the Check Alt sign-in before the claim applied record.`));
 });
