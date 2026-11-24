@@ -1,0 +1,64 @@
+{
+  "id": "sql174-checkalt-reset-stranded-attempt-production-apply",
+  "migration": "sql174",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/174_checkalt_reset_stranded_attempt.sql",
+  "migration_id": "174_checkalt_reset_stranded_attempt",
+  "staging_pin_commit": "1118ba3cd95551c535cd046ed9ec671b18e871ac",
+  "source_sha256": "7e69502ed9b7ced71feb95b7e7ed457518c33cfb43d9a7f40dde8f2c17edfc4b",
+  "function_identities": [
+    "public.aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c",
+  "authorization_phrase": "RESET_STRANDED_CHECKALT_ATTEMPT",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 174 creates one function and replaces nothing (owner 2026-11-24, \"start step 3\": clear the one stranded CheckAlt deposit attempt). Before PR 2068, checkalt-submit.mjs ran markHttpAttempted before the Check Alt sign-in; the sign-in answered 504 at 2026-11-24 19:58 UTC (\"CheckAlt auth failed [504]\", CloudWatch 19:58:54 UTC), no POST /fincapture/deposit/process was sent (the owner confirmed in the Check Alt portal that no deposit went through), and the attempt row stayed status submitting with provider_http_attempted_at set and the payload flag provider_http_attempted true, so every later press answers reconciliation_required. The read-only inspect of PR 2067 (checkalt-deposit-state-inspect, SSM 9eb0173e-0540-467f-b108-8fb6edc727e2, source commit 07068a8a) found exactly one such row of 92. One new SECURITY DEFINER function, public.aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone) returning integer (plpgsql, VOLATILE, search_path public, pg_temp, row_security off, EXECUTE for the owner only: revoked from PUBLIC, anon, authenticated, service_role and checksops). In a window of at most one hour it locks and counts the attempts with checkalt_reference NULL, status submitting, provider_http_attempted_at and created_at in the window, failure_class NULL, last_error NULL, last_status_payload phase submitting, a check with deposited_at NULL and no other checkalt_deposits row for that check; more than one raises 55000 sql174_ambiguous_stranded_attempts (nothing changes), none returns 0 (a NOTICE says whether a row of the window is already reset), exactly one is set back to the state insertQueuedDeposit leaves (status queued, provider_http_attempted_at NULL, last_status_payload merged with phase queued_before_http, provider_http_attempted false and stranded_reset {reason pre_provider_sign_in_504, migration 174, at now()}, updated_at now(); checkalt_reference stays NULL, amount, amount_cents, idempotency_key, tenant_id, check_intake_item_id and submitted_by untouched) and it returns 1. The file calls it once for [2026-11-24 19:58:00+00, 2026-11-24 19:59:00+00). It names no id, amount or name. The four status triggers on checkalt_deposits (SQL 120, 121, 123, 152) write nothing for submitting -> queued. The file refuses (55000) sql174_prerequisite_missing and sql174_definer_cannot_read (the applying login must own checkalt_deposits and check_intake_items without FORCE ROW LEVEL SECURITY, or be a superuser or BYPASSRLS; the engine's definer_can_write_relations). Before the file runs the engine requires checkalt_stranded_attempt_in_window: on production the declared count checkalt_stranded_attempts_in_window (the function's own rule for that minute, aggregate only) must be exactly 1; on staging it must be 0. Expected catalog pre-state in both environments: the function absent (release sql174 v1: 51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f, releaseStateHash('sql174', {})). No API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql174-checkalt-reset-stranded-attempt-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql174-checkalt-reset-stranded-attempt",
+    "one_shot_migration": "sql174",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-174-apply.md",
+    "tests": [
+      "aws/tests/release-sql174-executor.test.mjs",
+      "aws/tests/release-sql174-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql174-checkalt-reset-stranded-attempt-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 174: sql174-checkalt-reset-stranded-attempt-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql174-checkalt-reset-stranded-attempt); production-sql-one-shot.mjs --migration sql174. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's attributes, body hash and EXECUTE ACL. The row the file resets is data, not catalog: the inspect reports the declared counts checkalt_stranded_attempts_in_window and checkalt_reset_attempts_in_window, and the precondition checkalt_stranded_attempt_in_window requires exactly 1 stranded attempt on production. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 174 yet. Expected: prerequisites_missing [], predecessors {} (none), checkalt_deposits and check_intake_items owned by checksops_admin without FORCE ROW LEVEL SECURITY (definer_can_write_relations), the function absent, counts checkalt_stranded_attempts_in_window 1 and checkalt_reset_attempts_in_window 0, already_applied false. Expected release-engine fingerprint of that pre-state under sql174: 51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, counts, prerequisites_missing, predecessors, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs (the function present), checkalt_stranded_attempts_in_window is not 1, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c",
+    "note": "aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone) returns integer: plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, row_security off, EXECUTE for the owner only. No other catalog object changes. Data: on production the one stranded attempt of the minute 2026-11-24 19:58 UTC is queued again (checkalt_stranded_attempts_in_window 0, checkalt_reset_attempts_in_window 1); no other row changes. The fingerprint is releaseIntendedHash('sql174', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 174 (choice sql174-checkalt-reset-stranded-attempt) here in the reviewed change that sets execute true. Staging holds no stranded attempt in the window (the row exists only in production), so the staging apply proves the file, the owner-only function and the zero-row path; the owner accepted that on 2026-11-24. The one-row reset, the near misses, the abort on two matches and the re-run are covered on PostgreSQL 16 by aws/tests/sql174-checkalt-reset-stranded-attempt-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
