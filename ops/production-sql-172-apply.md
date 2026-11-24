@@ -41,7 +41,7 @@ the Resend webhook handler to pass `email.opened` and `email.clicked` to the fun
 turned on for the sending domain in Resend), then the website (opened and clicked beside Delivered), each after this pin
 is applied in production. No API, Lambda or SPA change is part of this pin.
 
-**Status:** applied in staging (wave 64, 2026-11-23, apply run 45276313813); staging acceptance: the staging apply under the owner's run approval ("run the SQL 172 staging apply"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `03050f81-bebc-4566-a116-35147b3410f6`, 2026-11-23) by the owner-reviewed pin change; not applied in production.
+**Status:** applied in staging (wave 64, 2026-11-23, apply run 45276313813); staging acceptance: the staging apply under the owner's run approval ("run the SQL 172 staging apply"; no separate acceptance statement); applied to production (2026-11-23); the production pin is retired (`execute: false`). Nothing a user sees changes until the API (the Resend webhook passing `email.opened` and `email.clicked` to the function) and the website are deployed.
 
 **Staging read-live (2026-11-23).** Run 45267758829 (main `6a5c0b746`, after executor inspect run 45266777439 and executor deploy
 run 45267274234 (executor CodeSha256 `gGHt9f/X…` -> `seM6qqQs…`)), under the owner's words "run the staging SQL executor
@@ -78,6 +78,30 @@ staging apply's `before_hash`), so the staging apply took the path production wi
 (run 45276313813) as its staging acceptance and `execute: true` under the owner's words "Open the SQL 172 production pin PR". The owner
 merges the pin change; the apply runs only after that merge is on main and staged, under the owner's words for that run (phrase
 `SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED`).
+
+**Production apply (2026-11-23).** After the pin change (#2049, merged to main as `8faa6c802`), transfer run 45288348430
+(`sql53-temporary-transfer.yml`) staged main `25b6c54ce` (the merge of #2050, which carries it; tarball sha256
+`f88246c80503db7c3fd6c2860bdea593f68e7f6d7d320fea7d645b2e7fa9e462`, checked by `sha256sum -c` on the runner before each command; `SOURCE_COMMIT`
+matched). The runner `i-0c35557c4e5385406` was started from stopped at 23:27:47Z (Online 23:28:03Z) by `user/claude-code`; at the start two
+AWS-managed commands were listed InProgress (`AmazonInspector2-ConfigureInspectorSsmPlugin` `411c6d1f` and `AWS-ConfigureAWSPackage` `2f7598fe`,
+queued while it was stopped, as in earlier runs; no SQL ran in them). Under the owner's message "Merge 2050and SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED"
+(its phrase `SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED` passed verbatim as the approval statement, `--approval-scope sql172`; root volume 39% used at the apply command):
+one-shot `--phase inspect` (SSM `8c44f818-014a-4beb-abfa-bd9c2e8c51a7`, 23:28:03Z to 23:28:18Z, Success, exit 0, run `089ea909-0980-4c82-99a1-99aded9d2ece`,
+steps pin, source, inspect and contracts ok, nothing written) read live `dbf6a724…` (`live_matches_expected` true, `already_applied` false,
+`apply_preconditions_met` true, `precondition_failures` `[]`, predecessors `{ sql170: true }`); the apply command was sent only after that. Then
+`--phase apply` (SSM `a071df6d-ac5d-42fc-a10c-5acd8e6e6d0b`, 23:28:33Z to 23:28:45Z, Success, exit 0, run `3f8c6c95-03dd-4a03-82c2-343480bf62a4`, workstream
+`prod-sql172-endorsement-email-engagement-20261123`, one_use_id `sql172-prod-9684d2f2-1fdb-4fb9-be08-d833dcfd09ad`): contracts claim-ledger,
+tenant-isolation and financial-write-protections ok; all 11 steps ok; manifest `2a865b79…`; receipt `dbf6a724…` →
+`fc4119aa53c9652fa4bd9774f2e0c3add752e70ce1aa8bb9fe302981a7b38dce` (intended), result `applied`; post-apply inspect `already_applied` true,
+`precondition_failures` `[]`, the six `check_endorsements` columns and `aws_endorsement_email_engagement` `intended`, EXECUTE `checksops` and the
+owner; SQL 170 still reads applied. The whole output arrived through SSM: inspect printed 5530 bytes (sha256
+`18f0eb1b0ef75d3284f15357e15f0be97e2e3cca999b9384c707aea4dc37e709`), compact copy 4089 bytes (sha256 `80348cb5a147128b11ddedaf89db5c7688a4643adb4fd99ed1410da18118412a`);
+apply printed 24000 bytes (sha256 `4ee4e4cce628f11782ae0fbd6d733bbcf8d7a20f6f519ea01c28bbbb88a0d9f8`), compact copy 16556 bytes (sha256
+`6f706cccb70a373b89d8a14d7d12e3f699aba3232ce811914a7141647adf6bc0`, read back whole in two base64 chunks, SSM `ca6bdc5b` and `d3d9e823` after a size
+check, SSM `b71191f7`; the same sha256 as computed on the runner). Both compact copies were then deleted from the runner (SSM
+`59615f54-aed2-4c87-86c9-9c48b442f459`). The apply command's own process check found no one-shot running; the runner was stopped again at 23:29:56Z by
+`user/claude-code`. Recorded in the pin's `applied` and `production_evidence`; `execute` is false again. Production acceptance had not been
+reported by the owner when this record was written; this record does not claim it.
 
 ## Order
 
