@@ -191,6 +191,12 @@
       "note": "Read-only production inspect of check ownership; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/check-ownership-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs over all checks: ownership class (tenant_id NULL, tenant_id not in tenants, uploaded_by NULL, uploader without a tenant_users row in the check's tenant) by the uploader's tenant count, deposited, created month, status and stage, claim organization, and the check-scoped uuid of each image path. Returns counts and code labels only: never an id, a name, an amount or an image path."
     },
     {
+      "path": "scripts/deployment-guard/checkalt-deposit-state-inspect.mjs",
+      "classification": "SAFE",
+      "capabilities": ["checkalt-deposit-state-inspect"],
+      "note": "Read-only production inspect of CheckAlt deposit state; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/checkalt-deposit-state-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs over public.checkalt_deposits and the checks they name: deposits by status, reference null and HTTP attempted; one entry per stranded row (provider_http_attempted_at set, checkalt_reference NULL, status queued, pending, submitting or error) with minute timestamps, status, failure_class and phase labels, whether last_error is null, its check's deposited/status/stage and the check's other deposit rows; stranded rows by created date; the rows created in the last 2 days. Returns counts, code labels, booleans and minute timestamps only: never an id, a name, an amount, a CheckAlt reference, error text or a payload value."
+    },
+    {
       "path": "scripts/deployment-guard/billing-trigger-inspect.mjs",
       "classification": "SAFE",
       "capabilities": ["billing-trigger-inspect"],
