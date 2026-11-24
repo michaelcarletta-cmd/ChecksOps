@@ -704,17 +704,17 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "75b5dff644a4279b9a551de5be4c9bfbe7ebc43c",
+        "git_sha": "eec69288beb715d18f70181ad1ff12cf51fe3517",
         "tree_hash": "3cad89d8a2e828fc1c711228df00f22f2c36bb3a5584054caa2caa84f463b1e0",
         "merged": true,
-        "merged_pr": 2055
+        "merged_pr": 2058
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-DewN8RMc.js",
-        "version": "KftERuZB_3SeREJX6oQTqjqXUYRGrC3W",
-        "hash": "cf62e1c2ba5848ef17230e109bc80c593d60c4bdfa751444147faa35f9469e52",
+        "name": "/assets/index-De_WbM8A.js",
+        "version": "mKB1PCRuuNV5H_4Lbor.4lHVkLeox7ow",
+        "hash": "0fc94f1de1fca203fa43fe4669e2924c0d7856b9eec8226cda0f198e18f4e665",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": "efd1147c-3134-43c2-9e23-17fdc50a13d6",
@@ -726,34 +726,34 @@
           "ops/release-locks/proof/production-spa-baseline.md",
           "ops/production-spa-deploy.md"
         ],
-        "recorded_at": "2026-11-24T02:56:36Z",
+        "recorded_at": "2026-11-24T15:48:52Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "75b5dff644a4279b9a551de5be4c9bfbe7ebc43c",
-        "artifact_identity": "/assets/index-DewN8RMc.js",
-        "evidence_producer": "guarded-production-spa-upload run 45315435083 (host-verified)",
+        "git_sha": "eec69288beb715d18f70181ad1ff12cf51fe3517",
+        "artifact_identity": "/assets/index-De_WbM8A.js",
+        "evidence_producer": "guarded-production-spa-upload run 45428883275 (host-verified)",
         "evidence_type": "guarded production SPA upload of a fresh main build"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-DewN8RMc.js",
-        "spa_sha256": "cf62e1c2ba5848ef17230e109bc80c593d60c4bdfa751444147faa35f9469e52",
+        "spa_bundle": "/assets/index-De_WbM8A.js",
+        "spa_sha256": "0fc94f1de1fca203fa43fe4669e2924c0d7856b9eec8226cda0f198e18f4e665",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "KftERuZB_3SeREJX6oQTqjqXUYRGrC3W",
+        "cloudfront_deployment_fingerprint": "mKB1PCRuuNV5H_4Lbor.4lHVkLeox7ow",
         "lambda_name": "checksops-production-prep-api",
         "lambda_version": "efd1147c-3134-43c2-9e23-17fdc50a13d6",
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "47a98df9ba953350dfbf96f2cafa053a35027c96521525127df86d2f581ad618",
-        "notes": "Guarded production SPA upload 2026-11-24T02:56:36Z (the writer's finished_at 2026-11-24T02:56:36.359Z, started_at 02:53:01.204Z; run 45315435083, job 138181044607, mode apply, workflow inputs approval_phrase \"DEPLOY WEBSITE TO PRODUCTION\" (the owner's words on 2026-11-24 for this deploy of #2055 were \"DEPLOY WEBSITE TO PRODUCTION\"), approved_commit 75b5dff644a4279b9a551de5be4c9bfbe7ebc43c (main, the merge of PR #2055, which removes the per-job profit and loss from the website, reverting #2045), expected_live_index_sha256 800ed3850f46bcd17525411c7fe64fbcbf21ba601f647447a336ec23c0a46e59, staging_acceptance_reference https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45314677412 (Guarded staging SPA upload, the apply run itself of the same main commit 75b5dff644a4279b9a551de5be4c9bfbe7ebc43c, job 138178540264, after staging inspect run 45314434123 read /assets/index-DWJT1MTh.js, index.html sha256 601b75d703f74c89f0d98de33fb35f065e351e09b59da35799d2ecd551877820; staging moved from /assets/index-DWJT1MTh.js to /assets/index-BngumWcC.js, index.html sha256 9c57a361251b461a4daba2722d5e7a8c8a3d38292f366826aa16cd7f880045e4 as the apply run reported it (245 files uploaded), CloudFront invalidation I1OEOECM1BSOKE2GI2H4SXDG4M, its public verify ok; no staging re-inspect after it is cited for this record). Pre-apply read-only inspect run 45314437958 on 75b5dff64 showed live equal to the previous lock (index.html sha256 800ed3850f46bcd17525411c7fe64fbcbf21ba601f647447a336ec23c0a46e59, entry /assets/index-DbPmHDtk.js, live_matches_lock true). The writer's old_production fingerprint read that same live state (S3 version ZXbYMhR__kS0dsZHnW0GGAOABi0jHCRt, etag 88827fc9d6f6de07f5c220ac6398da91, last_modified 2026-11-24T01:14:52Z), as did its reads immediately before the first write and before the index.html switch; it uploaded assets first and index.html last (245 files, no delete: the run's session policy allows s3:GetObject on index.html, s3:PutObject and cloudfront:CreateInvalidation only); CloudFront invalidation I5VA9CCNZ63Z1UEVL2M8LZ0KBM; index.html etag cbbbed7f74d08a7deebcb904167bbc10, S3 version KftERuZB_3SeREJX6oQTqjqXUYRGrC3W (the writer's index_put); the retired marketing keys pricing, vs/checksops-vs-guidewire-claimcenter and vs/checksops-vs-snapsheet carry the same etag as index.html, and vs/checksops-vs-iink-payments carries etag 72ce9c7ab41f7d3212866e86661273bc (as the writer reported it); rollback false; the writer reported ok true, code null and message null; receipt consumed (marker S3 version uwicvoh3UNGBtkzwLaVNWo.10WWFaUAu). The run's public production smoke step (checksops.com serves the candidate entry bundle, /prep/health ok) concluded success. No post-apply read-only inspect was run for this record; instead https://checksops.com/ and https://checksops.com/assets/index-DewN8RMc.js were fetched after the apply (2026-11-24): the page references /assets/index-DewN8RMc.js and the two files hash to the index.html and entry bundle sha256 below; the 219 JavaScript chunks the writer uploaded were fetched from checksops.com and none contains \"By Job\", \"Job P&L\" or \"jobPnl\", and its chunk assets/EndorsementChecklist-BvpyLSYv.js still contains \"Email link clicked\". The index.html sha256 47a98df9ba953350dfbf96f2cafa053a35027c96521525127df86d2f581ad618 and the entry bundle sha256 cf62e1c2ba5848ef17230e109bc80c593d60c4bdfa751444147faa35f9469e52 are the writer's candidate and after_host fingerprints; its after_s3_fingerprint reads the same index.html sha256 (last_modified 2026-11-24T02:56:33Z, S3 version KftERuZB_3SeREJX6oQTqjqXUYRGrC3W; it references /assets/index-DewN8RMc.js). The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships, since ab4c85426: PR #2055 (removes the per-job profit and loss from the website, reverting #2045: the Totals | By Job view in Revenue & Profit and the Job P&L card under the Claim Ledger and on the cash job page are gone). The other merges since ab4c85426 (#2052, #2053 and #2054) change no website source (git diff ab4c85426..75b5dff64 over src touches 9 files, all from #2055 and all the files #2045 touched: src/components/cash-jobs/CashJobDetail.tsx, src/components/jobs/JobPnlCard.tsx, src/components/jobs/JobPnlDetail.tsx, src/components/ledger/RevenueByJob.tsx, src/components/ledger/RevenueSummary.tsx, src/components/payments/ClaimLedgerCard.tsx, src/lib/jobPnl.ts, src/lib/jobPnlLoad.ts and src/lib/payments/revenueExpenseRows.ts; git diff d81f1b9d3..75b5dff64 over src no longer touches any of them). merged_pr is 2055, the PR whose merge is the approved commit and the only website PR in this upload. lambda_version is left as the earlier locks recorded it (efd1147c-3134-43c2-9e23-17fdc50a13d6); it was not re-read for this record, and the API overlays since (including any by the other workstream, which were not looked up) changed or may have changed the function's code. The SPA upload workflow makes no Lambda call. Previous lock /assets/index-DbPmHDtk.js is the rollback."
+        "config_hash": "44a012fa8c28676fbdc0200d480240e4897f917443e12b1ef632e60bbf7d6942",
+        "notes": "Guarded production SPA upload 2026-11-24T15:48:52Z (the writer's finished_at 2026-11-24T15:48:52.240Z, started_at 15:45:09.133Z; run 45428883275, job 138568361549, mode apply, workflow inputs approval_phrase \"DEPLOY WEBSITE TO PRODUCTION\" (the owner's words on 2026-11-24 for this deploy of #2058 were \"DEPLOY WEBSITE TO PRODUCTION\"), approved_commit eec69288beb715d18f70181ad1ff12cf51fe3517 (main, the merge of PR #2058, which adds a \"Finish endorsement\" button on the check page for fully signed checks that did not advance), expected_live_index_sha256 47a98df9ba953350dfbf96f2cafa053a35027c96521525127df86d2f581ad618, staging_acceptance_reference https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45426458736 (Guarded staging SPA upload, the apply run itself of the same main commit eec69288beb715d18f70181ad1ff12cf51fe3517, job 138559691453, after staging inspect run 45426031769 read /assets/index-BngumWcC.js, index.html sha256 9c57a361251b461a4daba2722d5e7a8c8a3d38292f366826aa16cd7f880045e4; staging moved from /assets/index-BngumWcC.js to /assets/index-CnFO70R3.js, index.html sha256 b10d3dd1429a69088ca0eb9774cf2c786979c8ebff9a8ea94896e5d007360829 as the apply run reported it (245 files uploaded), CloudFront invalidation IAVJCCZP4U0DC92SKEZAWZ65ID, its public verify ok; no staging re-inspect after it is cited for this record). Pre-apply read-only inspect run 45426038407 on eec69288b showed live equal to the previous lock (index.html sha256 47a98df9ba953350dfbf96f2cafa053a35027c96521525127df86d2f581ad618, entry /assets/index-DewN8RMc.js, live_matches_lock true). The writer's old_production fingerprint read that same live state (S3 version KftERuZB_3SeREJX6oQTqjqXUYRGrC3W, etag cbbbed7f74d08a7deebcb904167bbc10, last_modified 2026-11-24T02:56:33Z), as did its reads immediately before the first write and before the index.html switch; it uploaded assets first and index.html last (245 files, no delete: the run's session policy allows s3:GetObject on index.html, s3:PutObject and cloudfront:CreateInvalidation only); CloudFront invalidation I2APOV36XAYXBKQRTKFAP385UT; index.html etag fd60d9eb612d304247d9fffcd5652ed2, S3 version mKB1PCRuuNV5H_4Lbor.4lHVkLeox7ow (the writer's index_put); the retired marketing keys pricing, vs/checksops-vs-guidewire-claimcenter and vs/checksops-vs-snapsheet carry the same etag as index.html, and vs/checksops-vs-iink-payments carries etag 6314ae1bfd0ed8c286ee492ffedceb36 (as the writer reported it); rollback false; the writer reported ok true, code null and message null; receipt consumed (marker S3 version BnXH9AgTIzdhiT.1muxw4ZsPVvurUkb8). The run's public production smoke step (checksops.com serves the candidate entry bundle, /prep/health ok) concluded success. No post-apply read-only inspect was run for this record; instead https://checksops.com/ and https://checksops.com/assets/index-De_WbM8A.js were fetched after the apply (2026-11-24): the page references /assets/index-De_WbM8A.js and the two files hash to the index.html and entry bundle sha256 below; its chunk assets/EndorsementChecklist-CHfAl6QD.js contains \"Finish endorsement\", \"finalize_existing_endorsements\" and \"Email link clicked\", and the 219 JavaScript chunks the writer uploaded were fetched from checksops.com and none contains \"By Job\", \"Job P&L\" or \"jobPnl\". The index.html sha256 44a012fa8c28676fbdc0200d480240e4897f917443e12b1ef632e60bbf7d6942 and the entry bundle sha256 0fc94f1de1fca203fa43fe4669e2924c0d7856b9eec8226cda0f198e18f4e665 are the writer's candidate and after_host fingerprints; its after_s3_fingerprint reads the same index.html sha256 (last_modified 2026-11-24T15:48:49Z, S3 version mKB1PCRuuNV5H_4Lbor.4lHVkLeox7ow; it references /assets/index-De_WbM8A.js). The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships, since 75b5dff64: PR #2058 (the check page shows a \"Finish endorsement\" button for a fully signed check that did not advance, calling the existing check-endorsement action finalize_existing_endorsements: src/lib/finishEndorsement.ts, src/components/check-review/EndorsementChecklist.tsx and src/pages/CheckCommandCenter.tsx). The other merges since 75b5dff64 (#2056, the previous lock record, and #2057, a read-only production inspect tool for check endorsement state) change no website source (git diff 75b5dff64..eec69288b over src touches 3 files, all from #2058; git diff 75b5dff64..3a1362279 over src touches none). merged_pr is 2058, the PR whose merge is the approved commit and the only website PR in this upload. lambda_version is left as the earlier locks recorded it (efd1147c-3134-43c2-9e23-17fdc50a13d6); it was not re-read for this record, and the API overlays since (including any by the other workstream, which were not looked up) changed or may have changed the function's code; #2058 changes no API code, and whether the production API carries finalize_existing_endorsements as the button expects was not verified for this record. The SPA upload workflow makes no Lambda call. Previous lock /assets/index-DewN8RMc.js is the rollback."
 
       },
       "rollback": {
-        "git_sha": "ab4c854264b3bb3b60c4719e37b3cb641e57915a",
-        "artifact": "/assets/index-DbPmHDtk.js",
-        "notes": "Immediate previous locked baseline is /assets/index-DbPmHDtk.js (S3 index.html version ZXbYMhR__kS0dsZHnW0GGAOABi0jHCRt, index.html sha256 800ed3850f46bcd17525411c7fe64fbcbf21ba601f647447a336ec23c0a46e59, bundle sha256 ed00515ce42be4b1382b1c14f1d7f5a6f6a943f928d634cdf00d22a6f3ee0a15; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
+        "git_sha": "75b5dff644a4279b9a551de5be4c9bfbe7ebc43c",
+        "artifact": "/assets/index-DewN8RMc.js",
+        "notes": "Immediate previous locked baseline is /assets/index-DewN8RMc.js (S3 index.html version KftERuZB_3SeREJX6oQTqjqXUYRGrC3W, index.html sha256 47a98df9ba953350dfbf96f2cafa053a35027c96521525127df86d2f581ad618, bundle sha256 cf62e1c2ba5848ef17230e109bc80c593d60c4bdfa751444147faa35f9469e52; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
@@ -767,7 +767,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "36931a35f15857c01bc3862a424596284e9d8fd8",
-        "tree_hash": "fd66ece7df4e663bdc937a989b68dfcd522f8d5c5a2941f42923fe96ca52ccc0",
+        "tree_hash": "d1376d807280793016c4dc87f223ed52d7ee8eac88e1cc24ff296f800fcf682b",
         "merged": true,
         "merged_pr": null
       },
