@@ -238,6 +238,12 @@ test('overlay plan: the link expiry manifest stays as planned; production got it
   // (Applied 2026-11-19, production run 44589744829: the applied record is read back to the plan it applied.)
   // (And the endorsement email engagement plan of 2026-11-23, planning only, moved it on from the email status applied
   // bytes: read as it stood before that plan, those applied bytes standing for main's.)
+  // (Applied 2026-11-23, production run 45290080896: the applied record is read back to the plan it applied.)
+  if (row.manifest === 'aws/tests/fixtures/production-endorsement-email-engagement-api-applied-manifest-2026-11-23.json') {
+    const appliedEngagement = JSON.parse(read(row.manifest)).members[name];
+    assert.deepEqual([appliedEngagement.live_sha256, row.expected_live_sha256], [onMain, onMain]);
+    row = { ...row, expected_live_sha256: JSON.parse(read(appliedEngagement.previous_manifest)).members[name].live_sha256, manifest: appliedEngagement.previous_manifest };
+  }
   if (row.manifest === 'aws/tests/fixtures/production-endorsement-email-engagement-api-manifest-2026-11-23.json') {
     const engagement = JSON.parse(read(row.manifest)).members[name];
     assert.deepEqual([engagement.accepted_sha256, row.accepted_sha256, row.expected_live_sha256], [onMain, onMain, engagement.live_sha256]);
