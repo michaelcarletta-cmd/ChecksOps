@@ -108,7 +108,8 @@ export function DisbursementConsole({
   const qc = useQueryClient();
 
   const [allocations, setAllocations] = useState<Record<string, string>>({});
-  const [usePercent, setUsePercent] = useState(false);
+  // What is being typed in a "% of check" box. The dollar amount in `allocations` is what is sent.
+  const [pctDrafts, setPctDrafts] = useState<Record<string, string>>({});
   const [deliverySpeed, setDeliverySpeed] = useState<"next_day" | "same_day" | "external">("next_day");
   const SPEED_FEES: Record<string, number> = { next_day: 0.75, same_day: 1.00, external: 0.00 };
   const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", external: "External / Manual" };
@@ -339,10 +340,26 @@ export function DisbursementConsole({
       activeAllocationValues.reduce((sum, v) => {
         const n = parseFloat(v || "0");
         if (isNaN(n) || n <= 0) return sum;
-        return sum + toCents(usePercent ? (n / 100) * availableAmount : n);
+        return sum + toCents(n);
       }, 0)
     );
-  }, [activeAllocationValues, usePercent, availableAmount]);
+  }, [activeAllocationValues]);
+
+  // A percentage is always of the check amount, whatever has already been disbursed.
+  const pctToDollars = (pct: string) => {
+    const n = parseFloat(pct);
+    if (isNaN(n) || n <= 0 || !(checkAmount > 0)) return "";
+    return toCents((n / 100) * checkAmount).toFixed(2);
+  };
+  const pctValue = (id: string) => {
+    const typed = allocations[id] ?? "";
+    const draft = pctDrafts[id];
+    // Keep what was typed while it still describes the amount; otherwise show the amount's share.
+    if (draft !== undefined && pctToDollars(draft) === typed) return draft;
+    const n = parseFloat(typed);
+    if (isNaN(n) || n <= 0 || !(checkAmount > 0)) return "";
+    return String(Math.round((n / checkAmount) * 10000) / 100);
+  };
 
 
   const remaining = toCents(availableAmount - totalAllocatedDollars);
@@ -394,12 +411,12 @@ export function DisbursementConsole({
         })
         .map((a: any) => {
           const val = parseFloat(allocations[a.id]);
-          const dollarAmount = usePercent ? (val / 100) * availableAmount : val;
+          const dollarAmount = val;
           return {
             stakeholder_account_id: a.id,
             tenant_id: tenant.id,
             amount: Math.round(dollarAmount * 100) / 100,
-            pct_of_total: usePercent ? val : (dollarAmount / availableAmount) * 100,
+            pct_of_total: (dollarAmount / availableAmount) * 100,
             idempotence_key: `split_${a.id}_${Date.now()}`,
           };
         });
@@ -590,7 +607,6 @@ export function DisbursementConsole({
               next[key] = (r.unsent_cents / 100).toFixed(2);
             }
           }
-          setUsePercent(false);
           setAllocations(next);
         } else if (e.code === "provider_outcome_unknown") {
           setAllocations({});
@@ -632,14 +648,7 @@ export function DisbursementConsole({
             Disburse Funds
             {checkNumber && <span className="text-muted-foreground font-normal">— Check #{checkNumber}</span>}
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setUsePercent(!usePercent)}
-          >
-            {usePercent ? "Switch to $" : "Switch to %"}
-          </Button>
+          <span className="text-[10px] text-muted-foreground font-normal">Enter $ or % of check</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -880,14 +889,14 @@ export function DisbursementConsole({
                     {acct.custname || acct.homeowner_name || "Payment account connected"}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 w-28 flex-shrink-0">
-                  <span className="text-xs text-muted-foreground">{usePercent ? "%" : "$"}</span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-xs text-muted-foreground">$</span>
                   <Input
                     type="number"
                     min="0"
-                    step={usePercent ? "1" : "0.01"}
-                    placeholder="0"
-                    className="h-8 text-sm text-right"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="h-8 w-24 text-sm text-right"
                     aria-label={`Amount for ${acct.nickname}`}
                     ref={(el) => {
                       const k = String(acct.id).toLowerCase();
@@ -898,16 +907,23 @@ export function DisbursementConsole({
                     value={allocations[acct.id] ?? ""}
                     onChange={(e) => setAllocations({ ...allocations, [acct.id]: e.target.value })}
                   />
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="0"
+                    className="h-8 w-16 text-sm text-right"
+                    aria-label={`Percent of check for ${acct.nickname}`}
+                    title="Percent of the check amount"
+                    value={pctValue(acct.id)}
+                    onChange={(e) => {
+                      setPctDrafts({ ...pctDrafts, [acct.id]: e.target.value });
+                      setAllocations({ ...allocations, [acct.id]: pctToDollars(e.target.value) });
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
                 </div>
-                {allocations[acct.id] && parseFloat(allocations[acct.id]) > 0 && (
-                  <span className="text-xs text-muted-foreground w-20 text-right flex-shrink-0">
-                    {usePercent
-                      ? `$${toCents((parseFloat(allocations[acct.id]) / 100) * availableAmount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : `${((parseFloat(allocations[acct.id]) / availableAmount) * 100).toFixed(1)}%`
-
-                    }
-                  </span>
-                )}
               </div>
             );
           })}

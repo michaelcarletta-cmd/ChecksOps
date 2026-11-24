@@ -15,7 +15,7 @@ import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeo
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { PartnerSendPanel } from "@/components/payments/PartnerSendPanel";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { incomingSplitsForCheck } from "@/lib/fundsReceived";
 import {
@@ -130,14 +130,14 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     },
   });
 
-  // Per-check PA fee
+  // The check amount
   const { data: intakeItem } = useQuery({
     queryKey: ["intake-pa-fee", checkIntakeItemId],
     enabled: !!checkIntakeItemId,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("check_intake_items")
-        .select("id, amount, pa_fee_pct, pa_fee_amount")
+        .select("id, amount")
         .eq("id", checkIntakeItemId)
         .maybeSingle();
       if (error) throw error;
@@ -223,58 +223,35 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       .reduce((sum: number, s: any) => sum + Number(s.amount || 0), 0)
   );
 
-  // PA fee math
-  const [paFeeMode, setPaFeeMode] = useState<"pct" | "amount">("pct");
-  const [paFeePct, setPaFeePct] = useState<string>("");
-  const [paFeeAmt, setPaFeeAmt] = useState<string>("");
-
-  useEffect(() => {
-    if (intakeItem?.pa_fee_pct != null) {
-      setPaFeeMode("pct");
-      setPaFeePct(String(intakeItem.pa_fee_pct));
-    } else if (intakeItem?.pa_fee_amount != null) {
-      setPaFeeMode("amount");
-      setPaFeeAmt(String(intakeItem.pa_fee_amount));
-    }
-  }, [intakeItem?.id]);
-
   useEffect(() => {
     if (!payoutEnabled && disburseMode === "platform") {
       setDisburseMode(null);
     }
   }, [payoutEnabled, disburseMode]);
 
-  const paFeeComputed = useMemo(() => {
-    if (paFeeMode === "pct") {
-      const pct = parseFloat(paFeePct);
-      if (isNaN(pct) || pct <= 0) return 0;
-      return toCents((totalReceived * pct) / 100);
-    }
-    const amt = parseFloat(paFeeAmt);
-    return isNaN(amt) ? 0 : toCents(amt);
-  }, [paFeeMode, paFeePct, paFeeAmt, totalReceived]);
-
-  const availableForDisbursement = Math.max(0, toCents(toCents(totalReceived) - paFeeComputed - totalDisbursed));
-  // A payment made outside ChecksOps can be recorded up to the check amount: the PA fee is not held back (SQL 150).
-  const availableForExternal = Math.max(0, toCents(toCents(totalReceived) - totalDisbursed));
-
-  const savePaFee = async () => {
-    if (readOnly) return;
-    const payload: any = { pa_fee_pct: null, pa_fee_amount: null };
-    if (paFeeMode === "pct") payload.pa_fee_pct = parseFloat(paFeePct) || null;
-    else payload.pa_fee_amount = parseFloat(paFeeAmt) || null;
-    const { error } = await (supabase as any)
-      .from("check_intake_items").update(payload).eq("id", checkIntakeItemId);
-    if (error) return toast({ title: "Couldn't save PA fee", description: error.message, variant: "destructive" });
-    toast({ title: "PA fee saved" });
-    qc.invalidateQueries({ queryKey: ["intake-pa-fee", checkIntakeItemId] });
-  };
+  // Nothing is held back from the check: what was received less what was disbursed (as SQL 150 does for
+  // a payment made outside ChecksOps).
+  const availableForDisbursement = Math.max(0, toCents(toCents(totalReceived) - totalDisbursed));
+  const availableForExternal = availableForDisbursement;
 
   // External check form
   const [extRecipient, setExtRecipient] = useState("");
   const [extRecipientType, setExtRecipientType] = useState<string>("vendor");
   const [extCheckNum, setExtCheckNum] = useState("");
   const [extAmount, setExtAmount] = useState("");
+  // What is being typed in "% of check"; the dollar amount is what is recorded.
+  const [extPct, setExtPct] = useState<string | null>(null);
+  const extPctToDollars = (pct: string) => {
+    const n = parseFloat(pct);
+    if (isNaN(n) || n <= 0 || !(totalReceived > 0)) return "";
+    return toCents((n / 100) * totalReceived).toFixed(2);
+  };
+  const extPctValue = (() => {
+    if (extPct !== null && extPctToDollars(extPct) === extAmount) return extPct;
+    const n = parseFloat(extAmount);
+    if (isNaN(n) || n <= 0 || !(totalReceived > 0)) return "";
+    return String(Math.round((n / totalReceived) * 10000) / 100);
+  })();
   const [extNotes, setExtNotes] = useState("");
   const [extSaving, setExtSaving] = useState(false);
 
@@ -367,36 +344,12 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
         </Card>
       </div>
 
-      {/* PA Fee + Ledger */}
+      {/* Ledger */}
       {totalReceived > 0 && !readOnly && (
         <Card>
           <CardContent className="pt-3 pb-3 space-y-3">
-            {disburseMode === "platform" && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium">Public adjuster fee (optional)</Label>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant={paFeeMode === "pct" ? "default" : "outline"} className="h-6 px-2 text-[10px]" onClick={() => setPaFeeMode("pct")}>%</Button>
-                    <Button size="sm" variant={paFeeMode === "amount" ? "default" : "outline"} className="h-6 px-2 text-[10px]" onClick={() => setPaFeeMode("amount")}>$</Button>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {paFeeMode === "pct" ? (
-                    <Input type="number" inputMode="decimal" step="0.01" placeholder="e.g. 10" className="h-8 text-sm" value={paFeePct} onChange={(e) => setPaFeePct(e.target.value)} />
-                  ) : (
-                    <Input type="number" inputMode="decimal" step="0.01" placeholder="$ amount" className="h-8 text-sm" value={paFeeAmt} onChange={(e) => setPaFeeAmt(e.target.value)} />
-                  )}
-                  <Button size="sm" className="h-8 text-xs" onClick={savePaFee}>Save</Button>
-                </div>
-              </div>
-            )}
-
-
-            <div className="border-t pt-2 space-y-1 text-xs">
+            <div className="space-y-1 text-xs">
               <div className="flex justify-between"><span className="text-muted-foreground">Funds received</span><span>${totalReceived.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></div>
-              {paFeeComputed > 0 && (
-                <div className="flex justify-between"><span className="text-muted-foreground">PA fee{paFeeMode === "pct" && paFeePct ? ` (${paFeePct}%)` : ""}</span><span className="text-amber-600">− ${paFeeComputed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></div>
-              )}
               <div className="flex justify-between"><span className="text-muted-foreground">Disbursed</span><span className="text-blue-600">− ${totalDisbursed.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></div>
               <div className="border-t pt-1 flex justify-between text-sm font-medium"><span>Available for disbursement</span><span className="text-emerald-600">${availableForDisbursement.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></div>
             </div>
@@ -536,7 +489,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
           <InlineErrorBoundary label="Disbursement console">
             <DisbursementConsole
               checkIntakeItemId={checkIntakeItemId}
-              checkAmount={availableForDisbursement}
+              checkAmount={totalReceived}
               checkNumber={checkNumber}
               carrierName={carrierName}
               onComplete={() => {
@@ -618,7 +571,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-[1fr_1fr_88px] gap-2">
                 <div>
                   <Label className="text-[11px]">Check #</Label>
                   <Input className="h-8 text-sm font-mono" placeholder="1234" value={extCheckNum} onChange={(e) => setExtCheckNum(e.target.value)} />
@@ -627,12 +580,16 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                   <Label className="text-[11px]">Amount</Label>
                   <Input type="number" inputMode="decimal" step="0.01" className="h-8 text-sm" placeholder="0.00" value={extAmount} onChange={(e) => setExtAmount(e.target.value)} />
                 </div>
+                <div>
+                  <Label className="text-[11px]">% of check</Label>
+                  <Input type="number" inputMode="decimal" min="0" max="100" step="0.01" className="h-8 text-sm" placeholder="0" value={extPctValue} onChange={(e) => { setExtPct(e.target.value); setExtAmount(extPctToDollars(e.target.value)); }} />
+                </div>
               </div>
               <div>
                 <Label className="text-[11px]">Notes (optional)</Label>
                 <Input className="h-8 text-sm" placeholder="Memo, date paid, etc." value={extNotes} onChange={(e) => setExtNotes(e.target.value)} />
               </div>
-              <p className="text-[10px] text-muted-foreground">Available: ${availableForExternal.toLocaleString("en-US", { minimumFractionDigits: 2 })} (up to the check amount; the PA fee is not held back for a payment made outside ChecksOps)</p>
+              <p className="text-[10px] text-muted-foreground">Available: ${availableForExternal.toLocaleString("en-US", { minimumFractionDigits: 2 })} (up to the check amount)</p>
               <p className="text-[10px] text-muted-foreground">
                 For tracking only: it counts as disbursed from this check like a ChecksOps payment, labelled as an external check. ChecksOps moves no money and your balance does not change.
               </p>
