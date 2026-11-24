@@ -5,7 +5,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 172 included); this file covers what is new:
  *
  *   - the pin: staging-authorized (wave 64) from staging read-live run 45267758829 (applied in staging by run 45276313813), code-derived,
- *     selectable, packed, in step with the execute-authorized production pin (production's own pre-state); the pinned commit
+ *     selectable, packed, in step with the production pin (applied 2026-11-23 from production's own pre-state, retired); the pinned commit
  *     authored the bytes; predecessor SQL 170, supersedes nothing; nothing names it;
  *   - the file and spec: one SECURITY DEFINER function (VOLATILE, search_path public, row_security off, EXECUTE
  *     checksops), six columns on check_endorsements with no column grant; nothing else; no SQL 170 object; the expected
@@ -129,7 +129,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; predecessor SQL 170; the derived pre-state', () => {
+test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectable, packed, in step with the applied and retired production pin; predecessor SQL 170; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -147,7 +147,7 @@ test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-23: staging apply (wave 64) from staging read-live run 45267758829');
   assert.equal(pin.expected_live_definition_sha256, ABSENT_PRE);
   assert.equal(pin.expected_live_definition_sha256, 'dbf6a7240cfc5dd737cd47e7f0f765cf6349c0a3a8625a39e02f4901c2e29897');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-172-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 64, 2026-11-23, apply run 45276313813\); staging acceptance: the staging apply under the owner's run approval \("run the SQL 172 staging apply"; no separate acceptance statement\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `03050f81-bebc-4566-a116-35147b3410f6`, 2026-11-23\) by the owner-reviewed pin change; not applied in production\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-172-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 64, 2026-11-23, apply run 45276313813\); staging acceptance: the staging apply under the owner's run approval \("run the SQL 172 staging apply"; no separate acceptance statement\); applied to production \(2026-11-23\); the production pin is retired \(`execute: false`\)\./);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-172-apply.md'), 'utf8'), /read-live \(2026-11-23\)\.\*\* Run 45267758829/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT_PRE, pin.intended_replacement_sha256);
@@ -182,8 +182,10 @@ test('pin: SQL 172 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(prod.predecessors, ['sql170']);
   // Production pin execute-authorized (owner-approved pin change of 2026-11-23) on the staging apply from the same pre-state.
   // Its pre-state is production's own (read-only inspect SSM 03050f81): the six columns and the function absent, equal to the staging pin's.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-23 /);
+  // Then applied 2026-11-23 ("SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED") and retired.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-23; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'SHOW_ENDORSEMENT_EMAIL_OPENED_AND_CLICKED');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, ABSENT_PRE);
