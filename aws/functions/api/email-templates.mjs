@@ -170,19 +170,34 @@ export const renderTransactionalTemplate = (name, data = {}) => {
       return { subject: `Mortgage handling request ${data.requestId || data.request_id || ''}`.trim(), ...layout };
     }
     case 'endorsement-request': {
+      // Owner 2026-11-25: endorsement requests landed in Gmail spam with SPF, DKIM and DMARC passing. The
+      // message was two lines, an amount and a button. It now says who is asking, why the reader is
+      // getting it and how to check it is genuine. The amount stays (owner: "Leave the amount").
+      const company = String(data.companyName || '').trim() || 'ChecksOps';
+      const checkNumber = data.checkNumber || 'N/A';
+      const phone = String(data.companyPhone || brandingOf(data).company_phone || '').trim();
+      const contactEmail = String(data.companyEmail || brandingOf(data).company_email || '').trim();
+      const contact = [
+        phone ? `call ${company} at ${phone}` : null,
+        contactEmail ? `write to ${contactEmail}` : null,
+      ].filter(Boolean).join(' or ');
       const layout = layoutFrom(data, {
-        title: 'Endorsement required',
+        title: 'Your signature is needed',
         greeting: data.payeeName ? `Hello ${data.payeeName},` : 'Hello,',
         paragraphs: [
-          `Check #${data.checkNumber || 'N/A'} from ${data.carrier || 'the carrier'} needs your endorsement.`,
+          `${company} is handling an insurance claim payment and has received check #${checkNumber} from ${data.carrier || 'the insurance carrier'}. You are named as a payee on this check, so it needs your signature (your endorsement) before it can be deposited.`,
           data.amount != null && data.amount !== '' ? `Amount: ${data.amount}` : null,
+          'Use the button below to review the check and sign it electronically. It takes a couple of minutes.',
+          contact
+            ? `If you have questions or were not expecting this, reply to this email, or ${contact}.`
+            : 'If you have questions or were not expecting this, reply to this email.',
         ].filter(Boolean),
-        ctaLabel: 'Review and endorse',
+        ctaLabel: 'Review and sign',
         ctaUrl: data.endorseUrl,
         fallbackUrl: data.endorseUrl,
       });
       return {
-        subject: data.subject || `Endorsement required — Check #${data.checkNumber || 'N/A'}`,
+        subject: data.subject || `${company}: your signature is needed on check #${checkNumber}`,
         ...layout,
       };
     }

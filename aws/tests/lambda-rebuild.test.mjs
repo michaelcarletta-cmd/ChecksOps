@@ -115,6 +115,11 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // 45630323564) lists the same three and is applied (run 45633410707).
   'index.mjs': 'changed',
   'auth-cognito.mjs': 'changed',
+  // Endorsement request wording (2026-11-25, planning only): the email says who is asking, why the reader is a
+  // payee and how to reach the company, after requests landed in Gmail spam with SPF, DKIM and DMARC passing.
+  // A rebuild-only change (see OVERLAY_PLAN_CHANGES); no rebuild section lists it yet, so neither environment
+  // has these bytes.
+  'email-templates.mjs': 'changed',
   // Stakeholder settings edit (2026-10-25): WRITE_ALLOWLIST.stakeholder_accounts for Settings >
   // Stakeholder Accounts (remove a non-payee, change type); a REPLACE member of the production
   // overlay plan, not a rebuild section.
@@ -440,6 +445,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   // only with a rebuild: the tenth staging section (inspect 45623998343) lists them, with authorization.mjs.
   'index.mjs',
   'auth-cognito.mjs',
+  // Endorsement request wording (2026-11-25): not an overlay member; it reaches a function only with a rebuild.
+  'email-templates.mjs',
   // Contractor payee is a required signer (2026-11-18, planning only): a REPLACE row of the production plan.
   'endorsement-completion.mjs',
   'providers/production/checkalt-eligibility.mjs',
