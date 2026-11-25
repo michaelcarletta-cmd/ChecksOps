@@ -112,7 +112,7 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // response carries the hardening headers (index.mjs); the retired /auth/login reply names no sign-in method
   // (auth-cognito.mjs). Rebuild-only changes (see OVERLAY_PLAN_CHANGES). The tenth staging section (inspect 45623998343)
   // lists both, with authorization.mjs, and is applied (run 45628951828); the tenth production section (inspect
-  // 45630323564) lists the same three and is not applied.
+  // 45630323564) lists the same three and is applied (run 45633410707).
   'index.mjs': 'changed',
   'auth-cognito.mjs': 'changed',
   // Stakeholder settings edit (2026-10-25): WRITE_ALLOWLIST.stakeholder_accounts for Settings >
@@ -2159,14 +2159,32 @@ test('the production history keeps the ninth section (inspect 44152135321, apply
   assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
   assert.ok(first);
 });
-test('the production plan section accepts inspect run 45630323564: the pen test API hardening rebuild (3 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
+test('the production plan section accepts inspect run 45630323564 and records apply 45633410707: the pen test API hardening rebuild (3 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const staging = raw.environments.staging;
   const ninth = production.history[8];
-  // Accepted from the inspect, not applied: the apply needs the owner's exact phrase.
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  // Applied 2026-11-25 (run 45633410707) on the owner's "DEPLOY FULL API PACKAGE TO PRODUCTION", from the staging
+  // reference the section names.
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '45633410707');
+  assert.equal(production.applied.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45633410707');
+  assert.equal(production.applied.main_commit, 'b31f7cdf1a03bb4f7937a2a2d4fbcef30e6eccdc');
+  assert.equal(production.applied.approval_phrase, 'DEPLOY FULL API PACKAGE TO PRODUCTION');
+  assert.equal(production.applied.staging_acceptance, production.inspect.staging_acceptance);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.revision_id_before, production.inspect.live_revision_id);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
+  assert.equal(production.applied.code_sha256_after, 'N9/GF3IOU7lFPtxYHu8MrtA7mwn04NX4Ai6RaoIYGMI=');
+  assert.equal(production.applied.revision_id_after, '9ec432f2-5d07-4e7c-84d0-885ccc417517');
+  assert.equal(production.applied.applied_at, '2026-11-25T14:23:19.689Z');
+  assert.equal(production.applied.state, 'VERIFIED');
+  assert.deepEqual(production.applied.smoke, ['/health', '/db-health']);
+  // Production now runs the package staging runs.
+  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  for (const evidence of ['#2078', 'github-production-rebuild-45633410707', 'b697b63e8dfb5679c95a8935b6e0f827414450413570245a584158397ea2c13e', '622280ff-7449-4756-a8c6-ff70902c1a48', '2250a467ebdf07d8499ec0588998c29607a59bdb45d7fba174b96630dd5c8be9', '6791 members', '{"status":"ok"}', 'SAMEORIGIN', 'www.checksops.com', 'Not verified by this record']) {
+    assert.ok(production.applied.notes.includes(evidence), evidence);
+  }
   assert.equal(production.inspect.run_id, '45630323564');
   assert.equal(production.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45630323564');
   assert.equal(production.inspect.main_commit, '508ef7e40937b26b7cfdbc4a96483810ff892088');
