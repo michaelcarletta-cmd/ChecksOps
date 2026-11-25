@@ -4,7 +4,7 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "accepted",
+      "status": "applied",
       "members": {
         "email-templates.mjs": {
           "live_sha256": "f7f79f6d270e3d2e738ee9c54190dd1de1f972437721c839f025520afaa26ef0",
@@ -36,6 +36,25 @@
           "candidate": 54
         },
         "notes": "Eleventh staging rebuild, for the endorsement request email wording (#2082 \"Endorsement request email: say who is asking, why, and how to reach them (planning only)\", merge 353a6a189). Why: owner 2026-11-25, endorsement requests landed in Gmail spam, on a mailbox that had never received one, with SPF, DKIM and DMARC passing; the message was a greeting, one sentence, an amount and a button. main's email-templates.mjs names the company handling the claim, says the reader is a payee on the check and that a signature is needed before deposit, says what the button does (\"Review and sign\") and tells the reader to reply or write to the company if they were not expecting it; the amount stays. The subject line and the sender name are not in this file and do not change. email-templates.mjs is not an overlay member, so it reaches a function only with a rebuild. Inspect run 45659053880 (job 139363589201, main 353a6a189, read-only, mutation false) read BLOCKED with SOURCE_RECONCILIATION_REQUIRED (unlisted_change) for exactly this one member, which this section lists: 1 changed (email-templates.mjs f7f79f6d... -> ac065f28...), 0 added, 0 removed, 214 same, dependencies identical (54 live, 54 candidate, no delta), 6791 live and 6791 candidate members, candidate ZIP 4824da79.... The live package it read is CodeSha256 N9/GF3IO... (RevisionId 7f32fa17-6cda-472d-8280-520795a1bb75), the CodeSha256 and RevisionId the tenth section recorded after its apply (run 45628951828): the rebuild starts from the tenth rebuild's own package. The run's public staging smoke (/health, /db-health, /db-readonly-validate) answered 200 ok on the live package. The accepted hash is the sha256 of main's file at 353a6a189, computed for this record and equal to the inspect's candidate hash. Planning only until applied. Not verified by this record: nothing is applied; no endorsement request with the new wording has been sent from any environment, and whether the wording changes spam placement is not known; no production section lists the member, so production does not have these bytes. The apply needs the owner's exact phrase and re-reads the live package. The tenth section (inspect 45623998343, apply 45628951828) is history[9], verbatim."
+      },
+      "applied": {
+        "run_id": "45664041653",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45664041653",
+        "main_commit": "c773bd13fed877e7f8cd6da486272d2a45822326",
+        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+        "code_sha256_before": "N9/GF3IOU7lFPtxYHu8MrtA7mwn04NX4Ai6RaoIYGMI=",
+        "revision_id_before": "7f32fa17-6cda-472d-8280-520795a1bb75",
+        "code_sha256_after": "SCTaeQ8sLpsMRXTc6NkswBu30/Zg8aiIyvJjxmcIC/Y=",
+        "revision_id_after": "383b96c4-c449-4b09-b4af-27102c0fb951",
+        "candidate_zip_sha256": "4824da790f2c2e9b0c4574dce8d92cc01bb7d3f660f1a888caf263c667080bf6",
+        "applied_at": "2026-11-25T17:22:51.538Z",
+        "state": "VERIFIED",
+        "smoke": [
+          "/health",
+          "/db-health",
+          "/db-readonly-validate"
+        ],
+        "notes": "Eleventh staging rebuild, for the endorsement request email wording (#2082: email-templates.mjs), applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-25) from main c773bd13f (the merged plan #2083), with expected_live_code_sha256 N9/GF3IO... (inspect 45659053880). Apply run 45664041653 (job 139381239505): every step success. The job's own inspect step read READY (1 changed: email-templates.mjs f7f79f6d... -> ac065f28...; 0 added, 0 removed, 214 same, dependencies 54/54; live RevisionId 7f32fa17-6cda-472d-8280-520795a1bb75, candidate 4824da79..., 6791 candidate members, mutation false) and took the lease of workstream github-staging-rebuild-45664041653 (acquired 2026-11-25T17:22:49.142Z). The receipt-gated writer consumed the receipt (MAC 11450da7a3f9f023ed7e0c597849d6d30553d7d29e6c8c4c9c0748316113f6d9); its immediately_before fingerprint read N9/GF3IO... (RevisionId 7f32fa17-6cda-472d-8280-520795a1bb75), the same as its before fingerprint; its update returned CodeSha256 SCTaeQ8s... with RevisionId b549d271-a82b-42f0-a1b9-b8b176a1d474 while LastUpdateStatus was InProgress, and its after fingerprint read SCTaeQ8s... with RevisionId 383b96c4-c449-4b09-b4af-27102c0fb951, the one this record keeps. Configuration was the same before and after: Role checksops-staging-ApiFunctionRole-7E7XRyLe3nyi, nodejs22.x, index.handler, 1024 MB, 29 s, subnet-0df2518070c5b9ff0, sg-0fe2698f236959353, 46 environment variable names with variables_sha256 fb2994d9d5c17218d482c181796b40b4725b3e48328036faaf227d6204041b1b on both sides (names and a hash only; no value was printed). The writer reported ok true, code null, errors [], reclaim_forbidden and restore_forbidden true; applied_at is its only timestamp. The verify step re-read the live package as the candidate: VERIFIED, CodeSha256 SCTaeQ8s..., RevisionId 383b96c4-c449-4b09-b4af-27102c0fb951, 6791 members. The run's public staging smoke answered 200 ok for /health, /db-health and /db-readonly-validate. Read by the operator after the apply (2026-11-25, about 17:28 UTC, Lambda GetFunctionConfiguration, read-only): checksops-staging-api CodeSha256 SCTaeQ8s..., RevisionId 383b96c4-c449-4b09-b4af-27102c0fb951, State Active, LastUpdateStatus Successful, AWS_EMAIL_MODE sink. Not verified by this record: no endorsement request with the new wording has been sent from staging, and staging email is in sink mode, so no outside mailbox would receive one; the rendered email was not read; whether the wording changes spam placement is not known; whether anyone has signed in to staging since the apply was not observed."
       },
       "history": [
         {
@@ -1175,19 +1194,11 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "auth-cognito.mjs": {
-          "live_sha256": "5478b83b467c2f46d578ddbe9bfd1091a69b54a32e3009cddf8a97ffa7344d1d",
-          "accepted_sha256": "0223b4b1672c9ceeb2c50c4fb2c1a5952567e45da03f7ded95dcfdcb6c61e1ea"
-        },
-        "authorization.mjs": {
-          "live_sha256": "2555f1f22b83049291eaecc3c32d8da36bf78a1ae2e9a6efb6424134ccd6b646",
-          "accepted_sha256": "9d9a985e7462997d9d87330c51da47200f74e4e185fb3f91ef8f08357c0e1ac4"
-        },
-        "index.mjs": {
-          "live_sha256": "ec092b24bae29c4a0243f9f6fa36dc05942fe082051104e63b1201f1b8f699e1",
-          "accepted_sha256": "2861d4335227ecb80e2717a6967cf9fc012d1fdde877d0c644daebaacfb7946b"
+        "email-templates.mjs": {
+          "live_sha256": "f7f79f6d270e3d2e738ee9c54190dd1de1f972437721c839f025520afaa26ef0",
+          "accepted_sha256": "ac065f2854bc9fa0443a7cde990fb0772f6bfb8168558c782003705828c7bd72"
         }
       },
       "added": {},
@@ -1198,43 +1209,24 @@
         "changed": {}
       },
       "inspect": {
-        "run_id": "45630323564",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45630323564",
-        "main_commit": "508ef7e40937b26b7cfdbc4a96483810ff892088",
-        "live_code_sha256": "wyne27HeTJzvUw4QxG6UF50pW2isbcard0/RRMkx3/8=",
-        "live_revision_id": "816840fe-6c3e-4587-9b05-6ebc2897bb9c",
+        "run_id": "45664834020",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45664834020",
+        "main_commit": "c773bd13fed877e7f8cd6da486272d2a45822326",
+        "live_code_sha256": "N9/GF3IOU7lFPtxYHu8MrtA7mwn04NX4Ai6RaoIYGMI=",
+        "live_revision_id": "9ec432f2-5d07-4e7c-84d0-885ccc417517",
         "live_member_count": 6791,
-        "candidate_zip_sha256": "37dfc617720e53b9453edc581eef0caed03b9b09f4e0d5f8022e916a821818c2",
+        "candidate_zip_sha256": "4824da790f2c2e9b0c4574dce8d92cc01bb7d3f660f1a888caf263c667080bf6",
         "candidate_member_count": 6791,
-        "same": 212,
-        "changed": 3,
+        "same": 214,
+        "changed": 1,
         "added": 0,
         "removed": 0,
         "dependency_counts": {
           "live": 54,
           "candidate": 54
         },
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45628951828",
-        "notes": "Tenth production rebuild, for the API hardening from the AvalonX penetration test PT-47865 (2026-11-24; owner 2026-11-25: \"Proceed with fixes\"; #2074, merge 51794430a). Why: production answers an anonymous GET /prep/health with the service name, environment, database name and whether the database secret is configured, and answers the retired /prep/auth/login with a message that names the sign-in methods (both read on checksops.com 2026-11-25; the report names only the staging API). main's index.mjs answers an anonymous /health with {\"status\":\"ok\"} only and puts x-content-type-options, strict-transport-security and x-frame-options on every response it builds (F-01, F-03); main's auth-cognito.mjs answers 410 'gone' with no method named (F-09). authorization.mjs is the JWKS check text change of 2026-11-17 (planning only, rebuild-only), which production had not received. Inspect run 45630323564 (main 508ef7e40, read-only, mutation false) read BLOCKED with SOURCE_RECONCILIATION_REQUIRED (unlisted_change) for exactly these three, which this section lists: 3 changed (auth-cognito.mjs 5478b83b... -> 0223b4b1..., authorization.mjs 2555f1f2... -> 9d9a985e..., index.mjs ec092b24... -> 2861d433...), 0 added, 0 removed, 212 same, dependencies identical (54 live, 54 candidate), 6791 live and 6791 candidate members, candidate ZIP 37dfc617.... The live production package it read is CodeSha256 wyne27He... (RevisionId 816840fe-6c3e-4587-9b05-6ebc2897bb9c): the same CodeSha256 staging ran before its tenth rebuild, so production starts from the package staging started from, and the candidate is the ZIP staging applied and verified (staging apply run 45628951828, VERIFIED, CodeSha256 N9/GF3IO... after). It is not the CodeSha256 the ninth production section recorded after its apply (overlay runs since; not looked up for this record). The run's public production smoke answered 200 ok for /health and /db-health on the live package. Every workflow and script that reads /prep/health checks status only (guarded-production-lambda-config.yml, guarded-production-cors.yml, guarded-production-csp-headers.yml, the SPA upload's smoke, spa-fallback-public-probe.mjs). Staging acceptance is the guarded staging apply and its verification, plus the operator's unauthenticated reads of the three changed behaviours on staging (recorded in the staging section); no person has signed in to staging since. Not verified by this record: nothing is applied to production; the apply needs the owner's exact phrase and re-reads the live package. The ninth production section (inspect 44152135321, apply 44155016281) is history[8], verbatim."
-      },
-      "applied": {
-        "run_id": "45633410707",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45633410707",
-        "main_commit": "b31f7cdf1a03bb4f7937a2a2d4fbcef30e6eccdc",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45628951828",
-        "code_sha256_before": "wyne27HeTJzvUw4QxG6UF50pW2isbcard0/RRMkx3/8=",
-        "revision_id_before": "816840fe-6c3e-4587-9b05-6ebc2897bb9c",
-        "code_sha256_after": "N9/GF3IOU7lFPtxYHu8MrtA7mwn04NX4Ai6RaoIYGMI=",
-        "revision_id_after": "9ec432f2-5d07-4e7c-84d0-885ccc417517",
-        "candidate_zip_sha256": "37dfc617720e53b9453edc581eef0caed03b9b09f4e0d5f8022e916a821818c2",
-        "applied_at": "2026-11-25T14:23:19.689Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "notes": "Tenth production rebuild, for the API hardening from penetration test PT-47865 (#2074: index.mjs and auth-cognito.mjs changed; authorization.mjs, the JWKS check text of 2026-11-17, carried with it), applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-25; after \"Merge it\" for the plan #2078) from main b31f7cdf1 (the merged plan #2078; main moved from the inspect's 508ef7e40 by that plan only, which changes no file under aws/functions/api), with expected_live_code_sha256 wyne27He... (inspect 45630323564) and staging_acceptance_reference the staging apply run 45628951828. Apply run 45633410707 (job 139272387308): every step success. The job's own inspect step read READY (3 changed: auth-cognito.mjs 5478b83b... -> 0223b4b1..., authorization.mjs 2555f1f2... -> 9d9a985e..., index.mjs ec092b24... -> 2861d433...; 0 added, 0 removed, 212 same, dependencies 54/54; live RevisionId 816840fe-6c3e-4587-9b05-6ebc2897bb9c, candidate 37dfc617..., 6791 candidate members, mutation false): the same candidate ZIP SHA-256 staging applied and verified. It took the lease of workstream github-production-rebuild-45633410707 (acquired 2026-11-25T14:23:17.751Z). The receipt-gated writer consumed the receipt (MAC b697b63e8dfb5679c95a8935b6e0f827414450413570245a584158397ea2c13e); its immediately_before fingerprint read wyne27He... (RevisionId 816840fe-6c3e-4587-9b05-6ebc2897bb9c), the same as its before fingerprint; its update returned CodeSha256 N9/GF3IO... with RevisionId 622280ff-7449-4756-a8c6-ff70902c1a48 while LastUpdateStatus was InProgress, and its after fingerprint read N9/GF3IO... with RevisionId 9ec432f2-5d07-4e7c-84d0-885ccc417517, the one this record keeps. Configuration was the same before and after: Role checksops-production-api-execution, nodejs22.x, index.handler, 1024 MB, 45 s, subnet-0df2518070c5b9ff0, sg-0bc4695a666baf49b and sg-0fe2698f236959353, 51 environment variable names (the same list on both sides) with variables_sha256 2250a467ebdf07d8499ec0588998c29607a59bdb45d7fba174b96630dd5c8be9 on both sides (names and a hash only; no value was printed). The writer reported ok true, code null, errors [], reclaim_forbidden and restore_forbidden true; applied_at is its only timestamp. The verify step re-read the live package as the candidate: VERIFIED, CodeSha256 N9/GF3IO..., RevisionId 9ec432f2-5d07-4e7c-84d0-885ccc417517, 6791 members. Production now runs the CodeSha256 staging runs. The run's public production smoke answered 200 ok for /prep/health and /prep/db-health. Read by the operator after the apply (2026-11-25, about 14:30 UTC, unauthenticated, checksops.com): GET /prep/health answered 200 with exactly {\"status\":\"ok\"}; POST /prep/auth/login answered 410 with error gone and message \"This endpoint is no longer available.\" (the body still carries service and environment, as other routes do); GET /prep/db-health answered 200 ok. Through CloudFront the responses carry x-content-type-options nosniff, strict-transport-security max-age=31536000; includeSubDomains and x-frame-options SAMEORIGIN: the distribution's response headers policy sets them, so the function's own x-frame-options DENY is not what a browser receives on checksops.com. Not verified by this record: www.checksops.com was not reachable from the operator's environment and was not read; no person has signed in to production or used the application since the apply; authorization.mjs's /authorization/jwks-check text was not read. None of the three members is an overlay plan member, so no overlay row's live value is made stale by this rebuild."
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45664041653",
+        "notes": "Eleventh production rebuild, for the endorsement request email wording (#2082 \"Endorsement request email: say who is asking, why, and how to reach them (planning only)\", merge 353a6a189). Why: owner 2026-11-25, endorsement requests landed in Gmail spam, on a mailbox that had never received one, with SPF, DKIM and DMARC passing; the message was a greeting, one sentence, an amount and a button. main's email-templates.mjs names the company handling the claim, says the reader is a payee on the check and that a signature is needed before deposit, says what the button does (\"Review and sign\") and tells the reader to reply or write to the company if they were not expecting it; the amount stays. The subject line and the sender name are not in this file and do not change. email-templates.mjs is not an overlay member, so it reaches a function only with a rebuild. Inspect run 45664834020 (job 139384067306, main c773bd13f, read-only, mutation false) read BLOCKED with SOURCE_RECONCILIATION_REQUIRED (unlisted_change) for exactly this one member, which this section lists: 1 changed (email-templates.mjs f7f79f6d... -> ac065f28...), 0 added, 0 removed, 214 same, dependencies identical (54 live, 54 candidate, no delta), 6791 live and 6791 candidate members, candidate ZIP 4824da79.... The live production package it read is CodeSha256 N9/GF3IO... (RevisionId 9ec432f2-5d07-4e7c-84d0-885ccc417517), the CodeSha256 and RevisionId the tenth production section recorded after its apply (run 45633410707): production starts from the tenth rebuild's own package, the same CodeSha256 staging ran before its eleventh rebuild, and the candidate is the ZIP staging applied and verified (staging apply run 45664041653, VERIFIED, CodeSha256 SCTaeQ8s... after). The run's public production smoke answered 200 ok for /health and /db-health on the live package. Staging acceptance is the guarded staging apply and its verification (recorded in the staging section); staging email is in sink mode and no endorsement request with the new wording was sent from it. Not verified by this record: nothing is applied to production; no endorsement request with the new wording has been sent from any environment, the rendered email was not read, and whether the wording changes spam placement is not known; the apply needs the owner's exact phrase and re-reads the live package. The tenth production section (inspect 45630323564, apply 45633410707) is history[9], verbatim."
       },
       "history": [
         {
@@ -1959,6 +1951,69 @@
               "/db-health"
             ],
             "notes": "Ninth production rebuild, for the Secrets Manager read cache (#1980: secrets.mjs and sql53-production-readonly-inspect.mjs changed) and, with it, the Delete Check workstream's workflow-delete-check.mjs, applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-17; with \"merge 1984 when green\") from main 762d5aaf1 (the merged plan #1984), with expected_live_code_sha256 B9zvTiOU... (inspect 44152135321) and staging_acceptance_reference https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44151849515. The owner gave the phrase while #1984's checks were still running; #1984 was merged once all eight were green, and the apply was started from that merge. Apply run 44155016281: every step success. The job's own inspect step read READY (3 changed: secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...; 0 added, 0 removed; live RevisionId a1441c7d-6379-4adc-adae-266b60304af6, candidate 8f9da924..., 0 unlisted problems, mutation false) and took the lease of workstream github-production-rebuild-44155016281 (acquired 2026-11-17T19:07:10.434Z). The receipt-gated writer consumed the receipt (MAC f0cf3b066e90aed0b86e61af1b167e5850dac64e21bf2fb3244b38af1db1fd5f); its before fingerprint read B9zvTiOU... (RevisionId a1441c7d-6379-4adc-adae-266b60304af6) and it updated checksops-production-prep-api to CodeSha256 j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA= (writer RevisionId 6e47bcc7-b30d-4bb1-beef-77ccc2687bc3, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId 825bfc82-e261-42b2-be7c-5077ab496b9f, mutation false); the public production smoke returned 200 ok for /health and /db-health. Production now runs the package staging runs since its ninth rebuild. Read back after the run as user/claude-code: CodeSha256 j52pJCHg..., RevisionId 825bfc82-e261-42b2-be7c-5077ab496b9f, LastUpdateStatus Successful, TracingConfig PassThrough, the one subnet subnet-0df2518070c5b9ff0, both security groups and 50 environment variables, so the configuration changes of 2026-11-17 survived the rebuild. After the apply, from the logs: the API access log shows HTTP 200 for every request from 19:07 to 19:20 UTC except 26 x 403 at 19:08 and 54 x 403 at 19:10-19:14 (403 on /prep/data/query was already occurring before the apply: 30 at 18:55-18:59); no 5xx; Lambda average duration 184 ms over 1,442 invocations at 19:10-19:14 against 214 ms over 953 at 18:55-18:59; no log line matching a provenance mismatch, a missing module, a runtime error or a timeout. The cache: CloudTrail GetSecretValue by checksops-production-api-execution per five minutes was 1,209 at 18:55 and 1,006 at 19:00 (953 and 973 invocations), 322 at 19:05 (the apply landed at 19:07:12), then 60 at 19:10 for 1,442 invocations and 2 at 19:15 for 10. Not verified by this record: the Secrets Manager line on a later bill, a database password rotation against the cache (a container can hold the old password for up to five minutes), the SQL 53 read-only inspect invoked against the new pair, and Delete Check exercised by a person in production."
+          }
+        },
+        {
+          "status": "applied",
+          "members": {
+            "auth-cognito.mjs": {
+              "live_sha256": "5478b83b467c2f46d578ddbe9bfd1091a69b54a32e3009cddf8a97ffa7344d1d",
+              "accepted_sha256": "0223b4b1672c9ceeb2c50c4fb2c1a5952567e45da03f7ded95dcfdcb6c61e1ea"
+            },
+            "authorization.mjs": {
+              "live_sha256": "2555f1f22b83049291eaecc3c32d8da36bf78a1ae2e9a6efb6424134ccd6b646",
+              "accepted_sha256": "9d9a985e7462997d9d87330c51da47200f74e4e185fb3f91ef8f08357c0e1ac4"
+            },
+            "index.mjs": {
+              "live_sha256": "ec092b24bae29c4a0243f9f6fa36dc05942fe082051104e63b1201f1b8f699e1",
+              "accepted_sha256": "2861d4335227ecb80e2717a6967cf9fc012d1fdde877d0c644daebaacfb7946b"
+            }
+          },
+          "added": {},
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "45630323564",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45630323564",
+            "main_commit": "508ef7e40937b26b7cfdbc4a96483810ff892088",
+            "live_code_sha256": "wyne27HeTJzvUw4QxG6UF50pW2isbcard0/RRMkx3/8=",
+            "live_revision_id": "816840fe-6c3e-4587-9b05-6ebc2897bb9c",
+            "live_member_count": 6791,
+            "candidate_zip_sha256": "37dfc617720e53b9453edc581eef0caed03b9b09f4e0d5f8022e916a821818c2",
+            "candidate_member_count": 6791,
+            "same": 212,
+            "changed": 3,
+            "added": 0,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45628951828",
+            "notes": "Tenth production rebuild, for the API hardening from the AvalonX penetration test PT-47865 (2026-11-24; owner 2026-11-25: \"Proceed with fixes\"; #2074, merge 51794430a). Why: production answers an anonymous GET /prep/health with the service name, environment, database name and whether the database secret is configured, and answers the retired /prep/auth/login with a message that names the sign-in methods (both read on checksops.com 2026-11-25; the report names only the staging API). main's index.mjs answers an anonymous /health with {\"status\":\"ok\"} only and puts x-content-type-options, strict-transport-security and x-frame-options on every response it builds (F-01, F-03); main's auth-cognito.mjs answers 410 'gone' with no method named (F-09). authorization.mjs is the JWKS check text change of 2026-11-17 (planning only, rebuild-only), which production had not received. Inspect run 45630323564 (main 508ef7e40, read-only, mutation false) read BLOCKED with SOURCE_RECONCILIATION_REQUIRED (unlisted_change) for exactly these three, which this section lists: 3 changed (auth-cognito.mjs 5478b83b... -> 0223b4b1..., authorization.mjs 2555f1f2... -> 9d9a985e..., index.mjs ec092b24... -> 2861d433...), 0 added, 0 removed, 212 same, dependencies identical (54 live, 54 candidate), 6791 live and 6791 candidate members, candidate ZIP 37dfc617.... The live production package it read is CodeSha256 wyne27He... (RevisionId 816840fe-6c3e-4587-9b05-6ebc2897bb9c): the same CodeSha256 staging ran before its tenth rebuild, so production starts from the package staging started from, and the candidate is the ZIP staging applied and verified (staging apply run 45628951828, VERIFIED, CodeSha256 N9/GF3IO... after). It is not the CodeSha256 the ninth production section recorded after its apply (overlay runs since; not looked up for this record). The run's public production smoke answered 200 ok for /health and /db-health on the live package. Every workflow and script that reads /prep/health checks status only (guarded-production-lambda-config.yml, guarded-production-cors.yml, guarded-production-csp-headers.yml, the SPA upload's smoke, spa-fallback-public-probe.mjs). Staging acceptance is the guarded staging apply and its verification, plus the operator's unauthenticated reads of the three changed behaviours on staging (recorded in the staging section); no person has signed in to staging since. Not verified by this record: nothing is applied to production; the apply needs the owner's exact phrase and re-reads the live package. The ninth production section (inspect 44152135321, apply 44155016281) is history[8], verbatim."
+          },
+          "applied": {
+            "run_id": "45633410707",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45633410707",
+            "main_commit": "b31f7cdf1a03bb4f7937a2a2d4fbcef30e6eccdc",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45628951828",
+            "code_sha256_before": "wyne27HeTJzvUw4QxG6UF50pW2isbcard0/RRMkx3/8=",
+            "revision_id_before": "816840fe-6c3e-4587-9b05-6ebc2897bb9c",
+            "code_sha256_after": "N9/GF3IOU7lFPtxYHu8MrtA7mwn04NX4Ai6RaoIYGMI=",
+            "revision_id_after": "9ec432f2-5d07-4e7c-84d0-885ccc417517",
+            "candidate_zip_sha256": "37dfc617720e53b9453edc581eef0caed03b9b09f4e0d5f8022e916a821818c2",
+            "applied_at": "2026-11-25T14:23:19.689Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "notes": "Tenth production rebuild, for the API hardening from penetration test PT-47865 (#2074: index.mjs and auth-cognito.mjs changed; authorization.mjs, the JWKS check text of 2026-11-17, carried with it), applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-25; after \"Merge it\" for the plan #2078) from main b31f7cdf1 (the merged plan #2078; main moved from the inspect's 508ef7e40 by that plan only, which changes no file under aws/functions/api), with expected_live_code_sha256 wyne27He... (inspect 45630323564) and staging_acceptance_reference the staging apply run 45628951828. Apply run 45633410707 (job 139272387308): every step success. The job's own inspect step read READY (3 changed: auth-cognito.mjs 5478b83b... -> 0223b4b1..., authorization.mjs 2555f1f2... -> 9d9a985e..., index.mjs ec092b24... -> 2861d433...; 0 added, 0 removed, 212 same, dependencies 54/54; live RevisionId 816840fe-6c3e-4587-9b05-6ebc2897bb9c, candidate 37dfc617..., 6791 candidate members, mutation false): the same candidate ZIP SHA-256 staging applied and verified. It took the lease of workstream github-production-rebuild-45633410707 (acquired 2026-11-25T14:23:17.751Z). The receipt-gated writer consumed the receipt (MAC b697b63e8dfb5679c95a8935b6e0f827414450413570245a584158397ea2c13e); its immediately_before fingerprint read wyne27He... (RevisionId 816840fe-6c3e-4587-9b05-6ebc2897bb9c), the same as its before fingerprint; its update returned CodeSha256 N9/GF3IO... with RevisionId 622280ff-7449-4756-a8c6-ff70902c1a48 while LastUpdateStatus was InProgress, and its after fingerprint read N9/GF3IO... with RevisionId 9ec432f2-5d07-4e7c-84d0-885ccc417517, the one this record keeps. Configuration was the same before and after: Role checksops-production-api-execution, nodejs22.x, index.handler, 1024 MB, 45 s, subnet-0df2518070c5b9ff0, sg-0bc4695a666baf49b and sg-0fe2698f236959353, 51 environment variable names (the same list on both sides) with variables_sha256 2250a467ebdf07d8499ec0588998c29607a59bdb45d7fba174b96630dd5c8be9 on both sides (names and a hash only; no value was printed). The writer reported ok true, code null, errors [], reclaim_forbidden and restore_forbidden true; applied_at is its only timestamp. The verify step re-read the live package as the candidate: VERIFIED, CodeSha256 N9/GF3IO..., RevisionId 9ec432f2-5d07-4e7c-84d0-885ccc417517, 6791 members. Production now runs the CodeSha256 staging runs. The run's public production smoke answered 200 ok for /prep/health and /prep/db-health. Read by the operator after the apply (2026-11-25, about 14:30 UTC, unauthenticated, checksops.com): GET /prep/health answered 200 with exactly {\"status\":\"ok\"}; POST /prep/auth/login answered 410 with error gone and message \"This endpoint is no longer available.\" (the body still carries service and environment, as other routes do); GET /prep/db-health answered 200 ok. Through CloudFront the responses carry x-content-type-options nosniff, strict-transport-security max-age=31536000; includeSubDomains and x-frame-options SAMEORIGIN: the distribution's response headers policy sets them, so the function's own x-frame-options DENY is not what a browser receives on checksops.com. Not verified by this record: www.checksops.com was not reachable from the operator's environment and was not read; no person has signed in to production or used the application since the apply; authorization.mjs's /authorization/jwks-check text was not read. None of the three members is an overlay plan member, so no overlay row's live value is made stale by this rebuild."
           }
         }
       ]
