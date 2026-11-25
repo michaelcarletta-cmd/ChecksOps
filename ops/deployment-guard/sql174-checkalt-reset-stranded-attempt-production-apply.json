@@ -1,8 +1,8 @@
 {
   "id": "sql174-checkalt-reset-stranded-attempt-production-apply",
   "migration": "sql174",
-  "authorization": "Owner approved 2026-11-24 (the owner's words of 2026-11-24: \"start step 3\", \"Yes, acceptable\", \"run the SQL 174 staging apply\", \"run the SQL 174 production inspect\" and \"open the SQL 174 pin PR\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 174 after the staging apply below (production 51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f -> ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-24; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 174 production pin change on 2026-11-24 in the words \"start step 3\", \"Yes, acceptable\", \"run the SQL 174 staging apply\", \"run the SQL 174 production inspect\" and \"open the SQL 174 pin PR\" (on the staging apply run 45500686914; 51db2d26 -> ad7969b5, #2072, merged to main as 9f27b726e on the owner's \"merge the pin PR when green\") and the one apply run recorded in applied (workstream prod-sql174-checkalt-reset-20261124, from main 9f27b726e, the merge of #2072) in the owner's message \"RESET_STRANDED_CHECKALT_ATTEMPT\", which was passed to it verbatim as the approval statement. That approval covered that one run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,273 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45500686914",
     "basis": "Guarded staging SQL executor apply of sql174-checkalt-reset-stranded-attempt, run 45500686914 (job 138822846295, 2026-11-24, main 0b4f4b789f4f1c31b9a604cef713755376ce749e, wave 66, staging pin PR #2071), under the owner's words \"run the SQL 174 staging apply\", on the executor redeployed by deploy run 45499584688 (CodeSha256 xQkGHnWN... -> 1DN3Mzgq..., RevisionId 20041fcc-360f-46c9-9201-6c8639534ae7), after the fresh read-live run 45500179495 (pin_executable true, apply_preconditions_met true, matches_pinned_expected true, counts 0 and 0), from the staging pre-state read by read-live run 45496290311 (51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f; main bc57c431f after executor inspect run 45495103813 and deploy run 45495585761, CodeSha256 qJPry/Ig... -> xQkGHnWN...): receipt result applied, before 51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f, after ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c == intended, the function intended, function_acl owner EXECUTE, definer_writes checkalt_deposits ok and check_intake_items ok, counts checkalt_stranded_attempts_in_window 0 and checkalt_reset_attempts_in_window 0. Read-live run 45501136748 then reported already_applied true, precondition_failures []. Staging holds no stranded attempt, so the staging apply took the zero-row path (the function returned 0, no row written); the owner accepted that staging acceptance (\"Yes, acceptable\"). The one-row reset, the near misses, the refusals on two or no stranded attempts and the re-run are covered on PostgreSQL 16 through this production tool by aws/tests/sql174-checkalt-reset-stranded-attempt-pg.test.mjs, and through the executor by aws/tests/release-sql174-executor.test.mjs. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-174-apply.md by the production pin PR. Production's catalog pre-state (production_inspect) equals staging's, so staging accepted exactly the production catalog transition. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-24",
+    "result": "applied",
+    "source_commit": "9f27b726ec05077613a6d46ec6833b329ae6bd92",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-9f27b726ec05077613a6d46ec6833b329ae6bd92.tar.gz",
+      "sha256": "dd3c4b3d1f956cfc9ec1d0b1ffa50999a4930f9484c5d5e91d104b5f9c573d7d"
+    },
+    "source_staged_by": "sql53-temporary-transfer.yml run 45504902616 (staged main 9f27b726ec05077613a6d46ec6833b329ae6bd92; TARBALL_SHA256 dd3c4b3d1f956cfc9ec1d0b1ffa50999a4930f9484c5d5e91d104b5f9c573d7d, checked by sha256sum -c on the runner; SOURCE_COMMIT matched)",
+    "migration_source_sha256": "7e69502ed9b7ced71feb95b7e7ed457518c33cfb43d9a7f40dde8f2c17edfc4b",
+    "migration_source_sha256_note": "The one-shot source step checked the pinned migration file in the tarball against source_sha256 (step source ok).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql174-checkalt-reset-20261124",
+    "one_use_id": "sql174-prod-56fbe756-0cad-4be8-98d4-1959e1d91866",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "RESET_STRANDED_CHECKALT_ATTEMPT",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql174; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "8f263b21-5dad-48e4-8b22-bf80f7c28a3f",
+    "one_shot_run_id": "7d96c221-9353-4bdb-8802-e0c0adef9028",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql174_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. Recorded from the one-shot's JSON output as handed to this record by the operator (20916 bytes, sha256 bfb15491a58a03d4002d0a01b0cad158603cbbdf771171f9cbfa27a5c7351f1f as computed on that copy; the size and sha256 of the output as printed on the runner were not recorded). The run was one SSM command, 8f263b21-5dad-48e4-8b22-bf80f7c28a3f (AWS-RunShellScript, Success, 2026-11-24T22:55:20.578Z to 2026-11-24T22:55:37.578Z); its own inspect step read the pre-state before the apply step; no separate --phase inspect command is recorded for this run (as SQL 165's record). Source staged by transfer run 45504902616 (main 9f27b726ec05077613a6d46ec6833b329ae6bd92, the merge of #2072, the pin change; TARBALL_SHA256 dd3c4b3d1f956cfc9ec1d0b1ffa50999a4930f9484c5d5e91d104b5f9c573d7d; the tarball passed sha256sum -c on the runner and SOURCE_COMMIT matched). The runner was started from stopped with no command in progress (Online 22:55:20Z) by user/claude-code and stopped again at about 22:56:17Z by user/claude-code. Pre-apply inspect (step inspect): live 51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f, live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], counts checkalt_stranded_attempts_in_window 1 and checkalt_reset_attempts_in_window 0. Post-apply inspect: live ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c (intended), already_applied true, the function intended with EXECUTE for the owner only, counts checkalt_stranded_attempts_in_window 0 and checkalt_reset_attempts_in_window 1: the one stranded attempt was put back to queued. Its precondition_failures [\"checkalt_stranded_attempt_in_window\"] is the expected consequence of that reset, not a failure of the apply: the precondition requires exactly one stranded attempt before the apply on production, and after the reset there is none; the post-apply checks the one-shot applies (live equal to intended, already_applied true) passed. Production acceptance: the owner reported on 2026-11-24 \"Looks like it went thru for both checks\"; that is the owner's report, not verified by this record (no read of checkalt_deposits after the deposit). Not verified: a separate production re-inspect after the run beyond the one-shot's own post-apply inspect.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 9f27b726ec05077613a6d46ec6833b329ae6bd92 (production-sql-one-shot 7d96c221-9353-4bdb-8802-e0c0adef9028, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 9f27b726ec05077613a6d46ec6833b329ae6bd92 (production-sql-one-shot 7d96c221-9353-4bdb-8802-e0c0adef9028, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 9f27b726ec05077613a6d46ec6833b329ae6bd92 (production-sql-one-shot 7d96c221-9353-4bdb-8802-e0c0adef9028, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "checkalt_stranded_attempts_in_window": 1,
+        "checkalt_reset_attempts_in_window": 0
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "checkalt_deposits",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "checkalt_stranded_attempts_in_window": 1,
+          "checkalt_reset_attempts_in_window": 0
+        }
+      }
+    },
+    "manifest_sha256": "4fe3ab27e741a6b0b5ed7407e731fac3b298b0ded1b968f34ee810d593eaa289",
+    "receipt": {
+      "migration": "sql174",
+      "workstream": "prod-sql174-checkalt-reset-20261124",
+      "commit": "9f27b726ec05077613a6d46ec6833b329ae6bd92",
+      "sql_file": "aws/workflows/sql/174_checkalt_reset_stranded_attempt.sql",
+      "before_hash": "51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f",
+      "after_hash": "ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c",
+      "release_sql_inspect": {
+        "live_definition_sha256": "ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "checkalt_deposits",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "checkalt_stranded_attempts_in_window": 0,
+          "checkalt_reset_attempts_in_window": 1
+        }
+      },
+      "unrelated_catalog_sha256": "933fada156f456b05a785e15abe9fb7fa6bbd22ecb3dbeecf35bb94aaaae27ec",
+      "unrelated_catalog_counts": {
+        "relations": 911,
+        "columns": 3606,
+        "constraints": 2292,
+        "policies": 481,
+        "functions": 1401,
+        "indexes": 669,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 192,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45500686914",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [
+        "checkalt_stranded_attempt_in_window"
+      ],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "checkalt_stranded_attempts_in_window": 0,
+        "checkalt_reset_attempts_in_window": 1
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_checkalt_reset_stranded_attempt(timestamp with time zone, timestamp with time zone)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "checkalt_deposits",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "checkalt_stranded_attempts_in_window": 0,
+          "checkalt_reset_attempts_in_window": 1
+        }
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-24 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql174-checkalt-reset-20261124, main 9f27b726e (tarball dd3c4b3d…, transfer run 45504902616, migration source 7e69502e… == pin), owner-approved run (approval statement \"RESET_STRANDED_CHECKALT_ATTEMPT\"), one SSM command 8f263b21-5dad-48e4-8b22-bf80f7c28a3f (Success, 22:55:20Z to 22:55:37Z), run_id 7d96c221-9353-4bdb-8802-e0c0adef9028, one_use_id sql174-prod-56fbe756-0cad-4be8-98d4-1959e1d91866: every step ok; contracts claim-ledger, tenant-isolation and financial-write-protections ok (see applied.contract_results); pre-apply inspect live 51db2d26…, live_matches_expected true, precondition_failures [], counts 1 and 0; manifest 4fe3ab27…; 51db2d26… -> ad7969b5…, result applied; post-apply inspect already_applied true, aws_checkalt_reset_stranded_attempt intended with EXECUTE for the owner only, counts checkalt_stranded_attempts_in_window 0 and checkalt_reset_attempts_in_window 1 (the one stranded attempt of 2026-11-24 19:58 UTC put back to queued); its precondition_failures [\"checkalt_stranded_attempt_in_window\"] is the expected consequence of the reset (production must hold exactly one stranded attempt before the apply, none after). The owner reported \"Looks like it went thru for both checks\" (2026-11-24); not verified by this record (no read of checkalt_deposits after the deposit). execute is false so the pin is no longer a standing authorization."
   }
 }
