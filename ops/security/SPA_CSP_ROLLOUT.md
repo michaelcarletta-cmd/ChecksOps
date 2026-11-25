@@ -140,8 +140,20 @@ Run 41086648035 (`mode: enforce`, main `927c79d59c7de3f4a76b41ec217c08018b253500
 the expected enforcing `Content-Security-Policy`. Owner, 2026-10-31: "It has been enforced on
 staging without problems." This cleared step 3 and is the staging acceptance reference for step 5.
 
-## Not done yet
+## Production enforce (2026-11-25)
 
-Production enforce (step 5) is in source only: it waits for the owner to create the role
-(`ops/deployment-guard/production-csp-headers/README.md`), then a fresh inspect and the owner's
-"ENFORCE CSP ON PRODUCTION". No production change.
+Step 5 is done. Run 45648762313 (`mode: enforce`, main `2829627ff7786e81f78c38a1047edad85b09b531`,
+operator `michaelcarletta-cmd`), after inspect run 45646808525 on the same commit (`BASELINE`,
+snapshot `9d426e27bff6424a6fb45a07ba91d38f5eac14835dcc4a663ee5660a0d82d551`), on the owner's
+"ENFORCE CSP ON PRODUCTION" (2026-11-25; penetration test PT-47865, finding F-02), with this
+document's staging enforce run 41086648035 as the staging acceptance reference. The writer printed
+`"ok":true,"action":"enforce"` on policy `756a8f23-68dd-4f8a-8293-5a2fd08f919a`, `before_fingerprint`
+`9d426e27bff6424a6fb45a07ba91d38f5eac14835dcc4a663ee5660a0d82d551`, `after_fingerprint`
+`85c983fd0fb0c89eb43902ea5645a8e4fee4449516cfa7f3d2aa8e7f5831253a`, `index_html_sha256`
+`1e336975d2a3b45896bf2a438ab3eaf71e07ccbf2e7489c6444824885fe310fb`; the verify step printed
+`"state": "VERIFIED"`. `https://checksops.com/` was read afterwards with exactly the enforcing
+`Content-Security-Policy`, no report-only header and the four SH-1 headers. The run log, the policy
+text and what was not verified are in `ops/deployment-guard/PRODUCTION_CSP_HEADERS.md`.
+
+After each production SPA upload, inspect reports `ENFORCING_STALE` once the inline script changes;
+enforce again refreshes the hash (a new run, a new approval).
