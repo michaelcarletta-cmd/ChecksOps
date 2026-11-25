@@ -11,7 +11,7 @@ the existing production response headers policy `756a8f23-68dd-4f8a-8293-5a2fd08
 `/prep/*` of distribution `E1B0ZWWO5559U5`) is updated. The distribution is not changed and no
 policy is created.
 
-This file and the tool are source only. Nothing has been run against production.
+Production has enforced this policy since run 45648762313 (2026-11-25); see the run log below.
 
 ## What each mode does
 
@@ -146,4 +146,60 @@ Refresh with inspect, then enforce again (same phrase, a new run, a new approval
 
 ## Run log
 
-None yet.
+### Enforce, 2026-11-25 (run 45648762313)
+
+Why: penetration test PT-47865 (AvalonX, 2026-11-24), finding F-02, "Content Security Policy absent on
+production site". Owner, 2026-11-25: "Proceed with fixes", then, after creating the role and the
+`production` environment variable, "ENFORCE CSP ON PRODUCTION".
+
+- Role: the owner created `ChecksOpsGitHubProductionCspHeaders`; read with IAM after that, its trust
+  policy and its inline policy `ChecksOpsProductionCspHeaders` equal the two files in
+  `ops/deployment-guard/production-csp-headers/`.
+- Earlier runs, no change: 45623065279 stopped at the role-variable check (the variable did not
+  exist yet); 45646479758 assumed the role and failed after it, while the role had no permissions.
+- Inspect run 45646808525 (main `2829627ff7786e81f78c38a1047edad85b09b531`, read-only, mutation
+  false): state `BASELINE`, problems none, snapshot SHA-256
+  `9d426e27bff6424a6fb45a07ba91d38f5eac14835dcc4a663ee5660a0d82d551`, live `index.html` SHA-256
+  `1e336975d2a3b45896bf2a438ab3eaf71e07ccbf2e7489c6444824885fe310fb`, policy ETag `E23ZP02F085DFQ`,
+  distribution ETag `E3AEGXETSR30VB`. Inspect run 45648740413, seconds before the enforce, read the
+  same state and snapshot.
+- Dispatch: GitHub answered 504 to the first two enforce dispatches and to the owner's own attempt in
+  the Actions page; no run was created by any of them (the run list was read after each). The next
+  dispatch, with the same inputs, created run 45648762313.
+- Enforce run 45648762313 (job 139327200463, main `2829627ff7786e81f78c38a1047edad85b09b531`,
+  operator `michaelcarletta-cmd`, the owner approved the job as production reviewer): every step
+  success. Inputs: `expected_snapshot_sha256` the inspect's, `staging_acceptance_reference`
+  `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41086648035`, `approval_phrase`
+  "ENFORCE CSP ON PRODUCTION". Its preflight read `BASELINE` with the inspect's snapshot and took the
+  `production-spa` lease of workstream `github-production-csp-45648762313` (acquired
+  2026-11-25T15:48:15.417Z). The writer printed `"ok":true,"action":"enforce"` on policy
+  `756a8f23-68dd-4f8a-8293-5a2fd08f919a`, `before_fingerprint`
+  `9d426e27bff6424a6fb45a07ba91d38f5eac14835dcc4a663ee5660a0d82d551`, `after_fingerprint`
+  `85c983fd0fb0c89eb43902ea5645a8e4fee4449516cfa7f3d2aa8e7f5831253a`. The verify step printed
+  `"state": "VERIFIED"` with snapshot `85c983fd…` (the writer's after fingerprint), policy ETag
+  `ETVPDKIKX0DER` and distribution ETag `E3P5ROKL5A1OLE`. The public production header check
+  concluded success; its result lines go to the step summary and were not read.
+- The distribution ETag differs before and after (`E3AEGXETSR30VB`, `E3P5ROKL5A1OLE`). The
+  distribution was not updated: CloudTrail for the three hours before the read shows one
+  `UpdateResponseHeadersPolicy` (15:48:22 UTC, session `checksops-production-csp-45648762313`) and
+  no `UpdateDistribution`; `GetDistribution` afterwards reports `Deployed`, LastModifiedTime
+  2026-10-05T11:45:22Z, the policy on the default behavior, `/prep` and `/prep/*`, and the two
+  aliases. The run's session policy has no `UpdateDistribution`.
+- Read by the operator after the run (2026-11-25, about 15:55 UTC): `https://checksops.com/`,
+  `https://checksops.com/prep/health` and a missing asset path (403) each carry exactly the policy
+  below as `Content-Security-Policy`, no report-only header, and the four SH-1 headers;
+  `/prep/health` answers 200 `{"status":"ok"}`. The live `index.html` has three inline `<script>`
+  blocks: one executable, whose SHA-256 is the hash in `script-src`, and two
+  `application/ld+json` data blocks, which a browser does not execute.
+- Not verified by this record: step 4 above (every screen with the console open) had not been
+  reported done when this was written; `www.checksops.com` was not reachable from the operator's
+  environment and was not read; the staging header was not re-read on the day (staging acceptance is
+  run 41086648035 and the owner's words of 2026-10-31).
+
+The policy the run set:
+
+```
+default-src 'self'; script-src 'self' 'sha256-ts3my6jAAjgd6WfZ3C3O2R2Lc8IrKeHMSIlUM6Sdsmg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; font-src 'self' data:; connect-src 'self' https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com https://api.zippopotam.us data: blob:; frame-src 'self' blob: data: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests
+```
+
+Way back: inspect, then `mode: revert` with "REMOVE CSP FROM PRODUCTION", citing run 45648762313.
