@@ -29,6 +29,11 @@ export const CHECKALT_PROVIDER_UNAVAILABLE = "Provider not enabled / unavailable
 export const CHECKALT_APPROVE_USER_ERROR =
   "CheckAlt could not approve this deposit. The original deposit was not recreated or reprocessed.";
 
+/** checkalt-submit answers 503 checkalt_auth_unavailable when the CheckAlt sign-in (or account lookup) fails
+ *  before the deposit is claimed: nothing was sent and the same deposit can be retried (#2068). */
+export const CHECKALT_AUTH_UNAVAILABLE_USER_ERROR =
+  "CheckAlt's sign-in is unavailable right now. Nothing was sent to CheckAlt for this deposit. Press Deposit again in a minute.";
+
 const isCheckAltArtifactPath = (value: unknown) =>
   /\.checkalt\.jpe?g$/i.test(String(value || ""));
 
@@ -96,6 +101,9 @@ export const checkAltProviderUserMessage = (error: unknown): string => {
   const msg = error instanceof Error ? error.message : String(error || "");
   if (/checkalt_approve_failed|approval_failed/i.test(msg)) {
     return CHECKALT_APPROVE_USER_ERROR;
+  }
+  if (/checkalt_auth_unavailable/i.test(msg)) {
+    return CHECKALT_AUTH_UNAVAILABLE_USER_ERROR;
   }
   if (
     /provider_disabled|production_execution_blocked|legacy_checkalt_provider_path/i.test(msg)
