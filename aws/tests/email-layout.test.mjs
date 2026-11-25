@@ -507,3 +507,32 @@ test('staging template names AWS_EMAIL_MODE=sink and does not grant SES', () => 
   const production = fs.readFileSync(path.join(ROOT, 'aws/production/api-execution-role.yaml'), 'utf8');
   assert.doesNotMatch(production, /ses:SendEmail|ses:SendRawEmail|ses:/);
 });
+
+test('endorsement request says who is asking, why, and how to check it is genuine', () => {
+  const rendered = renderTransactionalTemplate('endorsement-request', {
+    payeeName: 'Jane Smith',
+    checkNumber: '1042',
+    carrier: 'Acme Insurance',
+    amount: '$14,636.33',
+    endorseUrl: 'https://checksops.com/endorse?token=tok-a',
+    companyName: 'Harbor Public Adjusters',
+    companyPhone: '(555) 010-0199',
+    branding: { company_email: 'office@harbor.test' },
+  });
+  assert.equal(rendered.subject, 'Harbor Public Adjusters: your signature is needed on check #1042');
+  for (const body of [rendered.html, rendered.text]) {
+    assert.match(body, /Harbor Public Adjusters is handling an insurance claim payment and has received check #1042 from Acme Insurance/);
+    assert.match(body, /You are named as a payee on this check/);
+    assert.match(body, /Amount: \$14,636\.33/);
+    assert.match(body, /reply to this email, or call Harbor Public Adjusters at \(555\) 010-0199 or write to office@harbor\.test\./);
+    assert.match(body, /https:\/\/checksops\.com\/endorse\?token=tok-a/);
+    assert.doesNotMatch(body, /Endorsement required|needs your endorsement/i);
+  }
+  assert.match(rendered.html, /Review and sign/);
+
+  const bare = renderTransactionalTemplate('endorsement-request', { checkNumber: '7', endorseUrl: 'https://checksops.com/endorse?token=t' });
+  assert.equal(bare.subject, 'ChecksOps: your signature is needed on check #7');
+  assert.match(bare.text, /were not expecting this, reply to this email\./);
+  assert.doesNotMatch(bare.text, /Amount:/);
+
+});
