@@ -54,7 +54,7 @@ The read-only production inspect of PR 2067 (`checkalt-deposit-state-inspect`, S
 **Not changed:** no table, column, constraint, index, trigger, policy or grant; `check_intake_items` is only read; no
 other `checkalt_deposits` row. No API, Lambda or SPA change.
 
-**Status:** applied in staging (wave 66, 2026-11-24, apply run 45500686914; the zero-row path); staging acceptance: the staging apply under the owner's run approval ("run the SQL 174 staging apply"), the zero-row path accepted by the owner ("Yes, acceptable"); production pin execute-authorized on production's own pre-state (read-only inspect SSM `c67d45d5-0101-4e45-ac6f-0acc4b24dfb6`, 2026-11-24) by the owner-reviewed pin change; not applied in production.
+**Status:** applied in staging (wave 66, 2026-11-24, apply run 45500686914; the zero-row path); staging acceptance: the staging apply under the owner's run approval ("run the SQL 174 staging apply"), the zero-row path accepted by the owner ("Yes, acceptable"); applied to production (2026-11-24); the production pin is retired (`execute: false`). The owner reported afterwards "Looks like it went thru for both checks" (not verified by this record).
 
 **Staging read-live (2026-11-24).** Run 45496290311 (main `bc57c431f`, after executor inspect run 45495103813 and executor
 deploy run 45495585761 (executor CodeSha256 `qJPry/Ig…` -> `xQkGHnWN…`, RevisionId `09a7de53-7894-4a06-a83f-0b84c5a79dfd`)):
@@ -94,6 +94,27 @@ with `GUARD_APPLY_FORBIDDEN` (execute false) before any connection: no read. Pro
 production pin with the staging apply (run 45500686914) as its staging acceptance and `execute: true` under the owner's words "open the
 SQL 174 pin PR". The owner merges the pin change; the apply runs only after that merge is on main and staged, under the owner's words
 for that run (phrase `RESET_STRANDED_CHECKALT_ATTEMPT`).
+
+**Production apply (2026-11-24).** After the pin change (#2072, merged to main as `9f27b726e` on the owner's "merge the pin PR when
+green"), transfer run 45504902616 (`sql53-temporary-transfer.yml`) staged main `9f27b726e` (the merge of #2072; tarball sha256
+`dd3c4b3d1f956cfc9ec1d0b1ffa50999a4930f9484c5d5e91d104b5f9c573d7d`, checked by `sha256sum -c` on the runner; `SOURCE_COMMIT` matched). The runner
+`i-0c35557c4e5385406` was started from stopped with no command in progress (Online 22:55:20Z) by `user/claude-code`. Under the owner's words
+"RESET_STRANDED_CHECKALT_ATTEMPT" (passed verbatim as the approval statement, `--approval-scope sql174`), one-shot `--phase apply` (SSM
+`8f263b21-5dad-48e4-8b22-bf80f7c28a3f`, AWS-RunShellScript, 2026-11-24T22:55:20.578Z to 22:55:37.578Z, Success, run
+`7d96c221-9353-4bdb-8802-e0c0adef9028`, workstream `prod-sql174-checkalt-reset-20261124`, one_use_id
+`sql174-prod-56fbe756-0cad-4be8-98d4-1959e1d91866`): all 11 steps ok; its inspect step read live `51db2d26…` (`live_matches_expected` true,
+`already_applied` false, `apply_preconditions_met` true, `precondition_failures` `[]`, counts `checkalt_stranded_attempts_in_window` 1 and
+`checkalt_reset_attempts_in_window` 0); contracts claim-ledger, tenant-isolation and financial-write-protections ok; manifest `4fe3ab27…`; receipt
+`51db2d26…` → `ad7969b5de482398d396216a1232de1d5f1faad8a8e3df01b7631538a0f1b46c` (intended), result `applied`; post-apply inspect `already_applied` true, the
+function `intended` with EXECUTE for the owner only, counts `checkalt_stranded_attempts_in_window` 0 and `checkalt_reset_attempts_in_window` 1 (the one
+stranded attempt put back to `queued`). The post-apply inspect's `precondition_failures` `["checkalt_stranded_attempt_in_window"]` is the expected
+consequence of the reset, not a failure: the precondition requires exactly one stranded attempt on production before the apply, and after it
+there is none. No separate `--phase inspect` command is recorded for this run (the one-shot's own inspect step read the pre-state). The runner
+was stopped again at about 22:56:17Z by `user/claude-code`. Recorded in the pin's `applied` (the run's `details.applied` verbatim, plus
+`source_staged_by`, the SSM command id, `steps`, `manifest_sha256` and `migration_source_sha256` from the same output) and `production_evidence`;
+`execute` is false again. The owner reported afterwards (2026-11-24) "Looks like it went thru for both checks"; this record does not verify it
+(no read of `checkalt_deposits` after the deposit), and no separate production re-inspect was made after the run beyond the one-shot's own
+post-apply inspect.
 
 ## Order
 
