@@ -435,10 +435,6 @@ test('Class A route exposes a GET-only read endpoint and no provider client is u
   assert.doesNotMatch(source, /\bfetch\s*\(/i);
   assert.doesNotMatch(source, /\bnew\s+(?:Moov|CheckAlt)/i);
 
-  const dashboard = fs.readFileSync(
-    new URL('../../src/components/admin/TenantManagementV2Dashboard.tsx', import.meta.url),
-    'utf8',
-  );
-  assert.match(dashboard, /import \{ awsApiBaseUrl, isAwsStaging \} from "@\/lib\/awsStaging"/);
-  assert.ok(dashboard.indexOf('if (!isAwsStaging())') < dashboard.indexOf('supabase.auth.getSession()'));
+  // The Organization 360 screen that called this endpoint was removed on 2026-11-25 (owner); the read-only
+  // endpoint stays.
 });
