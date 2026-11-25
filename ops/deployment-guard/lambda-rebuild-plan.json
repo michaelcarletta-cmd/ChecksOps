@@ -4,19 +4,19 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "secrets.mjs": {
-          "live_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
-          "accepted_sha256": "a4d589fd37ecc1a5a57aa3bcfd4aedac2df06d55fb88ada10c8e47715318db58"
+        "auth-cognito.mjs": {
+          "live_sha256": "5478b83b467c2f46d578ddbe9bfd1091a69b54a32e3009cddf8a97ffa7344d1d",
+          "accepted_sha256": "0223b4b1672c9ceeb2c50c4fb2c1a5952567e45da03f7ded95dcfdcb6c61e1ea"
         },
-        "sql53-production-readonly-inspect.mjs": {
-          "live_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
-          "accepted_sha256": "e31a2d1794ae7c085e46d48ef8f567414abff63b97fc51990f0806917656a57d"
+        "authorization.mjs": {
+          "live_sha256": "2555f1f22b83049291eaecc3c32d8da36bf78a1ae2e9a6efb6424134ccd6b646",
+          "accepted_sha256": "9d9a985e7462997d9d87330c51da47200f74e4e185fb3f91ef8f08357c0e1ac4"
         },
-        "workflow-delete-check.mjs": {
-          "live_sha256": "bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f",
-          "accepted_sha256": "c0430309e9bcbb29defb03ee69be096f4f3e3ee8234e12f26e61e60098645b88"
+        "index.mjs": {
+          "live_sha256": "ec092b24bae29c4a0243f9f6fa36dc05942fe082051104e63b1201f1b8f699e1",
+          "accepted_sha256": "2861d4335227ecb80e2717a6967cf9fc012d1fdde877d0c644daebaacfb7946b"
         }
       },
       "added": {},
@@ -27,15 +27,15 @@
         "changed": {}
       },
       "inspect": {
-        "run_id": "44146738768",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44146738768",
-        "main_commit": "d0131434a7cedc8e0160e3a32c3a3ca269d9b265",
-        "live_code_sha256": "B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=",
-        "live_revision_id": "d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644",
-        "live_member_count": 6789,
-        "candidate_zip_sha256": "8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30",
-        "candidate_member_count": 6789,
-        "same": 210,
+        "run_id": "45623998343",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45623998343",
+        "main_commit": "51794430a35d58c4406a61505a7e8ba11a2ec690",
+        "live_code_sha256": "wyne27HeTJzvUw4QxG6UF50pW2isbcard0/RRMkx3/8=",
+        "live_revision_id": "ed916294-137a-449e-851b-5a9f1c7edee7",
+        "live_member_count": 6791,
+        "candidate_zip_sha256": "37dfc617720e53b9453edc581eef0caed03b9b09f4e0d5f8022e916a821818c2",
+        "candidate_member_count": 6791,
+        "same": 212,
         "changed": 3,
         "added": 0,
         "removed": 0,
@@ -43,26 +43,7 @@
           "live": 54,
           "candidate": 54
         },
-        "notes": "Ninth staging rebuild, for the Secrets Manager read cache (2026-11-17 cost review, item 3; #1980 \"Cost: cache Secrets Manager reads for five minutes per container, and move the pins that fix secrets.mjs\", merge d01314340). Why: CloudTrail for the 24 hours to 2026-11-17 shows 53,265 GetSecretValue calls for the production database secret by checksops-production-api-execution, one per API request; getSecretStringFromAws in secrets.mjs now keeps each secret string for five minutes per container, and a failed fetch is not cached. sql53-production-readonly-inspect.mjs changes with it because SQL53_READONLY_INSPECT_SECRETS_SHA256 pins the bytes of secrets.mjs (f8fa9ee6... -> a4d589fd...): the two reach a function together, and neither is an overlay member. The third member is another workstream's: workflow-delete-check.mjs (the Delete Check changes marked planning only, the latest of them commit eeb1fa8, merged by #1970 on 2026-11-17; do_not_overlay in the production overlay plan, so it reaches a function only with a rebuild). A rebuild ships the whole of main and cannot leave it behind; the owner was shown the three names and chose to ship them. Owner 2026-11-17: \"land the secrets cache and move both pins\", \"merge 1980 when green\", \"ship the secrets cache with a guarded rebuild\", \"run the staging inspect\", then, shown this inspect's three files and told the third is the Delete Check change: \"ship all three to staging\". Inspect run 44146738768 (main d01314340, read-only, mutation false): live CodeSha256 B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=, RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644, 6789 live members; candidate ZIP 8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30, 6789 members; 210 same, 3 changed (secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...), 0 added, 0 removed, dependencies 54/54 with no delta; state BLOCKED with exactly those three as unlisted_change, which this section lists. The job's smoke read /health, /db-health and /db-readonly-validate 200. The live package is not the eighth rebuild's (history[7], g5DY/ZDw...): CodeSha256 has moved to B9zvTiOU... since, through guarded overlays; the last is the Delete Check workflow.mjs REPLACE of 2026-11-17 (staging apply run 44112953362, production apply run 44114061250, recorded in the production overlay plan with the same CodeSha256 B9zvTiOU... on production). Their members count as same here. The live RevisionId d2fc1ab8... is the one left by the 2026-11-17 17:39:54 UTC TracingConfig change (Active -> PassThrough) and the 17:21:43 UTC VpcConfig change (one subnet), both configuration only: CodeSha256 was B9zvTiOU... before and after each (ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md). Not verified by this record: nothing is applied; no person has exercised Delete Check or a database password rotation on staging against these bytes. Apply needs the owner's exact phrase for that run."
-      },
-      "applied": {
-        "run_id": "44151849515",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44151849515",
-        "main_commit": "37699e14b0a642e11a5fbb36489402786047d1ba",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
-        "code_sha256_before": "B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=",
-        "revision_id_before": "d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644",
-        "code_sha256_after": "j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA=",
-        "revision_id_after": "a8a0d167-4398-42c7-bb85-9c9655380ee8",
-        "candidate_zip_sha256": "8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30",
-        "applied_at": "2026-11-17T18:49:27.710Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health",
-          "/db-readonly-validate"
-        ],
-        "notes": "Ninth staging rebuild, for the Secrets Manager read cache (#1980: secrets.mjs and sql53-production-readonly-inspect.mjs changed) and, with it, the Delete Check workstream's workflow-delete-check.mjs, applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-17; with \"ship all three to staging\" and \"merge 1982 when green\") from main 37699e14b (the merged plan #1982 plus #1983, a documentation-only merge), with expected_live_code_sha256 B9zvTiOU... (inspect 44146738768). Apply run 44151849515: every step success. The job's own inspect step read READY (3 changed: secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...; 0 added, 0 removed, dependencies 54/54; live RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644, candidate 8f9da924..., 6789 candidate members, 0 unlisted problems, mutation false) and took the lease of workstream github-staging-rebuild-44151849515 (acquired 2026-11-17T18:49:25.526Z). The receipt-gated writer consumed the receipt (MAC 61a8a01f9ba8ccac3c0d32ab33b5d10e59837a9e9a9dcde626549e41f018a832); its before fingerprint read B9zvTiOU... (RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644) and it updated checksops-staging-api to CodeSha256 j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA= (writer RevisionId 854f4286-7bc8-49ec-b6d0-5ab224337a90, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId a8a0d167-4398-42c7-bb85-9c9655380ee8, mutation false); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. A separate GetFunctionConfiguration read-back after the run (as user/claude-code) showed CodeSha256 j52pJCHg..., RevisionId a8a0d167-4398-42c7-bb85-9c9655380ee8, LastUpdateStatus Successful, TracingConfig PassThrough, the one subnet subnet-0df2518070c5b9ff0 and 46 environment variables, so the configuration changes of 2026-11-17 survived the rebuild; then GET /staging/db-health 12 of 12 HTTP 200, /staging/authorization/jwks-check 8 of 8, /staging/providers/egress 200. Staging acceptance is this guarded apply and its verification only. Not verified by this record: that Secrets Manager calls from staging fell (no CloudTrail count was taken after the apply), a database password rotation against the cache, and Delete Check exercised by a person on staging."
+        "notes": "Tenth staging rebuild, for the API hardening from the AvalonX penetration test PT-47865 (2026-11-24; owner 2026-11-25: \"Had a pen test performed and this was the results. Overall good nothing critical but we need to fix some areas\", then \"Proceed with fixes\"; #2074 \"API hardening from pen test PT-47865: liveness-only /health, hardening headers, generic retired-login reply (planning only)\", merge 51794430a). Why: the live API answers an anonymous GET /health with the service name, environment, database name and whether the database secret is configured (finding F-01, Medium), sends none of x-content-type-options, strict-transport-security and x-frame-options (F-03, Low), and answers the retired /auth/login and /auth/challenge with a message that names the sign-in methods (F-09, Informational). main's index.mjs answers an anonymous /health with {\"status\":\"ok\"} only and puts the three headers on every response it builds; main's auth-cognito.mjs answers 410 'gone' with no method named. index.mjs is never overlaid and auth-cognito.mjs is not an overlay member, so both reach a function only with a rebuild. authorization.mjs is the JWKS check text change of 2026-11-17 (planning only, rebuild-only, listed in CHANGED_SINCE_SECOND_REBUILD since then): staging still ran its previous bytes and this rebuild carries it. Inspect run 45623998343 (main 51794430a, read-only, mutation false) read BLOCKED with SOURCE_RECONCILIATION_REQUIRED (unlisted_change) for exactly these three, which this section lists: 3 changed (auth-cognito.mjs 5478b83b... -> 0223b4b1..., authorization.mjs 2555f1f2... -> 9d9a985e..., index.mjs ec092b24... -> 2861d433...), 0 added, 0 removed, 212 same, dependencies identical (54 live, 54 candidate), 6791 live and 6791 candidate members, candidate ZIP 37dfc617.... The live package it read is CodeSha256 wyne27He... (RevisionId ed916294-137a-449e-851b-5a9f1c7edee7), which is not the CodeSha256 the ninth section recorded after its apply (the overlay runs since changed the package; they were not looked up for this record). The run's public staging smoke (/health, /db-health, /db-readonly-validate) answered 200 ok on the live package. The three accepted hashes are the sha256 of main's files at 51794430a, computed for this record and equal to the inspect's candidate hashes. Every workflow and script that reads /health checks status only (the rebuild's own smoke, guarded-production-lambda-config.yml, guarded-production-cors.yml, guarded-production-csp-headers.yml, spa-fallback-public-probe.mjs). Not verified by this record: nothing is applied; the apply needs the owner's exact phrase and re-reads the live package. The ninth section (inspect 44146738768, apply 44151849515) is history[8], verbatim."
       },
       "history": [
         {
@@ -1072,6 +1053,68 @@
               "/db-readonly-validate"
             ],
             "notes": "Eighth staging rebuild, for the no additional-check charge API (#1899: mortgage-ops-usage.mjs and tenant-billing-engine.mjs changed), applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-14; with \"merge #1898 and #1899\" and \"merge #1900\") from main 49f34426e (the merged plan #1900), with expected_live_code_sha256 7GMBgbER... (inspect 43602853354). Apply run 43604345243: every step success. The job's own inspect step read READY (2 changed: mortgage-ops-usage.mjs abd5fe7a... -> 6e60d033..., tenant-billing-engine.mjs 5859fc13... -> ea380af7...; 0 added, 0 removed, 211 same, dependencies 54/54; live RevisionId aefe1437-3fea-4de7-b1de-437541bdf98b, candidate 8390d8fd..., 6789 candidate members, mutation false) and took the lease of workstream github-staging-rebuild-43604345243 (acquired 2026-11-14T14:20:50.172Z). The receipt-gated writer consumed the receipt (MAC 2bd37ccd52aad1a51aed6849c2a40079ae8340ed15301d3f315ee6d9f8ff9cbf); its immediately_before fingerprint read 7GMBgbER... (RevisionId aefe1437-3fea-4de7-b1de-437541bdf98b) and it updated checksops-staging-api to CodeSha256 g5DY/ZDwgUB8G62jiOYpSLG6BKcyKxHirKl4dG0oiWg= (writer RevisionId 0eb57a97-7d4d-4747-800c-90298751b507, lastUpdateStatus InProgress, errors []); its after fingerprint and \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId bae75dd3-dac3-448a-9e5a-18d798173521, mutation false); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. Staging acceptance is this guarded apply and its verification only: no person-run additional-check accept on staging after this rebuild is recorded. Not verified by this record: a separate GetFunctionConfiguration read-back after the run, the GitHub job id (not printed in the run log), and an additional-check accept on staging recording no charge."
+          }
+        },
+        {
+          "status": "applied",
+          "members": {
+            "secrets.mjs": {
+              "live_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3",
+              "accepted_sha256": "a4d589fd37ecc1a5a57aa3bcfd4aedac2df06d55fb88ada10c8e47715318db58"
+            },
+            "sql53-production-readonly-inspect.mjs": {
+              "live_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68",
+              "accepted_sha256": "e31a2d1794ae7c085e46d48ef8f567414abff63b97fc51990f0806917656a57d"
+            },
+            "workflow-delete-check.mjs": {
+              "live_sha256": "bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f",
+              "accepted_sha256": "c0430309e9bcbb29defb03ee69be096f4f3e3ee8234e12f26e61e60098645b88"
+            }
+          },
+          "added": {},
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "44146738768",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44146738768",
+            "main_commit": "d0131434a7cedc8e0160e3a32c3a3ca269d9b265",
+            "live_code_sha256": "B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=",
+            "live_revision_id": "d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644",
+            "live_member_count": 6789,
+            "candidate_zip_sha256": "8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30",
+            "candidate_member_count": 6789,
+            "same": 210,
+            "changed": 3,
+            "added": 0,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "notes": "Ninth staging rebuild, for the Secrets Manager read cache (2026-11-17 cost review, item 3; #1980 \"Cost: cache Secrets Manager reads for five minutes per container, and move the pins that fix secrets.mjs\", merge d01314340). Why: CloudTrail for the 24 hours to 2026-11-17 shows 53,265 GetSecretValue calls for the production database secret by checksops-production-api-execution, one per API request; getSecretStringFromAws in secrets.mjs now keeps each secret string for five minutes per container, and a failed fetch is not cached. sql53-production-readonly-inspect.mjs changes with it because SQL53_READONLY_INSPECT_SECRETS_SHA256 pins the bytes of secrets.mjs (f8fa9ee6... -> a4d589fd...): the two reach a function together, and neither is an overlay member. The third member is another workstream's: workflow-delete-check.mjs (the Delete Check changes marked planning only, the latest of them commit eeb1fa8, merged by #1970 on 2026-11-17; do_not_overlay in the production overlay plan, so it reaches a function only with a rebuild). A rebuild ships the whole of main and cannot leave it behind; the owner was shown the three names and chose to ship them. Owner 2026-11-17: \"land the secrets cache and move both pins\", \"merge 1980 when green\", \"ship the secrets cache with a guarded rebuild\", \"run the staging inspect\", then, shown this inspect's three files and told the third is the Delete Check change: \"ship all three to staging\". Inspect run 44146738768 (main d01314340, read-only, mutation false): live CodeSha256 B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=, RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644, 6789 live members; candidate ZIP 8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30, 6789 members; 210 same, 3 changed (secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...), 0 added, 0 removed, dependencies 54/54 with no delta; state BLOCKED with exactly those three as unlisted_change, which this section lists. The job's smoke read /health, /db-health and /db-readonly-validate 200. The live package is not the eighth rebuild's (history[7], g5DY/ZDw...): CodeSha256 has moved to B9zvTiOU... since, through guarded overlays; the last is the Delete Check workflow.mjs REPLACE of 2026-11-17 (staging apply run 44112953362, production apply run 44114061250, recorded in the production overlay plan with the same CodeSha256 B9zvTiOU... on production). Their members count as same here. The live RevisionId d2fc1ab8... is the one left by the 2026-11-17 17:39:54 UTC TracingConfig change (Active -> PassThrough) and the 17:21:43 UTC VpcConfig change (one subnet), both configuration only: CodeSha256 was B9zvTiOU... before and after each (ops/security/NAT_GATEWAY_COST_PLAN_2026_11.md). Not verified by this record: nothing is applied; no person has exercised Delete Check or a database password rotation on staging against these bytes. Apply needs the owner's exact phrase for that run."
+          },
+          "applied": {
+            "run_id": "44151849515",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/44151849515",
+            "main_commit": "37699e14b0a642e11a5fbb36489402786047d1ba",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+            "code_sha256_before": "B9zvTiOUXAEPuhVBmx6Q7WvHDYyeymK8Uebbg/LD3Vs=",
+            "revision_id_before": "d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644",
+            "code_sha256_after": "j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA=",
+            "revision_id_after": "a8a0d167-4398-42c7-bb85-9c9655380ee8",
+            "candidate_zip_sha256": "8f9da92421e0f427eedabba8c013bbc735c415fca8d513a5fba953ec6623ce30",
+            "applied_at": "2026-11-17T18:49:27.710Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health",
+              "/db-readonly-validate"
+            ],
+            "notes": "Ninth staging rebuild, for the Secrets Manager read cache (#1980: secrets.mjs and sql53-production-readonly-inspect.mjs changed) and, with it, the Delete Check workstream's workflow-delete-check.mjs, applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-17; with \"ship all three to staging\" and \"merge 1982 when green\") from main 37699e14b (the merged plan #1982 plus #1983, a documentation-only merge), with expected_live_code_sha256 B9zvTiOU... (inspect 44146738768). Apply run 44151849515: every step success. The job's own inspect step read READY (3 changed: secrets.mjs f8fa9ee6... -> a4d589fd..., sql53-production-readonly-inspect.mjs 4e356350... -> e31a2d17..., workflow-delete-check.mjs bdfd5f3a... -> c0430309...; 0 added, 0 removed, dependencies 54/54; live RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644, candidate 8f9da924..., 6789 candidate members, 0 unlisted problems, mutation false) and took the lease of workstream github-staging-rebuild-44151849515 (acquired 2026-11-17T18:49:25.526Z). The receipt-gated writer consumed the receipt (MAC 61a8a01f9ba8ccac3c0d32ab33b5d10e59837a9e9a9dcde626549e41f018a832); its before fingerprint read B9zvTiOU... (RevisionId d2fc1ab8-3a9e-4dc9-9dbb-5cf10b93a644) and it updated checksops-staging-api to CodeSha256 j52pJCHg9Cfu2ruowBO7xzXEFfyo1ROl+6lT7GYjzjA= (writer RevisionId 854f4286-7bc8-49ec-b6d0-5ab224337a90, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6789 members, RevisionId a8a0d167-4398-42c7-bb85-9c9655380ee8, mutation false); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. A separate GetFunctionConfiguration read-back after the run (as user/claude-code) showed CodeSha256 j52pJCHg..., RevisionId a8a0d167-4398-42c7-bb85-9c9655380ee8, LastUpdateStatus Successful, TracingConfig PassThrough, the one subnet subnet-0df2518070c5b9ff0 and 46 environment variables, so the configuration changes of 2026-11-17 survived the rebuild; then GET /staging/db-health 12 of 12 HTTP 200, /staging/authorization/jwks-check 8 of 8, /staging/providers/egress 200. Staging acceptance is this guarded apply and its verification only. Not verified by this record: that Secrets Manager calls from staging fell (no CloudTrail count was taken after the apply), a database password rotation against the cache, and Delete Check exercised by a person on staging."
           }
         }
       ]
