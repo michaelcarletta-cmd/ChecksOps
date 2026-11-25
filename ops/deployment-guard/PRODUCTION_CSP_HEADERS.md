@@ -191,8 +191,11 @@ production site". Owner, 2026-11-25: "Proceed with fixes", then, after creating 
   `/prep/health` answers 200 `{"status":"ok"}`. The live `index.html` has three inline `<script>`
   blocks: one executable, whose SHA-256 is the hash in `script-src`, and two
   `application/ld+json` data blocks, which a browser does not execute.
-- Not verified by this record: step 4 above (every screen with the console open) had not been
-  reported done when this was written; `www.checksops.com` was not reachable from the operator's
+- Step 4, the owner, 2026-11-25, after the run: "Clicked through everything, no console errors".
+  The screens asked for were sign-in, a check with uploads and image previews, PDF field placement,
+  a deposit, the wallet, settings and a tenant logo; which screens were opened is the owner's report,
+  not something this record observed.
+- Not verified by this record: `www.checksops.com` was not reachable from the operator's
   environment and was not read; the staging header was not re-read on the day (staging acceptance is
   run 41086648035 and the owner's words of 2026-10-31).
 
