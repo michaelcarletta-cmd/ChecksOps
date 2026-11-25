@@ -108,6 +108,12 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // recipient instead of the staging allowlist; a REPLACE member of the production overlay plan,
   // not a rebuild section.
   'email-policy.mjs': 'changed',
+  // Pen test PT-47865 (2026-11-25, planning only): /health tells an anonymous caller only {"status":"ok"} and every
+  // response carries the hardening headers (index.mjs); the retired /auth/login reply names no sign-in method
+  // (auth-cognito.mjs). Rebuild-only changes (see OVERLAY_PLAN_CHANGES), not members of the current rebuild section:
+  // live still returns the old bodies until the next rebuild.
+  'index.mjs': 'changed',
+  'auth-cognito.mjs': 'changed',
   // Stakeholder settings edit (2026-10-25): WRITE_ALLOWLIST.stakeholder_accounts for Settings >
   // Stakeholder Accounts (remove a non-payee, change type); a REPLACE member of the production
   // overlay plan, not a rebuild section.
@@ -428,6 +434,11 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'sql53-production-readonly-inspect.mjs',
   // JWKS check text (2026-11-17, planning only): not an overlay member; it reaches a function only with a rebuild.
   'authorization.mjs',
+  // Pen test PT-47865 (2026-11-25, planning only): liveness-only /health and hardening headers (index.mjs, never
+  // overlaid) and the generic retired-login reply (auth-cognito.mjs, not an overlay member). They reach a function
+  // only with a rebuild.
+  'index.mjs',
+  'auth-cognito.mjs',
   // Contractor payee is a required signer (2026-11-18, planning only): a REPLACE row of the production plan.
   'endorsement-completion.mjs',
   'providers/production/checkalt-eligibility.mjs',

@@ -89,7 +89,8 @@ test('password and master/UAT password authentication are unavailable and never 
     for (const result of [login, challenge]) {
       assert.equal(result.ok, false);
       assert.equal(result.statusCode, 410);
-      assert.equal(result.error, 'password_auth_disabled');
+      assert.equal(result.error, 'gone');
+      assert.doesNotMatch(JSON.stringify(result), /password|otp|passkey|staging/i);
       assert.equal(result.authentication, undefined);
     }
     assert.equal(AUTH_ROUTES['/auth/login'], handleAuthLogin);
@@ -226,7 +227,7 @@ test('staging SAM template and production prep-stack stay untouched by this pass
   assert.match(factors[1], /WEB_AUTHN/);
   assert.match(yaml, /ALLOW_USER_AUTH/);
   assert.match(productionPrep(), /ALLOW_USER_PASSWORD_AUTH/);
-  assert.match(authSource(), /password_auth_disabled/);
+  assert.match(authSource(), /error: 'gone'/);
   assert.match(authSource(), /handleAuthLogin = async \(\) => passwordAuthDisabled/);
   assert.match(authSource(), /handleAuthChallenge = async \(\) => passwordAuthDisabled/);
 });

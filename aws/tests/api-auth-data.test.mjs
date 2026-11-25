@@ -638,7 +638,8 @@ test('password login is disabled and never treats Cognito sub as the application
     });
     assert.equal(result.ok, false);
     assert.equal(result.statusCode, 410);
-    assert.equal(result.error, 'password_auth_disabled');
+    assert.equal(result.error, 'gone');
+    assert.doesNotMatch(JSON.stringify(result), /password|otp|passkey|staging/i);
     assert.equal(result.authentication, undefined);
     assert.equal(result.challenge, undefined);
     assert.equal(fetchCalled, false);
