@@ -118,8 +118,8 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Endorsement request wording (2026-11-25, planning only): the email says who is asking, why the reader is a
   // payee and how to reach the company, after requests landed in Gmail spam with SPF, DKIM and DMARC passing.
   // A rebuild-only change (see OVERLAY_PLAN_CHANGES). The eleventh staging section (inspect 45659053880) lists it and
-  // is applied (run 45664041653); the eleventh production section (inspect 45664834020) lists it and is not applied,
-  // so production does not have these bytes yet.
+  // is applied (run 45664041653); the eleventh production section (inspect 45664834020) lists it and is applied
+  // (run 45672485106), so both environments have these bytes.
   'email-templates.mjs': 'changed',
   // Stakeholder settings edit (2026-10-25): WRITE_ALLOWLIST.stakeholder_accounts for Settings >
   // Stakeholder Accounts (remove a non-payee, change type); a REPLACE member of the production
@@ -448,7 +448,7 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'auth-cognito.mjs',
   // Endorsement request wording (2026-11-25): not an overlay member; it reaches a function only with a rebuild: the
   // eleventh staging section (inspect 45659053880, applied by run 45664041653) and the eleventh production section
-  // (inspect 45664834020, not applied) list it.
+  // (inspect 45664834020, applied by run 45672485106) list it, so both environments have these bytes.
   'email-templates.mjs',
   // Contractor payee is a required signer (2026-11-18, planning only): a REPLACE row of the production plan.
   'endorsement-completion.mjs',
@@ -1912,15 +1912,16 @@ test('the staging plan section accepts inspect run 45659053880 and records apply
     assert.equal(overlayPlan.members[name], undefined, name);
     assert.equal(overlayPlan.order.includes(name), false, name);
   }
-  // No applied production section lists it: production does not have these bytes. The eleventh production section
-  // (inspect 45664834020) lists it and is not applied.
+  // No production section in history lists it. The eleventh production section (inspect 45664834020) lists it and is
+  // applied (run 45672485106): production has these bytes.
   for (const production of raw.environments.production.history) {
     assert.equal(production.status, 'applied');
     assert.equal(production.members['email-templates.mjs'], undefined);
     assert.equal(production.added['email-templates.mjs'], undefined);
   }
-  assert.equal(raw.environments.production.status, 'accepted');
-  assert.equal(raw.environments.production.applied, undefined);
+  assert.equal(raw.environments.production.status, 'applied');
+  assert.equal(raw.environments.production.applied.run_id, '45672485106');
+  assert.deepEqual(raw.environments.production.members, staging.members);
   // The plan as committed makes the inspected live package READY, not BLOCKED; another live hash is a collision.
   const live = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].live_sha256]));
   const candidate = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].accepted_sha256]));
@@ -2352,14 +2353,32 @@ test('the production history keeps the tenth section (inspect 45630323564, apply
   assert.equal(extra.code, 'SOURCE_RECONCILIATION_REQUIRED');
   assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
 });
-test('the production plan section accepts inspect run 45664834020: the endorsement request email wording rebuild (1 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
+test('the production plan section accepts inspect run 45664834020 and records apply 45672485106: the endorsement request email wording rebuild (1 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const staging = raw.environments.staging;
   const tenth = production.history[9];
-  // Accepted from the inspect, not applied: the apply needs the owner's exact phrase.
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  // Applied 2026-11-25 (run 45672485106) on the owner's "DEPLOY FULL API PACKAGE TO PRODUCTION", from the staging
+  // reference the section names.
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '45672485106');
+  assert.equal(production.applied.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45672485106');
+  assert.equal(production.applied.main_commit, 'c9fac5015341f5f110a7f3db9453545028769ce4');
+  assert.equal(production.applied.approval_phrase, 'DEPLOY FULL API PACKAGE TO PRODUCTION');
+  assert.equal(production.applied.staging_acceptance, production.inspect.staging_acceptance);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.revision_id_before, production.inspect.live_revision_id);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
+  assert.equal(production.applied.code_sha256_after, 'SCTaeQ8sLpsMRXTc6NkswBu30/Zg8aiIyvJjxmcIC/Y=');
+  assert.equal(production.applied.revision_id_after, '1a13d5a7-c07a-4429-a796-832c0afdd849');
+  assert.equal(production.applied.applied_at, '2026-11-25T18:11:38.071Z');
+  assert.equal(production.applied.state, 'VERIFIED');
+  assert.deepEqual(production.applied.smoke, ['/health', '/db-health']);
+  // Production now runs the package staging runs.
+  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  for (const evidence of ['#2084', 'github-production-rebuild-45672485106', '423193107746257ad05e88825eb4d4fea34860324e68fc5ba3ebcb6295d2a2ae', 'da82ff64-1326-4ed3-b326-ee546bf6b6d8', '2250a467ebdf07d8499ec0588998c29607a59bdb45d7fba174b96630dd5c8be9', '6791 members', '2026-11-25T18:15:35Z', 'Gmail', 'www.checksops.com', 'Not verified by this record']) {
+    assert.ok(production.applied.notes.includes(evidence), evidence);
+  }
   assert.equal(production.inspect.run_id, '45664834020');
   assert.equal(production.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45664834020');
   assert.equal(production.inspect.main_commit, 'c773bd13fed877e7f8cd6da486272d2a45822326');
