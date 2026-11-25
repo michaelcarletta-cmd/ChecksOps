@@ -117,8 +117,8 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   'auth-cognito.mjs': 'changed',
   // Endorsement request wording (2026-11-25, planning only): the email says who is asking, why the reader is a
   // payee and how to reach the company, after requests landed in Gmail spam with SPF, DKIM and DMARC passing.
-  // A rebuild-only change (see OVERLAY_PLAN_CHANGES); no rebuild section lists it yet, so neither environment
-  // has these bytes.
+  // A rebuild-only change (see OVERLAY_PLAN_CHANGES). The eleventh staging section (inspect 45659053880) lists it,
+  // accepted and not applied; no production section lists it, so production does not have these bytes yet.
   'email-templates.mjs': 'changed',
   // Stakeholder settings edit (2026-10-25): WRITE_ALLOWLIST.stakeholder_accounts for Settings >
   // Stakeholder Accounts (remove a non-payee, change type); a REPLACE member of the production
@@ -445,7 +445,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   // only with a rebuild: the tenth staging section (inspect 45623998343) lists them, with authorization.mjs.
   'index.mjs',
   'auth-cognito.mjs',
-  // Endorsement request wording (2026-11-25): not an overlay member; it reaches a function only with a rebuild.
+  // Endorsement request wording (2026-11-25): not an overlay member; it reaches a function only with a rebuild: the
+  // eleventh staging section (inspect 45659053880) lists it.
   'email-templates.mjs',
   // Contractor payee is a required signer (2026-11-18, planning only): a REPLACE row of the production plan.
   'endorsement-completion.mjs',
@@ -1131,7 +1132,7 @@ test('the production history keeps the fifth section (inspect 43210883811, apply
 test('the staging history keeps the first rebuild (inspect 39585059839, apply 39587414391) and every accepted hash is the bytes on main or a listed later change', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
-  assert.equal(staging.history.length, 9);
+  assert.equal(staging.history.length, 10);
   const first = staging.history[0];
   assert.equal(first.status, 'applied');
   assert.equal(first.applied.run_id, '39587414391');
@@ -1751,10 +1752,12 @@ test('the staging history keeps the ninth section (inspect 44146738768, apply 44
   assert.equal(extra.code, 'SOURCE_RECONCILIATION_REQUIRED');
   assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
 });
-test('the staging plan section accepts inspect run 45623998343 and records apply 45628951828: the pen test API hardening rebuild (3 changed, 0 added, 0 removed)', () => {
+test('the staging history keeps the tenth section (inspect 45623998343, apply 45628951828): the pen test API hardening rebuild (3 changed, 0 added, 0 removed)', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
-  const staging = raw.environments.staging;
-  const ninth = staging.history[8];
+  // The eleventh section (inspect 45659053880, the endorsement request email wording) moved the tenth into history[9]
+  // verbatim.
+  const staging = raw.environments.staging.history[9];
+  const ninth = raw.environments.staging.history[8];
   // Applied 2026-11-25 (run 45628951828) on the owner's "DEPLOY FULL API PACKAGE TO STAGING". The staging acceptance is
   // the guarded apply, its verification and unauthenticated reads of the three changed behaviours: no person has signed
   // in to staging since.
@@ -1794,7 +1797,8 @@ test('the staging plan section accepts inspect run 45623998343 and records apply
   for (const evidence of ['PT-47865', '#2074', 'F-01', 'F-03', 'F-09', 'Proceed with fixes', 'never overlaid', 'authorization.mjs', 'history[8]', 'BLOCKED', 'Not verified by this record']) {
     assert.ok(staging.inspect.notes.includes(evidence), evidence);
   }
-  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  const section = staging;
+  const plan = { environments: { staging: { function_name: raw.environments.staging.function_name, ...staging } } };
   const CHANGED = ['auth-cognito.mjs', 'authorization.mjs', 'index.mjs'];
   assert.deepEqual(Object.keys(section.members), CHANGED);
   assert.deepEqual(section.added, {});
@@ -1820,13 +1824,86 @@ test('the staging plan section accepts inspect run 45623998343 and records apply
     assert.equal(overlayPlan.members[name], undefined, name);
     assert.equal(overlayPlan.order.includes(name), false, name);
   }
+  // The recorded section still makes the inspected live package READY, not BLOCKED; another live hash is a collision.
+  const live = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].live_sha256]));
+  const candidate = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].accepted_sha256]));
+  const result = evaluateRebuild({ plan, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.state, 'READY');
+  const drifted = evaluateRebuild({ plan, environment: 'staging', liveMemberHashes: { ...live, 'index.mjs': 'c'.repeat(64) }, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(drifted.ok, false);
+  assert.equal(drifted.code, 'DEPLOYMENT_COLLISION');
+  assert.deepEqual(drifted.details.problems.map((p) => p.reason), ['live_mismatch']);
+  // Another changed member still blocks.
+  const extra = evaluateRebuild({ plan, environment: 'staging', liveMemberHashes: { ...live, 'workflow-rpc.mjs': 'a'.repeat(64) }, candidateMemberHashes: { ...candidate, 'workflow-rpc.mjs': 'b'.repeat(64) }, liveInventory: {}, candidateInventory: {} });
+  assert.equal(extra.ok, false);
+  assert.equal(extra.code, 'SOURCE_RECONCILIATION_REQUIRED');
+  assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
+});
+test('the staging plan section accepts inspect run 45659053880: the endorsement request email wording rebuild (1 changed, 0 added, 0 removed)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const staging = raw.environments.staging;
+  const tenth = staging.history[9];
+  // Accepted from the inspect, not applied: the apply needs the owner's exact phrase.
+  assert.equal(staging.status, 'accepted');
+  assert.equal(staging.applied, undefined);
+  assert.equal(staging.inspect.run_id, '45659053880');
+  assert.equal(staging.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45659053880');
+  assert.equal(staging.inspect.main_commit, '353a6a189cbdac2fbd179752fc2b8fd11bb40f94');
+  assert.equal(staging.inspect.live_code_sha256, 'N9/GF3IOU7lFPtxYHu8MrtA7mwn04NX4Ai6RaoIYGMI=');
+  assert.equal(staging.inspect.live_revision_id, '7f32fa17-6cda-472d-8280-520795a1bb75');
+  assert.equal(staging.inspect.candidate_zip_sha256, '4824da790f2c2e9b0c4574dce8d92cc01bb7d3f660f1a888caf263c667080bf6');
+  assert.equal(staging.inspect.live_member_count, 6791);
+  assert.equal(staging.inspect.candidate_member_count, 6791);
+  assert.equal(staging.inspect.same, 214);
+  assert.equal(staging.inspect.changed, 1);
+  assert.equal(staging.inspect.added, 0);
+  assert.equal(staging.inspect.removed, 0);
+  assert.deepEqual(staging.inspect.dependency_counts, { live: 54, candidate: 54 });
+  // The package the rebuild starts from is the tenth rebuild's own package: no code change on staging since its apply.
+  assert.equal(tenth.inspect.run_id, '45623998343');
+  assert.equal(tenth.applied.run_id, '45628951828');
+  assert.equal(staging.inspect.live_code_sha256, tenth.applied.code_sha256_after);
+  assert.equal(staging.inspect.live_revision_id, tenth.applied.revision_id_after);
+  for (const evidence of ['#2082', 'Gmail spam', 'SPF, DKIM and DMARC', 'not an overlay member', '139363589201', 'history[9]', 'BLOCKED', 'Planning only until applied', 'Not verified by this record']) {
+    assert.ok(staging.inspect.notes.includes(evidence), evidence);
+  }
+  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  const CHANGED = ['email-templates.mjs'];
+  assert.deepEqual(Object.keys(section.members), CHANGED);
+  assert.deepEqual(section.added, {});
+  assert.deepEqual(section.removed, {});
+  assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
+  // Accepted is main's bytes; live is what the inspect printed.
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  const INSPECTED = {
+    'email-templates.mjs': ['f7f79f6d270e3d2e738ee9c54190dd1de1f972437721c839f025520afaa26ef0', 'ac065f2854bc9fa0443a7cde990fb0772f6bfb8168558c782003705828c7bd72'],
+  };
+  for (const [name, [live, accepted]] of Object.entries(INSPECTED)) {
+    assert.equal(section.members[name].accepted_sha256, accepted, name);
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), accepted, name);
+    assert.equal(section.members[name].live_sha256, live, name);
+    assert.equal(CHANGED_SINCE_SECOND_REBUILD[name], 'changed', name);
+    assert.ok(OVERLAY_PLAN_CHANGES.has(name), name);
+  }
+  // Not an overlay member: a rebuild is the only way it reaches a function.
+  const overlayPlan = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
+  for (const name of CHANGED) {
+    assert.equal(overlayPlan.members[name], undefined, name);
+    assert.equal(overlayPlan.order.includes(name), false, name);
+  }
+  // No production section lists it: production does not have these bytes.
+  for (const production of [raw.environments.production, ...raw.environments.production.history]) {
+    assert.equal(production.members['email-templates.mjs'], undefined);
+    assert.equal(production.added['email-templates.mjs'], undefined);
+  }
   // The plan as committed makes the inspected live package READY, not BLOCKED; another live hash is a collision.
   const live = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].live_sha256]));
   const candidate = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].accepted_sha256]));
   const result = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
   assert.equal(result.ok, true, result.message);
   assert.equal(result.details.state, 'READY');
-  const drifted = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: { ...live, 'index.mjs': 'c'.repeat(64) }, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  const drifted = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: { ...live, 'email-templates.mjs': 'c'.repeat(64) }, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
   assert.equal(drifted.ok, false);
   assert.equal(drifted.code, 'DEPLOYMENT_COLLISION');
   assert.deepEqual(drifted.details.problems.map((p) => p.reason), ['live_mismatch']);
@@ -2169,7 +2246,8 @@ test('the production history keeps the ninth section (inspect 44152135321, apply
 test('the production plan section accepts inspect run 45630323564 and records apply 45633410707: the pen test API hardening rebuild (3 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
-  const staging = raw.environments.staging;
+  // The staging tenth section is history[9] since the eleventh (inspect 45659053880, the endorsement request email wording).
+  const staging = raw.environments.staging.history[9];
   const ninth = production.history[8];
   // Applied 2026-11-25 (run 45633410707) on the owner's "DEPLOY FULL API PACKAGE TO PRODUCTION", from the staging
   // reference the section names.
@@ -2631,7 +2709,7 @@ test('vendor payments API (2026-11-13): its three REPLACEs went through the prod
   assert.equal(raw.environments.staging.history[7].status, 'applied');
   // The production eighth section is history[7] since the ninth (inspect 44152135321), which lists none of them either.
   assert.equal(raw.environments.production.history[7].status, 'applied');
-  for (const [environment, section] of [['staging', raw.environments.staging.history[7]], ['staging ninth', raw.environments.staging.history[8]], ['staging tenth', raw.environments.staging], ['production', raw.environments.production.history[7]], ['production ninth', raw.environments.production.history[8]], ['production tenth', raw.environments.production]]) {
+  for (const [environment, section] of [['staging', raw.environments.staging.history[7]], ['staging ninth', raw.environments.staging.history[8]], ['staging tenth', raw.environments.staging.history[9]], ['staging eleventh', raw.environments.staging], ['production', raw.environments.production.history[7]], ['production ninth', raw.environments.production.history[8]], ['production tenth', raw.environments.production]]) {
     for (const name of REPLACES) {
       assert.equal(section.members[name], undefined, `${environment} ${name}`);
       assert.equal(section.added[name], undefined, `${environment} ${name}`);
