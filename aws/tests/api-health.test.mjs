@@ -97,19 +97,27 @@ test('strips HTTP API stage prefix from rawPath', () => {
   );
 });
 
-test('GET /health returns staging ok without a database password', async () => {
+test('GET /health tells an anonymous caller only that the service is up', async () => {
   const response = await invoke();
   assert.equal(response.statusCode, 200);
-  const body = JSON.parse(response.body);
-  assert.equal(body.service, 'checksops-api');
-  assert.equal(body.environment, 'staging');
-  assert.equal(body.status, 'ok');
-  assert.equal(body.database, 'not-connected');
-  assert.equal(body.databaseSecretConfigured, true);
-  assert.equal(body.databaseName, 'checksops');
-  assert.equal(body.productionSupabaseChanged, false);
-  assert.equal(Object.hasOwn(body, 'password'), false);
-  assert.doesNotMatch(response.body, /password/i);
+  // Pen test PT-47865, F-01: no service, environment or database configuration without a sign-in.
+  assert.deepEqual(JSON.parse(response.body), { status: 'ok' });
+  assert.doesNotMatch(response.body, /password|database|checksops|staging/i);
+});
+
+test('GET /health with a sign-in that does not verify is still liveness only', async () => {
+  const response = await invoke({ headers: { authorization: 'Bearer not-a-token' } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(JSON.parse(response.body), { status: 'ok' });
+});
+
+test('every response carries the hardening headers', async () => {
+  // Pen test PT-47865, F-03.
+  for (const response of [await invoke(), await invoke({ rawPath: '/v1/tenants', requestContext: { stage: 'staging', http: { method: 'GET', path: '/v1/tenants' } } })]) {
+    assert.equal(response.headers['x-content-type-options'], 'nosniff');
+    assert.equal(response.headers['strict-transport-security'], 'max-age=31536000; includeSubDomains');
+    assert.equal(response.headers['x-frame-options'], 'DENY');
+  }
 });
 
 test('GET /staging/health succeeds when API Gateway includes the stage', async () => {

@@ -166,8 +166,9 @@ export const handleAuthPasswordlessVerify = async (event) => {
 const passwordAuthDisabled = () => ({
   ok: false,
   statusCode: 410,
-  error: 'password_auth_disabled',
-  message: 'Staging password login is disabled. Use EMAIL_OTP or a passkey.',
+  // Says nothing about which sign-in methods exist (pen test PT-47865, F-09).
+  error: 'gone',
+  message: 'This endpoint is no longer available.',
 });
 
 /**

@@ -38,9 +38,17 @@ import {
   isSql53ProductionReadonlyInspectEvent,
 } from './sql53-production-readonly-inspect.mjs';
 
+// Sent on every response this function builds (pen test PT-47865, F-03).
+export const SECURITY_HEADERS = Object.freeze({
+  'x-content-type-options': 'nosniff',
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
+  'x-frame-options': 'DENY',
+});
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: {
+    ...SECURITY_HEADERS,
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
@@ -159,6 +167,11 @@ export const handler = async (event) => {
   }
 
   if (method === 'GET' && (path === '/' || path === '/health')) {
+    // An anonymous caller gets liveness only (pen test PT-47865, F-01). The service, environment and
+    // database configuration are for a signed-in caller.
+    const headers = event?.headers || {};
+    const signedIn = (headers.authorization || headers.Authorization) ? (await resolveClaims(event)).ok : false;
+    if (!signedIn) return json(200, { status: 'ok' });
     return json(200, {
       service: 'checksops-api',
       environment: process.env.CHECKSOPS_ENV || 'unknown',
@@ -323,6 +336,7 @@ export const handler = async (event) => {
       return {
         statusCode: 200,
         headers: {
+          ...SECURITY_HEADERS,
           'content-type': result.contentType || 'image/png',
           'cache-control': 'public, max-age=3600',
           'access-control-allow-origin': '*',
@@ -345,6 +359,7 @@ export const handler = async (event) => {
       return {
         statusCode: 302,
         headers: {
+          ...SECURITY_HEADERS,
           'content-type': 'application/json',
           'cache-control': 'no-store',
           location: result.location,
