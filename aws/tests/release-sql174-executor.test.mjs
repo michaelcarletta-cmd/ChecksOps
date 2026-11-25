@@ -5,7 +5,7 @@
  * runs what every release key shares (SQL 174 included); this file covers what is new:
  *
  *   - the pin: staging-authorized (wave 66) from staging read-live run 45496290311 (applied in staging by run 45500686914), code-derived,
- *     selectable, packed, in step with the execute-authorized production pin (production's own pre-state); the pinned commit
+ *     selectable, packed, in step with the production pin (applied 2026-11-24 from production's own pre-state, retired); the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; nothing names it;
  *   - the file and spec: one owner-only SECURITY DEFINER function (search_path public, pg_temp; row_security off) with
  *     the stranded-attempt rule and the queued_before_http reset, called once for the minute 2026-11-24 19:58 UTC; the
@@ -127,7 +127,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 174 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor; the derived pre-state', () => {
+test('pin: SQL 174 staging-authorized from its read-live, code-derived, selectable, packed, in step with the applied and retired production pin; no predecessor; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -145,7 +145,7 @@ test('pin: SQL 174 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-24: staging apply (wave 66) from staging read-live run 45496290311');
   assert.equal(pin.expected_live_definition_sha256, ABSENT);
   assert.equal(pin.expected_live_definition_sha256, '51db2d269aed8dc824b02831671c6e945fde3cd2d772e167e6ea6bfe6824e83f');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-174-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 66, 2026-11-24, apply run 45500686914; the zero-row path\); staging acceptance: the staging apply under the owner's run approval \("run the SQL 174 staging apply"\), the zero-row path accepted by the owner \("Yes, acceptable"\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `c67d45d5-0101-4e45-ac6f-0acc4b24dfb6`, 2026-11-24\) by the owner-reviewed pin change; not applied in production\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-174-apply.md'), 'utf8'), /\*\*Status:\*\* applied in staging \(wave 66, 2026-11-24, apply run 45500686914; the zero-row path\); staging acceptance: the staging apply under the owner's run approval \("run the SQL 174 staging apply"\), the zero-row path accepted by the owner \("Yes, acceptable"\); applied to production \(2026-11-24\); the production pin is retired \(`execute: false`\)\./);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-174-apply.md'), 'utf8'), /read-live \(2026-11-24\)\.\*\* Run 45496290311/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
@@ -186,8 +186,10 @@ test('pin: SQL 174 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(prod.predecessors, []);
   // Production pin execute-authorized (owner-approved pin change of 2026-11-24) on the staging apply from the same catalog
   // pre-state. Its pre-state is production's own (read-only inspect SSM c67d45d5): the function absent, equal to the staging pin's.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-24 /);
+  // Then applied 2026-11-24 ("RESET_STRANDED_CHECKALT_ATTEMPT") and retired.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-24; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'RESET_STRANDED_CHECKALT_ATTEMPT');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, ABSENT);
