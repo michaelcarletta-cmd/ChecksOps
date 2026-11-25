@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Loader2, ArrowLeft, Home, Calculator, LineChart, Printer } from "lucide-react";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { PnlModel } from "@/components/financial/PnlModel";
 import { SavingsCalculator } from "@/components/financial/SavingsCalculator";
 
@@ -62,14 +61,11 @@ export default function AdminFinancialModel() {
     <div className="min-h-screen bg-background px-fluid">
       <SettingsPageShell className="max-w-[1600px]">
         <div className="flex flex-wrap items-center gap-2 print:hidden">
-          <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
+          <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/admin/tenants"))}>
             <ArrowLeft className="mr-1 h-4 w-4" /> Back
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
-            <Home className="mr-1 h-4 w-4" /> Home
-          </Button>
           <Button variant="ghost" size="sm" onClick={() => navigate("/admin/tenants")}>
-            Tenants
+            <Home className="mr-1 h-4 w-4" /> Home
           </Button>
         </div>
 

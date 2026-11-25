@@ -36,8 +36,15 @@ test('?tab=mortgage-agents selects Mortgage Agents and unknown tabs stay on tena
   assert.match(tenants, /<TabsTrigger value="mortgage-agents">/);
   assert.match(tenants, /<TabsContent value="mortgage-agents">\s*<MortgageAgentsPanel \/>/);
   assert.match(tenants, /isPlatformOwner\(email, userId\)/);
-  // Main's Tenant Management v2 overview stays.
-  assert.match(tenants, /<TenantManagementV2Dashboard tenantId=\{tenant\.id\} \/>/);
+  // Owner 2026-11-25: Organization 360 is removed from the tenant screen and Billing & Usage opens first.
+  assert.doesNotMatch(tenants, /TenantManagementV2Dashboard|Organization 360|value="overview"/);
+  assert.match(tenants, /<Tabs defaultValue="billing" className="w-full">\s*<TabsList[^>]*>\s*<TabsTrigger value="billing"/);
+  // Owner 2026-11-25: Home on the platform pages opens the tenants list, never the public landing page.
+  for (const page of ['AdminTenants', 'AdminFinancialModel', 'AdminMortgageOps']) {
+    const text = read(`src/pages/admin/${page}.tsx`);
+    assert.match(text, /onClick=\{\(\) => navigate\("\/admin\/tenants"\)\}>\s*<Home /, page);
+    assert.doesNotMatch(text, /goToChecksOpsHome/, page);
+  }
 
   const alias = read('src/pages/admin/AdminMortgageOps.tsx');
   assert.match(alias, /\/admin\/tenants\?tab=mortgage-agents/);

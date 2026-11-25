@@ -5,7 +5,6 @@ import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ArrowLeft, Briefcase, Home, Loader2 } from "lucide-react";
-import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { MortgageAgentsPanel } from "@/components/admin/MortgageAgentsPanel";
 
 export default function AdminMortgageOps() {
@@ -42,7 +41,7 @@ export default function AdminMortgageOps() {
           <Button variant="ghost" size="sm" onClick={() => navigate("/admin/tenants?tab=mortgage-agents")}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Tenant Management
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/tenants")}>
             <Home className="w-4 h-4 mr-1" /> Home
           </Button>
           <Briefcase className="w-6 h-6 text-primary" />

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PLATFORM_OWNER_EMAIL, isPlatformOwner } from "@/lib/masterMerchant";
 import { TenantMoovIdentityCard } from "@/components/admin/TenantMoovIdentityCard";
-import { TenantManagementV2Dashboard } from "@/components/admin/TenantManagementV2Dashboard";
 import { PlatformBankPanel } from "@/components/admin/PlatformBankPanel";
 import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel";
 import { PlatformFeeDestinationCard, TenantBillingVerifyButton, TenantFeeCollectButton } from "@/components/admin/TenantFeeCollection";
@@ -29,7 +28,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { Megaphone, Inbox, Loader2, Plus, Trash2, Power, Undo2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
-import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
 import { SectionCard } from "@/components/settings/SectionCard";
@@ -186,10 +184,10 @@ export default function AdminTenants() {
       <SettingsPageShell className="max-w-[1600px]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
+            <Button variant="ghost" size="sm" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/admin/tenants"))}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => goToChecksOpsHome(navigate)}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/admin/tenants")}>
               <Home className="w-4 h-4 mr-1" /> Home
             </Button>
           </div>
@@ -384,21 +382,17 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
 
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs defaultValue="billing" className="w-full">
 
           <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
-            <TabsTrigger value="overview" className="flex-1 min-w-[150px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Organization 360</TabsTrigger>
+            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing & Usage</TabsTrigger>
             <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
-            <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing & Usage</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="mt-6">
-            <TenantManagementV2Dashboard tenantId={tenant.id} />
-          </TabsContent>
           <TabsContent value="company" className="mt-6 space-y-6">
             <CompanyTab tenant={tenant} onUpdated={onUpdated} />
             <TenantOpsBadgeSwitch tenantId={tenant.id} tenantName={tenant.name} />
