@@ -170,7 +170,22 @@ const authBeforeAttemptPre = (plan0) => {
 const PLATFORM_PNL_COLLECTED_REL = 'aws/tests/fixtures/production-platform-pnl-collected-manifest-2026-11-26.json';
 const PLATFORM_PNL_COLLECTED = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_COLLECTED_REL), 'utf8'));
 const PLATFORM_PNL_APPLIED_BYTES = PLATFORM_PNL_COLLECTED.members['providers/parity/platform-finance.mjs'].live_sha256;
-const platformPnlCollectedPre = (plan) => {
+// Applied 2026-11-26 (production run 45744634576, VERIFIED): the row expects the applied bytes and names the applied
+// record, which chains to the planning manifest. platformPnlCollectedRecordPre reads the row as it stood before that
+// apply; PLATFORM_PNL_COLLECTED_RELS names the row in either state.
+const PLATFORM_PNL_COLLECTED_APPLIED_REL = 'aws/tests/fixtures/production-platform-pnl-collected-applied-manifest-2026-11-26.json';
+const PLATFORM_PNL_COLLECTED_RELS = [PLATFORM_PNL_COLLECTED_REL, PLATFORM_PNL_COLLECTED_APPLIED_REL];
+const platformPnlCollectedRecordPre = (plan) => {
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_COLLECTED_APPLIED_REL), 'utf8'));
+  for (const [name, entry] of Object.entries(record.members)) {
+    if (plan.members[name]?.manifest !== PLATFORM_PNL_COLLECTED_APPLIED_REL) continue;
+    assert.equal(entry.previous_manifest, PLATFORM_PNL_COLLECTED_REL, name);
+    plan.members[name] = { ...plan.members[name], expected_live_sha256: PLATFORM_PNL_COLLECTED.members[name].live_sha256, manifest: entry.previous_manifest };
+  }
+  return plan;
+};
+const platformPnlCollectedPre = (plan0) => {
+  const plan = platformPnlCollectedRecordPre(plan0);
   for (const [name, entry] of Object.entries(PLATFORM_PNL_COLLECTED.members)) {
     if (plan.members[name]?.manifest !== PLATFORM_PNL_COLLECTED_REL) continue;
     plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
@@ -3312,7 +3327,8 @@ test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expec
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace' });
   // The row has moved on to the P&L from collected money REPLACE (2026-11-26, planning only) from the bytes this
   // plan applied: the row is read as it stood before that plan, and those applied bytes stand for main's.
-  const collectedMovedOn = PLAN.members[MEMBER].manifest === PLATFORM_PNL_COLLECTED_REL;
+  // (Applied 2026-11-26, production run 45744634576: the applied record is read back to the plan it applied.)
+  const collectedMovedOn = PLATFORM_PNL_COLLECTED_RELS.includes(PLAN.members[MEMBER].manifest);
   const onMain = sha(`aws/functions/api/${MEMBER}`);
   const row = platformPnlCollectedPre(structuredClone(PLAN)).members[MEMBER];
   assert.equal(row.operation, 'replace');
@@ -3323,11 +3339,12 @@ test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expec
   assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('providers/production/platform-finance.mjs'));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  // The bytes this plan applied were the P&L from collected money REPLACE's expected live bytes: READY for it as it
+  // stood before its apply (production run 45744634576), and main's bytes ALREADY_ACCEPTED.
+  const beforeCollectedApply = platformPnlCollectedRecordPre(structuredClone(PLAN));
+  const done = await run(inspect, { root: ROOT, plan: beforeCollectedApply, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
   if (collectedMovedOn) {
-    // The bytes this plan applied are the P&L from collected money REPLACE's expected live bytes: READY for it, and
-    // main's bytes ALREADY_ACCEPTED.
-    assert.equal(PLAN.members[MEMBER].expected_live_sha256, LIVE);
+    assert.equal(beforeCollectedApply.members[MEMBER].expected_live_sha256, LIVE);
     assert.equal(done.state, 'READY');
     assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
   } else {
@@ -11417,14 +11434,21 @@ test('Platform Finance P&L from collected money (2026-11-26, planning only): pro
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: onMain, operation: 'replace', previous_manifest: PREVIOUS_REL } });
   assert.notEqual(onMain, applied);
   // No hold: no SQL before it.
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_REL });
+  // Applied 2026-11-26 (production run 45744634576): the row expects main's bytes and names the applied record, which
+  // chains to this planning manifest; read the row back as it stood before the apply.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_COLLECTED_APPLIED_REL), 'utf8'));
+  const beforeApply = { ...PLAN.members[MEMBER], expected_live_sha256: manifest.members[MEMBER].live_sha256, manifest: record.members[MEMBER].previous_manifest };
+  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_REL });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
   assert.ok(PLAN.notes.includes(`${MEMBER} REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes(`Manifest ${PLATFORM_PNL_COLLECTED_REL}. Nothing deployed.`));
-  // Inspect: the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other bytes a reconciliation stop.
+  // Inspect (as the row stood before the apply): the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other
+  // bytes a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) });
+  const planBeforeApply = platformPnlCollectedRecordPre(structuredClone(PLAN));
+  assert.deepEqual(planBeforeApply.members[MEMBER], beforeApply);
+  const ready = await run(inspect, { root: ROOT, plan: planBeforeApply, inspectLive: liveFor(MEMBER, { sha256: applied }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
@@ -11440,4 +11464,27 @@ test('Platform Finance P&L from collected money (2026-11-26, planning only): pro
   assert.deepEqual(localImports(source, MEMBER).sort(), ['data.mjs', 'provider-secrets.mjs', 'providers/parity/caller.mjs', 'providers/parity/moov-client.mjs', 'sandbox-credentials.mjs']);
   // The legacy fee ledger and the per-transfer fee columns are no longer read.
   for (const gone of ['platform_fee_line_items', 'platform_fee_cents', 'provider_fee_cents']) assert.equal(source.includes(gone), false, gone);
+  // The record (2026-11-26): main's bytes are live and the row expects them; the bytes it replaced are now refused.
+  assert.equal(record.workstream_id, 'production-platform-pnl-collected-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-26\)/);
+  assert.equal(record.live_lambda, 'checksops-production-prep-api');
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: PLATFORM_PNL_COLLECTED_REL } });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_APPLIED_REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  for (const runId of ['45743472466', '45743754116', '45744443663', '45744235978', '45744634576']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['c11e4ddc2513a316b20e159239bfb8d804e0c483', '"DEPLOY providers/parity/platform-finance.mjs TO PRODUCTION"',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45743754116', 'SCTaeQ8sLpsMRXTc6NkswBu30/Zg8aiIyvJjxmcIC/Y=',
+    '1a13d5a7-c07a-4429-a796-832c0afdd849', 'B7pnMSPcBWmcRl2cZfO4YNV9nIpOselmkH7nwP/h2Bk=', '3b503ebd-8222-437e-aefa-ccabad6a8337', 'VERIFIED',
+    'errors []', 'Not read for this record', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${PLATFORM_PNL_COLLECTED_APPLIED_REL}. The row expects the applied bytes and names the Platform Finance P&L from collected money applied record.`));
 });
