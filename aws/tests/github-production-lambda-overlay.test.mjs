@@ -164,6 +164,19 @@ const authBeforeAttemptPre = (plan0) => {
   }
   return plan;
 };
+// Platform Finance P&L from collected money (2026-11-26, planning only): providers/parity/platform-finance.mjs REPLACE from
+// the bytes the P&L accuracy apply put live (production run 40001351087). Tests of that workstream read the row as it stood
+// before this plan (platformPnlCollectedPre), and PLATFORM_PNL_APPLIED_BYTES (this plan's live_sha256) stands for main's bytes there.
+const PLATFORM_PNL_COLLECTED_REL = 'aws/tests/fixtures/production-platform-pnl-collected-manifest-2026-11-26.json';
+const PLATFORM_PNL_COLLECTED = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_COLLECTED_REL), 'utf8'));
+const PLATFORM_PNL_APPLIED_BYTES = PLATFORM_PNL_COLLECTED.members['providers/parity/platform-finance.mjs'].live_sha256;
+const platformPnlCollectedPre = (plan) => {
+  for (const [name, entry] of Object.entries(PLATFORM_PNL_COLLECTED.members)) {
+    if (plan.members[name]?.manifest !== PLATFORM_PNL_COLLECTED_REL) continue;
+    plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+  }
+  return plan;
+};
 // Homeowner upload status, applied in production 2026-10-29 (workflow-transitions.mjs, then homeowner.mjs).
 const HOMEOWNER_UPLOAD_STATUS_APPLIED_REL = 'aws/tests/fixtures/production-homeowner-upload-status-applied-manifest-2026-10-29.json';
 // Homeowner timeline link (2026-10-29): planned REPLACE of workflow.mjs from the cash-jobs applied bytes.
@@ -3297,17 +3310,29 @@ test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expec
   assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   // The P&L manifest keeps the pre-apply record.
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace' });
-  const row = PLAN.members[MEMBER];
+  // The row has moved on to the P&L from collected money REPLACE (2026-11-26, planning only) from the bytes this
+  // plan applied: the row is read as it stood before that plan, and those applied bytes stand for main's.
+  const collectedMovedOn = PLAN.members[MEMBER].manifest === PLATFORM_PNL_COLLECTED_REL;
+  const onMain = sha(`aws/functions/api/${MEMBER}`);
+  const row = platformPnlCollectedPre(structuredClone(PLAN)).members[MEMBER];
   assert.equal(row.operation, 'replace');
   assert.equal(row.manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, LIVE);
   assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${MEMBER}`), LIVE);
+  assert.equal(collectedMovedOn ? PLATFORM_PNL_APPLIED_BYTES : onMain, LIVE);
   assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('providers/production/platform-finance.mjs'));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  if (collectedMovedOn) {
+    // The bytes this plan applied are the P&L from collected money REPLACE's expected live bytes: READY for it, and
+    // main's bytes ALREADY_ACCEPTED.
+    assert.equal(PLAN.members[MEMBER].expected_live_sha256, LIVE);
+    assert.equal(done.state, 'READY');
+    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
+  } else {
+    assert.equal(done.state, 'ALREADY_ACCEPTED');
+  }
   assert.equal(done.mutation, false);
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
@@ -11367,4 +11392,52 @@ test('Check Alt sign-in before the claim (2026-11-24, planning only): checkalt-s
     assert.ok(record.notes.includes(text), text);
   }
   assert.ok(PLAN.notes.includes(`Recorded in ${CHECKALT_AUTH_BEFORE_ATTEMPT_APPLIED_REL}. The row expects the applied bytes and names the Check Alt sign-in before the claim applied record.`));
+});
+
+test('Platform Finance P&L from collected money (2026-11-26, planning only): providers/parity/platform-finance.mjs REPLACE from the bytes production run 40001351087 applied, no SQL', async () => {
+  const MEMBER = 'providers/parity/platform-finance.mjs';
+  const PREVIOUS_REL = 'aws/tests/fixtures/production-platform-pnl-applied-manifest-2026-10-23.json';
+  const manifest = PLATFORM_PNL_COLLECTED;
+  const onMain = sha(`aws/functions/api/${MEMBER}`);
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS_REL), 'utf8'));
+  const applied = previous.members[MEMBER].accepted_sha256;
+  assert.equal(manifest.workstream_id, 'production-platform-pnl-collected');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-26\)\. Planning only/);
+  assert.equal(manifest.live_lambda, 'checksops-production-prep-api');
+  for (const text of ['Revenue is what we collected.', 'completed payouts to recipients only each counted once', 'Check alt charges $0.68 per check.',
+    'Moov charges $500 minimum.', 'tenant_maintenance_payments', 'billing_verification', 'sendRecipientKey', 'moov_minimum_topup_cents',
+    'sources_unavailable', 'PROVIDER_COST_RATES', '40001351087', 'read-only production overlay inspect must confirm', 'No release-lock change']) {
+    assert.ok(manifest.notes.includes(text), text);
+  }
+  // From the bytes the P&L accuracy apply put live (VERIFIED, production run 40001351087) to main's bytes.
+  assert.match(previous.notes, /production apply run 40001351087 /);
+  assert.match(previous.notes, /VERIFIED, 5b1ccfdb live/);
+  assert.equal(previous.members[MEMBER].live_sha256, applied);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: onMain, operation: 'replace', previous_manifest: PREVIOUS_REL } });
+  assert.notEqual(onMain, applied);
+  // No hold: no SQL before it.
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
+  assert.ok(PLAN.notes.includes(`${MEMBER} REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`Manifest ${PLATFORM_PNL_COLLECTED_REL}. Nothing deployed.`));
+  // Inspect: the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other bytes a reconciliation stop.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
+  const preAccuracyBytes = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-platform-pnl-manifest-2026-10-23.json'), 'utf8')).members[MEMBER].live_sha256;
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: preAccuracyBytes }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // The read model still precedes the production handler that imports it, and imports nothing new: the same five
+  // modules as the applied bytes (two static, three loaded on demand), not the billing engine whose rules it mirrors.
+  assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('providers/production/platform-finance.mjs'));
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.deepEqual(localImports(source, MEMBER).sort(), ['data.mjs', 'provider-secrets.mjs', 'providers/parity/caller.mjs', 'providers/parity/moov-client.mjs', 'sandbox-credentials.mjs']);
+  // The legacy fee ledger and the per-transfer fee columns are no longer read.
+  for (const gone of ['platform_fee_line_items', 'platform_fee_cents', 'provider_fee_cents']) assert.equal(source.includes(gone), false, gone);
 });

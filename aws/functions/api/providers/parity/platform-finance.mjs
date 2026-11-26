@@ -412,6 +412,38 @@ async function walletPayload({ accountId, environment, fetchImpl }) {
  */
 export const PNL_EXCLUDED_TRANSFER_STATUSES = Object.freeze(['ready', 'failed', 'cancelled', 'canceled', 'returned', 'reversed']);
 
+/**
+ * What the providers charge ChecksOps. Owner, 2026-11-25/26: "Check alt charges $0.68 per
+ * check." "Moov charges $500 minimum. They charge $0.25 for next day disbursement and $0.40
+ * for same day". Confirmed with the owner: the $500 minimum is per calendar month; the
+ * $0.25 / $0.40 apply to payouts to recipients only (not fee collection pulls, not wallet
+ * funding); the top-up to the minimum is not split by tenant and is its own line on the
+ * month and on the total. No overheads (AWS and the like) are counted.
+ *
+ * Dated rows, oldest first: a rate change is a new row with its effective_from (UTC day),
+ * never an edit of an old one. An item is priced by the row in force on its own date.
+ */
+export const PROVIDER_COST_RATES = Object.freeze([
+  Object.freeze({
+    effective_from: '2026-01-01',
+    checkalt_per_check_cents: 68,
+    moov_next_day_cents: 25,
+    moov_same_day_cents: 40,
+    moov_monthly_minimum_cents: 50000,
+  }),
+]);
+
+/** The rate row in force on a date; a date before the first row takes the first row. */
+export function providerCostRatesAt(value) {
+  const at = value instanceof Date ? value : new Date(value);
+  const day = Number.isNaN(at.getTime()) ? '' : at.toISOString().slice(0, 10);
+  let picked = PROVIDER_COST_RATES[0];
+  for (const row of PROVIDER_COST_RATES) {
+    if (row.effective_from <= day) picked = row;
+  }
+  return picked;
+}
+
 /** Calendar month (UTC) as YYYY-MM; pg hands timestamptz back as a Date, not ISO text. */
 export function pnlMonthOf(value) {
   if (!value) return 'unknown';
@@ -419,104 +451,360 @@ export function pnlMonthOf(value) {
   return Number.isNaN(at.getTime()) ? 'unknown' : at.toISOString().slice(0, 7);
 }
 
-async function pnlPayload(client, { environment = null } = {}) {
-  const empty = () => ({
-    fees_cents: 0,
-    transfer_fees_cents: 0,
-    provider_cost_cents: 0,
-    volume_cents: 0,
-    transfer_count: 0,
-  });
-  if (!client?.query) {
-    const totals = { ...empty(), revenue_cents: 0, profit_cents: 0 };
-    return { totals, months: [], tenants: [] };
-  }
-  const since = new Date();
-  since.setMonth(since.getMonth() - 11);
-  since.setDate(1);
-  const sinceIso = new Date(Date.UTC(since.getUTCFullYear(), since.getUTCMonth(), 1)).toISOString();
-  let tenants = [];
-  let fees = [];
-  let transfers = [];
-  try {
-    tenants = (await client.query('SELECT id, name, is_test_account FROM public.tenants')).rows;
-  } catch {
+/**
+ * The P&L window: from the first day (UTC) of the month 11 months before the current UTC
+ * month, through now. Date.UTC normalises the month, so the 29th-31st cannot overflow into
+ * the following month the way setMonth on the current day did.
+ */
+export function pnlWindow(now = new Date()) {
+  const at = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  return {
+    since: new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() - 11, 1)),
+    until: at,
+  };
+}
+
+/** The P&L sources, as they are named in sources_unavailable. */
+export const PNL_SOURCES = Object.freeze(['tenants', 'collected_revenue', 'payouts', 'check_deposits']);
+
+/** A payout to a recipient is one or two of these legs (providers/production/moov-send.mjs SEND_LEG_ROLES). */
+export const PNL_SEND_LEG_ROLES = Object.freeze(['send_wallet', 'send_bank']);
+// BILLABLE_TRANSFER_STATUSES and the not-yet statuses of transferIsQualifying (tenant-billing-engine.mjs).
+const PNL_COMPLETED_TRANSFER_STATUSES = Object.freeze(['completed', 'settled', 'succeeded']);
+const PNL_NOT_YET_TRANSFER_STATUSES = Object.freeze(['pending', 'created']);
+/**
+ * Deposits the check provider received: approved or accepted ('submitted', 'cleared'; SQL 120,
+ * aws_record_checkalt_billing_event) and 'returned' (a returned check was submitted and charged).
+ */
+export const PNL_SUBMITTED_DEPOSIT_STATUSES = Object.freeze(['submitted', 'cleared', 'returned']);
+const PNL_VERIFICATION_OCCURRENCE = 'billing_verification'; // OCCURRENCE_KIND_VERIFICATION, tenant-billing-engine.mjs
+
+/**
+ * A completed send leg: transferIsQualifying (tenant-billing-engine.mjs: completed_at set, or
+ * a completed status, and not failed / canceled / ready / pending / created), and not sent
+ * back afterwards (returned, reversed). Replicated here: the engine is not imported by a
+ * read model.
+ */
+export function pnlTransferIsCompleted(transfer) {
+  if (!transfer) return false;
+  const status = String(transfer.status || '').toLowerCase();
+  if (PNL_EXCLUDED_TRANSFER_STATUSES.includes(status) || PNL_NOT_YET_TRANSFER_STATUSES.includes(status)) return false;
+  if (transfer.completed_at) return true;
+  return PNL_COMPLETED_TRANSFER_STATUSES.includes(status);
+}
+
+function pnlMetadataOf(transfer) {
+  const meta = transfer?.provider_metadata;
+  if (meta && typeof meta === 'object') return meta;
+  if (typeof meta === 'string') {
     try {
-      tenants = (await client.query('SELECT id, name FROM public.tenants')).rows;
-    } catch { /* optional */ }
+      const parsed = JSON.parse(meta);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
   }
+  return {};
+}
+
+/**
+ * One recipient of one send is one payout: its wallet leg and its bank top-up leg share
+ * provider_metadata request_hash and recipient_index. Same key as sendRecipientKey
+ * (tenant-billing-engine.mjs, SQL 120), within the tenant.
+ */
+export function pnlPayoutKey(transfer) {
+  const meta = pnlMetadataOf(transfer);
+  const hash = meta.request_hash == null ? '' : String(meta.request_hash);
+  const tenant = transfer?.tenant_id || 'unassigned';
+  if (!hash) return `${tenant}|leg:${transfer?.id}`;
+  const recipient = meta.recipient_index == null ? '' : String(meta.recipient_index);
+  return `${tenant}|send:${hash}:${recipient}`;
+}
+
+/**
+ * The delivery speed of a send leg that is an ACH credit to a bank: 'same_day', 'next_day',
+ * or null when the leg has no such fee. Speed names as feeTypeForTransfer
+ * (tenant-billing-engine.mjs): standard is next day; instant or an unknown speed has no rate
+ * here. A leg to the recipient's wallet (destination_kind 'wallet') uses no ACH rail.
+ */
+export function pnlAchCreditSpeed(transfer) {
+  if (String(pnlMetadataOf(transfer).destination_kind || '').toLowerCase() === 'wallet') return null;
+  const speed = String(transfer?.requested_speed || transfer?.speed || 'standard').toLowerCase().replace(/-/g, '_');
+  if (speed === 'same_day' || speed === 'moov_same_day') return 'same_day';
+  if (['standard', 'next_day', 'moov_next_day', 'ach'].includes(speed)) return 'next_day';
+  return null;
+}
+
+const pnlTimeOf = (value) => {
+  if (!value) return NaN;
+  return (value instanceof Date ? value : new Date(value)).getTime();
+};
+
+const pnlNextMonth = (month) => {
+  const [year, index] = month.split('-').map(Number);
+  return new Date(Date.UTC(year, index, 1)).toISOString().slice(0, 7);
+};
+
+const pnlBucket = () => ({
+  revenue_cents: 0,
+  checkalt_cost_cents: 0,
+  moov_cost_cents: 0,
+  volume_cents: 0,
+  payout_count: 0,
+  check_count: 0,
+  next_day_count: 0,
+  same_day_count: 0,
+});
+
+/**
+ * The row the panel reads. The keys it already had keep their place with the new meaning:
+ * fees_cents is the collected revenue, transfer_fees_cents is 0 (no per-transfer fee is
+ * collected apart from the settled obligations) and transfer_count is the payout count.
+ * topupCents is null on tenant rows: the monthly minimum is not attributed to a tenant.
+ */
+function pnlShape(bucket, topupCents = null) {
+  const moov = bucket.moov_cost_cents + (topupCents || 0);
+  const providerCost = bucket.checkalt_cost_cents + moov;
+  return {
+    fees_cents: bucket.revenue_cents,
+    transfer_fees_cents: 0,
+    provider_cost_cents: providerCost,
+    volume_cents: bucket.volume_cents,
+    transfer_count: bucket.payout_count,
+    revenue_cents: bucket.revenue_cents,
+    profit_cents: bucket.revenue_cents - providerCost,
+    checkalt_cost_cents: bucket.checkalt_cost_cents,
+    moov_cost_cents: moov,
+    check_count: bucket.check_count,
+    payout_count: bucket.payout_count,
+    next_day_count: bucket.next_day_count,
+    same_day_count: bucket.same_day_count,
+    ...(topupCents === null ? {} : { moov_minimum_topup_cents: topupCents }),
+  };
+}
+
+function pnlCostBasis() {
+  return {
+    estimated: true,
+    rates: PROVIDER_COST_RATES.map((row) => ({ ...row })),
+    notes: [
+      'Provider cost is an estimate from the rates above, not the provider invoices.',
+      'Revenue is money collected: settled tenant billing obligations by settlement date; the $1.00 bank verification debits are not revenue.',
+      'Volume and payout count are completed payouts to recipients, each counted once; the legs of one payout add up to its amount.',
+      'Payout fee: one per completed send leg that is an ACH credit to a bank, by delivery speed; a leg to a wallet has none.',
+      'Check fee: one per check submitted for deposit, counted once at its first submission.',
+      'The monthly minimum applies from the first month with a completed payout in the window through the current month; its top-up is not attributed to any organization.',
+      'No overheads are counted.',
+    ],
+  };
+}
+
+/**
+ * One P&L read. A failed read (missing table, missing permission) is named in `unavailable`
+ * and logged, so a zero is never presented as a fact; the savepoint keeps the request's
+ * transaction usable for the remaining reads. Returns null when the read failed.
+ */
+async function pnlRead(client, source, unavailable, sql, params = []) {
+  const savepoint = `pnl_${source}`;
+  let held = false;
   try {
-    fees = (await client.query(
-      `SELECT tenant_id, amount_cents, occurred_at, fee_code, status
-         FROM public.platform_fee_line_items
-        WHERE occurred_at >= $1`,
-      [sinceIso],
-    )).rows;
-  } catch { /* optional */ }
+    await client.query(`SAVEPOINT ${savepoint}`);
+    held = true;
+  } catch { /* not inside a transaction: the read stands on its own */ }
   try {
-    // Only this environment's money: production P&L never counts sandbox (test account) transfers.
-    transfers = (await client.query(
-      environment
-        ? `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
-             FROM public.payment_transfers
-            WHERE created_at >= $1 AND environment = $2`
-        : `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
-             FROM public.payment_transfers
-            WHERE created_at >= $1`,
-      environment ? [sinceIso, environment] : [sinceIso],
-    )).rows;
-  } catch { /* optional */ }
+    const { rows } = await client.query(sql, params);
+    if (held) {
+      try { await client.query(`RELEASE SAVEPOINT ${savepoint}`); } catch { /* nothing to release */ }
+    }
+    return rows || [];
+  } catch (error) {
+    if (held) {
+      try { await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`); } catch { /* transaction already over */ }
+    }
+    if (!unavailable.includes(source)) unavailable.push(source);
+    console.warn('platform_finance_pnl_source_unavailable', JSON.stringify({ source, code: error?.code ?? null }));
+    return null;
+  }
+}
+
+export async function pnlPayload(client, { environment = null, now = new Date() } = {}) {
+  const window = pnlWindow(now);
+  const sinceIso = window.since.toISOString();
+  const untilIso = window.until.toISOString();
+  const sinceMs = window.since.getTime();
+  const untilMs = window.until.getTime();
+  const inWindow = (value) => {
+    const at = pnlTimeOf(value);
+    return !Number.isNaN(at) && at >= sinceMs && at <= untilMs;
+  };
+  if (!client?.query) {
+    return {
+      since: sinceIso,
+      until: untilIso,
+      totals: pnlShape(pnlBucket(), 0),
+      months: [],
+      tenants: [],
+      cost_basis: pnlCostBasis(),
+      sources_unavailable: [...PNL_SOURCES],
+    };
+  }
+  const unavailable = [];
+
+  let tenants = await pnlRead(client, 'tenants', [], 'SELECT id, name, is_test_account FROM public.tenants');
+  if (tenants === null) {
+    // Without the flag, demo (test account) organizations cannot be told apart: named below.
+    tenants = await pnlRead(client, 'tenants', unavailable, 'SELECT id, name FROM public.tenants');
+    if (tenants !== null && environment === 'production') unavailable.push('test_account_flag');
+  }
+
+  // Revenue is what was collected: settled billing obligations, on the day they settled.
+  // The collection legs of an obligation (payment_transfers, tenant-collection-v2) are parts
+  // of the same money and are not read here.
+  const payments = await pnlRead(
+    client,
+    'collected_revenue',
+    unavailable,
+    `SELECT tenant_id, amount_cents, status, settled_at, occurrence_kind, provider_environment
+       FROM public.tenant_maintenance_payments
+      WHERE status = 'settled'
+        AND settled_at >= $1 AND settled_at <= $2
+        AND occurrence_kind IS DISTINCT FROM '${PNL_VERIFICATION_OCCURRENCE}'${environment ? `
+        AND provider_environment = $3` : ''}`,
+    environment ? [sinceIso, untilIso, environment] : [sinceIso, untilIso],
+  );
+
+  // Only this environment's money: production P&L never counts sandbox (test account) transfers.
+  const legs = await pnlRead(
+    client,
+    'payouts',
+    unavailable,
+    `SELECT id, tenant_id, environment, amount_cents, status, speed, leg_role, completed_at, created_at, provider_metadata
+       FROM public.payment_transfers
+      WHERE leg_role IN (${PNL_SEND_LEG_ROLES.map((role) => `'${role}'`).join(', ')})
+        AND (completed_at IS NOT NULL OR lower(status) IN (${PNL_COMPLETED_TRANSFER_STATUSES.map((status) => `'${status}'`).join(', ')}))
+        AND COALESCE(completed_at, created_at) >= $1 AND COALESCE(completed_at, created_at) <= $2${environment ? `
+        AND environment = $3` : ''}`,
+    environment ? [sinceIso, untilIso, environment] : [sinceIso, untilIso],
+  );
+
+  // No lower bound: a check is counted once, at its first submission, which may precede a
+  // later deposit row of the same check. This table has no environment column.
+  const deposits = await pnlRead(
+    client,
+    'check_deposits',
+    unavailable,
+    `SELECT id, tenant_id, check_intake_item_id, checkalt_reference, status, submitted_at
+       FROM public.checkalt_deposits
+      WHERE checkalt_reference IS NOT NULL
+        AND submitted_at IS NOT NULL AND submitted_at <= $1
+        AND status IN (${PNL_SUBMITTED_DEPOSIT_STATUSES.map((status) => `'${status}'`).join(', ')})`,
+    [untilIso],
+  );
 
   const nameById = new Map((tenants || []).map((row) => [row.id, row.name]));
   // Production P&L leaves out demo (test account) organizations: they run on the sandbox ledger.
   const excludedTenants = new Set(environment === 'production'
     ? (tenants || []).filter((row) => row.is_test_account === true).map((row) => row.id)
     : []);
-  const monthOf = pnlMonthOf;
   const byMonth = new Map();
   const byTenant = new Map();
   const bump = (map, key) => {
-    if (!map.has(key)) map.set(key, empty());
+    if (!map.has(key)) map.set(key, pnlBucket());
     return map.get(key);
   };
-  for (const fee of fees || []) {
-    if (String(fee.status || '').toLowerCase() === 'void') continue;
-    if (excludedTenants.has(fee.tenant_id)) continue;
-    const amount = Number(fee.amount_cents || 0);
-    bump(byMonth, monthOf(fee.occurred_at)).fees_cents += amount;
-    bump(byTenant, fee.tenant_id || 'unassigned').fees_cents += amount;
-  }
-  for (const transfer of transfers || []) {
-    const status = String(transfer.status || '').toLowerCase();
-    if (PNL_EXCLUDED_TRANSFER_STATUSES.includes(status)) continue;
-    if (excludedTenants.has(transfer.tenant_id)) continue;
-    for (const bucket of [bump(byMonth, monthOf(transfer.created_at)), bump(byTenant, transfer.tenant_id || 'unassigned')]) {
-      bucket.transfer_fees_cents += Number(transfer.platform_fee_cents || 0);
-      bucket.provider_cost_cents += Number(transfer.provider_fee_cents || 0);
-      bucket.volume_cents += Number(transfer.amount_cents || 0);
-      bucket.transfer_count += 1;
+  const bucketsOf = (tenantId, at) => [bump(byMonth, pnlMonthOf(at)), bump(byTenant, tenantId || 'unassigned')];
+
+  for (const payment of payments || []) {
+    if (String(payment.status || '').toLowerCase() !== 'settled') continue;
+    if (payment.occurrence_kind === PNL_VERIFICATION_OCCURRENCE) continue;
+    if (environment && payment.provider_environment !== environment) continue;
+    if (!inWindow(payment.settled_at)) continue;
+    if (excludedTenants.has(payment.tenant_id)) continue;
+    for (const bucket of bucketsOf(payment.tenant_id, payment.settled_at)) {
+      bucket.revenue_cents += Number(payment.amount_cents || 0);
     }
   }
-  const shape = (bucket) => {
-    const revenue = bucket.fees_cents + bucket.transfer_fees_cents;
-    return { ...bucket, revenue_cents: revenue, profit_cents: revenue - bucket.provider_cost_cents };
-  };
+
+  const payoutFirstLeg = new Map();
+  let firstPayoutMonth = null;
+  for (const leg of legs || []) {
+    if (!PNL_SEND_LEG_ROLES.includes(leg.leg_role)) continue;
+    if (!pnlTransferIsCompleted(leg)) continue;
+    if (environment && leg.environment !== undefined && leg.environment !== environment) continue;
+    const at = leg.completed_at || leg.created_at;
+    if (!inWindow(at)) continue;
+    if (excludedTenants.has(leg.tenant_id)) continue;
+    const speed = pnlAchCreditSpeed(leg);
+    const rates = providerCostRatesAt(at);
+    const fee = speed === 'same_day' ? rates.moov_same_day_cents : speed === 'next_day' ? rates.moov_next_day_cents : 0;
+    for (const bucket of bucketsOf(leg.tenant_id, at)) {
+      bucket.volume_cents += Number(leg.amount_cents || 0);
+      bucket.moov_cost_cents += fee;
+      if (speed === 'same_day') bucket.same_day_count += 1;
+      if (speed === 'next_day') bucket.next_day_count += 1;
+    }
+    const month = pnlMonthOf(at);
+    if (firstPayoutMonth === null || month < firstPayoutMonth) firstPayoutMonth = month;
+    const key = pnlPayoutKey(leg);
+    const first = payoutFirstLeg.get(key);
+    if (!first || pnlTimeOf(at) < pnlTimeOf(first.at)) payoutFirstLeg.set(key, { at, tenantId: leg.tenant_id });
+  }
+  // A payout whose legs completed in different months is counted in the month of its first leg.
+  for (const { at, tenantId } of payoutFirstLeg.values()) {
+    for (const bucket of bucketsOf(tenantId, at)) bucket.payout_count += 1;
+  }
+
+  const firstSubmission = new Map();
+  for (const deposit of deposits || []) {
+    if (!deposit.checkalt_reference || !deposit.submitted_at) continue;
+    if (!PNL_SUBMITTED_DEPOSIT_STATUSES.includes(String(deposit.status || '').toLowerCase())) continue;
+    const at = pnlTimeOf(deposit.submitted_at);
+    if (Number.isNaN(at) || at > untilMs) continue;
+    const key = deposit.check_intake_item_id ? `check:${deposit.check_intake_item_id}` : `reference:${deposit.checkalt_reference}`;
+    const first = firstSubmission.get(key);
+    if (!first || at < pnlTimeOf(first.submitted_at)) firstSubmission.set(key, deposit);
+  }
+  for (const deposit of firstSubmission.values()) {
+    if (!inWindow(deposit.submitted_at)) continue;
+    if (excludedTenants.has(deposit.tenant_id)) continue;
+    const rates = providerCostRatesAt(deposit.submitted_at);
+    for (const bucket of bucketsOf(deposit.tenant_id, deposit.submitted_at)) {
+      bucket.check_count += 1;
+      bucket.checkalt_cost_cents += rates.checkalt_per_check_cents;
+    }
+  }
+
+  // The monthly minimum: from the first month with a completed payout through the current
+  // month, never for a month before the payout provider was in use.
+  const topupByMonth = new Map();
+  if (firstPayoutMonth) {
+    const currentMonth = pnlMonthOf(window.until);
+    for (let month = firstPayoutMonth; month <= currentMonth; month = pnlNextMonth(month)) {
+      const minimum = providerCostRatesAt(`${month}-01T00:00:00Z`).moov_monthly_minimum_cents;
+      topupByMonth.set(month, Math.max(0, minimum - bump(byMonth, month).moov_cost_cents));
+    }
+  }
+
   const months = [...byMonth.entries()]
-    .filter(([key]) => key !== 'unknown')
     .sort(([left], [right]) => (left < right ? -1 : 1))
-    .map(([month, bucket]) => ({ month, ...shape(bucket) }));
+    .map(([month, bucket]) => ({ month, ...pnlShape(bucket, topupByMonth.get(month) ?? 0) }));
   const tenantRows = [...byTenant.entries()]
-    .map(([id, bucket]) => ({ tenant_id: id, tenant_name: nameById.get(id) ?? 'Unassigned', ...shape(bucket) }))
+    .map(([id, bucket]) => ({ tenant_id: id, tenant_name: nameById.get(id) ?? 'Unassigned', ...pnlShape(bucket) }))
     .sort((left, right) => right.revenue_cents - left.revenue_cents);
-  const totals = shape([...byTenant.values()].reduce((acc, bucket) => {
-    acc.fees_cents += bucket.fees_cents;
-    acc.transfer_fees_cents += bucket.transfer_fees_cents;
-    acc.provider_cost_cents += bucket.provider_cost_cents;
-    acc.volume_cents += bucket.volume_cents;
-    acc.transfer_count += bucket.transfer_count;
-    return acc;
-  }, empty()));
-  return { since: sinceIso, totals, months, tenants: tenantRows };
+  const sum = pnlBucket();
+  for (const bucket of byMonth.values()) {
+    for (const key of Object.keys(sum)) sum[key] += bucket[key];
+  }
+  const totals = pnlShape(sum, [...topupByMonth.values()].reduce((acc, cents) => acc + cents, 0));
+  return {
+    since: sinceIso,
+    until: untilIso,
+    totals,
+    months,
+    tenants: tenantRows,
+    cost_basis: pnlCostBasis(),
+    sources_unavailable: unavailable,
+  };
 }
 
 async function statusPayload({ client, accountId, environment, fetchImpl }) {
