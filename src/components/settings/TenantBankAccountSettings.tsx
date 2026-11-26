@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Banknote, Plus, Trash2, ShieldCheck, MailCheck, Lock, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Banknote, Trash2, ShieldCheck, MailCheck, Lock, ShieldAlert } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
 import { BankVerification } from "@/components/disbursement/BankVerification";
@@ -25,7 +25,6 @@ export function TenantBankAccountSettings() {
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
   const qc = useQueryClient();
-  const [isStarting, setIsStarting] = useState(false);
 
 
   const { data: accounts = [], isLoading } = useQuery({
@@ -49,74 +48,6 @@ export function TenantBankAccountSettings() {
       return data ?? [];
     },
   });
-
-  const addAccount = useMutation({
-    mutationFn: async () => {
-      let insertedId: string | null = null;
-      // Create placeholder row; the bank-verification rail fills in all real fields:
-      // routing, account, account type, holder name, and bank name.
-      const { data: inserted, error } = await supabase
-        .from("stakeholder_accounts")
-        .insert({
-          nickname: "Bank Account (pending verification)",
-          custname: "Pending",
-          acct_type: "C",
-          chk_aba: "000000000",
-          chk_acct: "0000000000",
-          account_type: "operating",
-          is_primary: true,
-          tenant_id: tenant!.id,
-          created_by: user!.id,
-        } as any)
-        .select("id")
-        .single();
-      if (error) throw error;
-      insertedId = inserted!.id;
-
-      try {
-        // Moov rail: the row lands unverified and the
-        // inline Moov Link widget on the account card finishes the job.
-        // Legacy rails are disabled globally.
-        return null;
-      } catch (e: any) {
-        if (insertedId) {
-          await supabase
-            .from("stakeholder_accounts")
-            .update({ is_active: false, verification_status: "failed", verification_failure_reason: e.message })
-            .eq("id", insertedId);
-        }
-        throw e;
-      }
-    },
-    onMutate: () => setIsStarting(true),
-    onSettled: () => setIsStarting(false),
-    onSuccess: (url) => {
-      if (!url) {
-        toast({
-          title: "Account added",
-          description: "Click \u201cVerify with bank login\u201d below to link it.",
-        });
-      }
-      if (url) {
-        // Open as a normal full-size tab, not a constrained popup — OAuth-based
-        // bank redirects (Wells Fargo, Chase, etc. via Moov) can lose session
-        // state inside small fixed-size popup windows, especially on mobile.
-        const win = window.open(url, "_blank", "noopener,noreferrer");
-        if (!win) {
-          toast({
-            title: "Popup blocked",
-            description: "Allow popups, then click 'Verify with bank login' on the new account.",
-            variant: "destructive",
-          });
-        } else {
-          toast({ title: "Bank login opened", description: "Sign in with your bank — we'll fill in the rest automatically." });
-        }
-      }
-      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
 
   const resendVerification = useMutation({
     mutationFn: async (id: string) => {
@@ -196,25 +127,15 @@ export function TenantBankAccountSettings() {
           <div>
             <p className="text-sm text-muted-foreground">
               Link a primary business account for all claim deposits and treasury operations.
+              To add or change it, go to Settings → Compliance &amp; Docs → Bank and click “Add bank account”.
             </p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => addAccount.mutate()}
-            disabled={isStarting}
-          >
-            {isStarting
-              ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Opening bank login...</>
-              : <><Plus className="h-3 w-3 mr-1" /> Add account</>}
-          </Button>
         </div>
 
 
           {accounts.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-4">
-              No bank account added yet. Click "Add account" to sign in with your bank and verify instantly.
+              No bank account added yet. Add it under Settings → Compliance &amp; Docs → Bank (“Add bank account”), then verify it.
             </p>
           )}
 
