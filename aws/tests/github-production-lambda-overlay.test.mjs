@@ -182,7 +182,22 @@ const PLATFORM_PNL_COLLECTED_RELS = [PLATFORM_PNL_COLLECTED_REL, PLATFORM_PNL_CO
 const PLATFORM_PNL_PER_ITEM_COST_REL = 'aws/tests/fixtures/production-platform-pnl-per-item-cost-manifest-2026-11-26.json';
 const PLATFORM_PNL_PER_ITEM_COST = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_PER_ITEM_COST_REL), 'utf8'));
 const PLATFORM_PNL_COLLECTED_APPLIED_BYTES = PLATFORM_PNL_PER_ITEM_COST.members['providers/parity/platform-finance.mjs'].live_sha256;
-const platformPnlPerItemCostPre = (plan) => {
+// Applied 2026-11-26 (production run 45819277560, VERIFIED): the row expects the applied bytes and names the applied
+// record, which chains to the planning manifest. platformPnlPerItemCostRecordPre reads the row as it stood before that
+// apply; PLATFORM_PNL_PER_ITEM_COST_RELS names the row in either state.
+const PLATFORM_PNL_PER_ITEM_COST_APPLIED_REL = 'aws/tests/fixtures/production-platform-pnl-per-item-cost-applied-manifest-2026-11-26.json';
+const PLATFORM_PNL_PER_ITEM_COST_RELS = [PLATFORM_PNL_PER_ITEM_COST_REL, PLATFORM_PNL_PER_ITEM_COST_APPLIED_REL];
+const platformPnlPerItemCostRecordPre = (plan) => {
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_PER_ITEM_COST_APPLIED_REL), 'utf8'));
+  for (const [name, entry] of Object.entries(record.members)) {
+    if (plan.members[name]?.manifest !== PLATFORM_PNL_PER_ITEM_COST_APPLIED_REL) continue;
+    assert.equal(entry.previous_manifest, PLATFORM_PNL_PER_ITEM_COST_REL, name);
+    plan.members[name] = { ...plan.members[name], expected_live_sha256: PLATFORM_PNL_PER_ITEM_COST.members[name].live_sha256, manifest: entry.previous_manifest };
+  }
+  return plan;
+};
+const platformPnlPerItemCostPre = (plan0) => {
+  const plan = platformPnlPerItemCostRecordPre(plan0);
   for (const [name, entry] of Object.entries(PLATFORM_PNL_PER_ITEM_COST.members)) {
     if (plan.members[name]?.manifest !== PLATFORM_PNL_PER_ITEM_COST_REL) continue;
     plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
@@ -11437,7 +11452,8 @@ test('Platform Finance P&L from collected money (2026-11-26, planning only): pro
   // The row has moved on to the per-item provider cost REPLACE (2026-11-26, planning only) from the bytes this plan
   // applied (production run 45744634576): the row is read as it stood before that plan (rowBeforePerItem), and those
   // applied bytes (accepted) stand for main's.
-  const perItemMovedOn = PLAN.members[MEMBER].manifest === PLATFORM_PNL_PER_ITEM_COST_REL;
+  // (Applied 2026-11-26, production run 45819277560: the applied record is read back to the plan it applied.)
+  const perItemMovedOn = PLATFORM_PNL_PER_ITEM_COST_RELS.includes(PLAN.members[MEMBER].manifest);
   const onMain = sha(`aws/functions/api/${MEMBER}`);
   const accepted = perItemMovedOn ? PLATFORM_PNL_COLLECTED_APPLIED_BYTES : onMain;
   const rowBeforePerItem = platformPnlPerItemCostPre(structuredClone(PLAN)).members[MEMBER];
@@ -11544,7 +11560,11 @@ test('Platform Finance P&L provider cost from per-item fees only (2026-11-26, pl
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: onMain, operation: 'replace', previous_manifest: PREVIOUS_REL } });
   assert.notEqual(onMain, applied);
   // No hold: no SQL before it.
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_PER_ITEM_COST_REL });
+  // Applied 2026-11-26 (production run 45819277560): the row expects main's bytes and names the applied record, which
+  // chains to this planning manifest; read the row back as it stood before the apply.
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_PER_ITEM_COST_APPLIED_REL), 'utf8'));
+  const beforeApply = { ...PLAN.members[MEMBER], expected_live_sha256: manifest.members[MEMBER].live_sha256, manifest: record.members[MEMBER].previous_manifest };
+  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_PER_ITEM_COST_REL });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
   assert.ok(manifest.notes.includes(`${MEMBER} REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
@@ -11553,9 +11573,12 @@ test('Platform Finance P&L provider cost from per-item fees only (2026-11-26, pl
   // Read back, the row is the applied record's.
   assert.deepEqual(platformPnlPerItemCostPre(structuredClone(PLAN)).members[MEMBER],
     { operation: 'replace', accepted_sha256: applied, expected_live_sha256: applied, sql_before: null, manifest: PREVIOUS_REL });
-  // Inspect: the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other bytes a reconciliation stop.
+  // Inspect (as the row stood before the apply): the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other
+  // bytes a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) });
+  const planBeforeApply = platformPnlPerItemCostRecordPre(structuredClone(PLAN));
+  assert.deepEqual(planBeforeApply.members[MEMBER], beforeApply);
+  const ready = await run(inspect, { root: ROOT, plan: planBeforeApply, inspectLive: liveFor(MEMBER, { sha256: applied }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
@@ -11579,4 +11602,29 @@ test('Platform Finance P&L provider cost from per-item fees only (2026-11-26, pl
   for (const key of ['check_processing_cost_cents', 'disbursement_cost_cents', 'checkalt_monthly_minimum_cents: 100000', 'moov_monthly_minimum_cents: 50000', 'provider_minimums']) {
     assert.ok(source.includes(key), key);
   }
+  // The record (2026-11-26): main's bytes are live and the row expects them; the bytes it replaced are now refused.
+  assert.equal(record.workstream_id, 'production-platform-pnl-per-item-cost-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only \(2026-11-26\)/);
+  assert.equal(record.live_lambda, 'checksops-production-prep-api');
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: PLATFORM_PNL_PER_ITEM_COST_REL } });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: PLATFORM_PNL_PER_ITEM_COST_APPLIED_REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  for (const runId of ['45817550107', '45817685011', '45818192750', '45818197991', '45819277560']) {
+    assert.match(record.notes, new RegExp(`\\b${runId}\\b`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  // The first staging inspect (failed at its smoke, nothing applied) is in the record only.
+  assert.match(record.notes, /\b45812481347\b/);
+  for (const text of ['235b0f6f66cc917b268573bcaa1f80e0d4ff9ffb', '"DEPLOY providers/parity/platform-finance.mjs TO PRODUCTION"', '"deploy it to staging"',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/45817685011', 'B7pnMSPcBWmcRl2cZfO4YNV9nIpOselmkH7nwP/h2Bk=',
+    '3b503ebd-8222-437e-aefa-ccabad6a8337', '0BAQzmST+x//JqZcPFX6jdkgDS6lKSlsZBMgHK4qV1o=', '55fc8834-701f-4d10-8bc2-641beed8aef5', 'VERIFIED',
+    'errors []', 'Not read for this record', 'Not verified by this record']) {
+    assert.ok(record.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${PLATFORM_PNL_PER_ITEM_COST_APPLIED_REL}. The row expects the applied bytes and names the Platform Finance P&L provider cost from per-item fees only applied record.`));
 });
