@@ -1,0 +1,15 @@
+{
+  "id": "settlement-bank-state-inspect",
+  "read_only": true,
+  "apply": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "tool": "scripts/deployment-guard/settlement-bank-state-inspect.mjs",
+  "runbook": "ops/production-settlement-bank-state-inspect.md",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "note": "Inspect-only configuration (no pin, no execute, no apply). Same production RDS and checksops_admin secret as ops/deployment-guard/mortgage-desk-access-production-inspect.json. The tool takes only --inspect, runs one BEGIN READ ONLY ... ROLLBACK of fixed SELECTs scoped to one tenant (Condition One, a bind parameter fixed in the tool) over payment_provider_accounts, payment_provider_methods, payment_method_verifications, payment_event_log (30 days), financial_stepup_log (14 days) and stakeholder_accounts, and prints counts, code labels, booleans and minute timestamps only: no ids, names, bank names, account or routing digits, amounts, error text or payload values.",
+  "production_inspect": null
+}
