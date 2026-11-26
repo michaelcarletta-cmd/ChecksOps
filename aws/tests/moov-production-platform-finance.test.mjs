@@ -242,13 +242,13 @@ test('Wallet & P&L overview: platform wallet balance and transactions plus the P
     assert.equal(result.wallet.wallet_id, 'wallet-platform');
     assert.equal(result.wallet.available_cents, 123456);
     assert.equal(result.wallet.transactions.length, 1);
-    // Collected $25.00; one check ($0.68) and one next-day payout ($0.25, topped up to the $500.00 monthly minimum).
+    // Collected $25.00; one check ($0.68) and one next-day payout ($0.25). No monthly minimum is applied.
     assert.equal(result.pnl.totals.revenue_cents, 2500);
     assert.equal(result.pnl.totals.checkalt_cost_cents, 68);
-    assert.equal(result.pnl.totals.moov_cost_cents, 50000);
-    assert.equal(result.pnl.totals.moov_minimum_topup_cents, 49975);
-    assert.equal(result.pnl.totals.provider_cost_cents, 50068);
-    assert.equal(result.pnl.totals.profit_cents, 2500 - 50068);
+    assert.equal(result.pnl.totals.moov_cost_cents, 25);
+    assert.equal(result.pnl.totals.moov_minimum_topup_cents, 0);
+    assert.equal(result.pnl.totals.provider_cost_cents, 93);
+    assert.equal(result.pnl.totals.profit_cents, 2500 - 93);
     assert.equal(result.pnl.totals.volume_cents, 100000);
     assert.equal(result.pnl.totals.payout_count, 1);
     assert.equal(result.pnl.cost_basis.estimated, true);
@@ -352,6 +352,8 @@ test('rates: the owner\'s figures, one dated row, picked by the item\'s date', (
     checkalt_per_check_cents: 68,
     moov_next_day_cents: 25,
     moov_same_day_cents: 40,
+    // The two monthly minimums are recorded for information and never applied (owner 2026-11-26).
+    checkalt_monthly_minimum_cents: 100000,
     moov_monthly_minimum_cents: 50000,
   }]);
   assert.ok(Object.isFrozen(PROVIDER_COST_RATES) && Object.isFrozen(PROVIDER_COST_RATES[0]));
@@ -587,7 +589,7 @@ test('check fee: $0.68 per check submitted, counted once however many deposit ro
   assert.equal(result.totals.check_count, 4);
   assert.equal(result.totals.checkalt_cost_cents, 4 * 68);
   assert.equal(result.totals.provider_cost_cents, 4 * 68);
-  assert.equal(result.totals.moov_minimum_topup_cents, 0, 'no payout in the window: no monthly minimum');
+  assert.equal(result.totals.moov_minimum_topup_cents, 0);
   assert.equal(month(result, '2026-10').check_count, 1);
   assert.equal(month(result, '2026-11').check_count, 3);
   assert.equal(tenantRow(result, TENANT).checkalt_cost_cents, 2 * 68);
@@ -597,7 +599,7 @@ test('check fee: $0.68 per check submitted, counted once however many deposit ro
   assert.match(query.sql, /status IN \('submitted', 'cleared', 'returned'\)/);
 });
 
-test('the $500.00 monthly minimum: applied from the first payout month through the current month, never split by organization', async () => {
+test('no monthly minimum is applied: every month, organization and total costs only its per-item fees', async () => {
   const many = (count, over) => Array.from({ length: count }, (_, i) => sendLeg({ ...over, id: `${over.id}-${i}` }));
   const { result } = await pnl({
     payments: [
@@ -608,41 +610,110 @@ test('the $500.00 monthly minimum: applied from the first payout month through t
     transfers: [
       sendLeg({ id: 'sep-1', speed: 'standard', completed_at: at('2026-09-10T00:00:00Z') }),
       sendLeg({ id: 'sep-2', tenant_id: OTHER, speed: 'same_day', completed_at: at('2026-09-11T00:00:00Z') }),
-      // November is over the minimum: 1,500 same-day legs are $600.00.
+      // November: 1,500 same-day legs are $600.00 of fees, more than the transfer provider's minimum.
       ...many(1500, { id: 'nov', tenant_id: OTHER, speed: 'same_day', amount_cents: 100, completed_at: at('2026-11-05T00:00:00Z') }),
     ],
   });
-  assert.deepEqual(result.months.map((m) => m.month), ['2026-08', '2026-09', '2026-10', '2026-11']);
-  // August: before the payout provider was in use, so no minimum.
-  assert.deepEqual([month(result, '2026-08').moov_cost_cents, month(result, '2026-08').moov_minimum_topup_cents], [0, 0]);
+  // October has no activity and no minimum is owed for it: it is not a row.
+  assert.deepEqual(result.months.map((m) => m.month), ['2026-08', '2026-09', '2026-11']);
+  // August: one check, no payout.
+  assert.deepEqual([month(result, '2026-08').checkalt_cost_cents, month(result, '2026-08').moov_cost_cents], [68, 0]);
   assert.equal(month(result, '2026-08').provider_cost_cents, 68);
   assert.equal(month(result, '2026-08').profit_cents, 30000 - 68);
-  // September: $0.25 + $0.40 of fees, topped up to $500.00.
-  assert.deepEqual([month(result, '2026-09').moov_cost_cents, month(result, '2026-09').moov_minimum_topup_cents], [50000, 50000 - 65]);
-  assert.equal(month(result, '2026-09').profit_cents, -50000);
-  // October: no payout at all, the minimum is still owed.
-  assert.deepEqual([month(result, '2026-10').moov_cost_cents, month(result, '2026-10').moov_minimum_topup_cents], [50000, 50000]);
-  assert.equal(month(result, '2026-10').payout_count, 0);
-  // November (the current month): fees exceed the minimum, no top-up.
-  assert.deepEqual([month(result, '2026-11').moov_cost_cents, month(result, '2026-11').moov_minimum_topup_cents], [60000, 0]);
+  // September: two payouts cost $0.25 + $0.40, not $500.00.
+  assert.equal(month(result, '2026-09').moov_cost_cents, 65);
+  assert.equal(month(result, '2026-09').provider_cost_cents, 65);
+  assert.equal(month(result, '2026-09').profit_cents, -65);
+  // November (the current month): the fees themselves.
+  assert.equal(month(result, '2026-11').moov_cost_cents, 60000);
   assert.equal(month(result, '2026-11').profit_cents, 90000 - 60000);
 
-  assert.equal(result.totals.moov_minimum_topup_cents, 50000 - 65 + 50000);
-  assert.equal(result.totals.moov_cost_cents, 50000 + 50000 + 60000);
+  assert.equal(result.totals.moov_cost_cents, 65 + 60000);
   assert.equal(result.totals.checkalt_cost_cents, 68);
-  assert.equal(result.totals.provider_cost_cents, 160068);
+  assert.equal(result.totals.provider_cost_cents, 68 + 65 + 60000);
   assert.equal(result.totals.revenue_cents, 120000);
-  assert.equal(result.totals.profit_cents, 120000 - 160068);
-  // The top-up belongs to no organization: organizations plus the top-up is the total.
+  assert.equal(result.totals.profit_cents, 120000 - 60133);
+  // The top-up key stays on months and totals and is always 0; tenant rows never carried it.
+  for (const row of [result.totals, ...result.months]) assert.equal(row.moov_minimum_topup_cents, 0);
   for (const row of result.tenants) assert.equal('moov_minimum_topup_cents' in row, false);
-  const tenantCost = result.tenants.reduce((sum, row) => sum + row.provider_cost_cents, 0);
-  assert.equal(tenantCost, 68 + 25 + 40 + 60000);
-  assert.equal(tenantCost + result.totals.moov_minimum_topup_cents, result.totals.provider_cost_cents);
-  // Months add up to the totals, key by key.
-  for (const key of ['revenue_cents', 'provider_cost_cents', 'profit_cents', 'volume_cents', 'payout_count', 'transfer_count', 'check_count',
-    'next_day_count', 'same_day_count', 'checkalt_cost_cents', 'moov_cost_cents', 'moov_minimum_topup_cents', 'fees_cents', 'transfer_fees_cents']) {
-    assert.equal(result.months.reduce((sum, m) => sum + m[key], 0), result.totals[key], key);
+  // The organizations add up to the total, key by key, and so do the months.
+  const KEYS = ['revenue_cents', 'provider_cost_cents', 'profit_cents', 'volume_cents', 'payout_count', 'transfer_count', 'check_count',
+    'next_day_count', 'same_day_count', 'checkalt_cost_cents', 'moov_cost_cents', 'check_processing_cost_cents', 'disbursement_cost_cents',
+    'fees_cents', 'transfer_fees_cents'];
+  assert.equal(result.tenants.reduce((sum, row) => sum + row.provider_cost_cents, 0), result.totals.provider_cost_cents);
+  for (const key of KEYS) {
+    assert.equal(result.tenants.reduce((sum, row) => sum + row[key], 0), result.totals[key], `tenants ${key}`);
+    assert.equal(result.months.reduce((sum, m) => sum + m[key], 0), result.totals[key], `months ${key}`);
   }
+  assert.equal(result.months.reduce((sum, m) => sum + m.moov_minimum_topup_cents, 0), 0);
+  // The two cost columns: each row's provider cost is exactly check processing plus disbursements.
+  for (const row of [result.totals, ...result.months, ...result.tenants]) {
+    assert.equal(row.check_processing_cost_cents, row.checkalt_cost_cents);
+    assert.equal(row.disbursement_cost_cents, row.moov_cost_cents);
+    assert.equal(row.provider_cost_cents, row.check_processing_cost_cents + row.disbursement_cost_cents);
+    assert.equal(row.profit_cents, row.revenue_cents - row.provider_cost_cents);
+  }
+});
+
+test('the monthly minimums are information only: shown in cost_basis, applied nowhere', async () => {
+  // One next-day payout in the month: far under both minimums.
+  const { result } = await pnl({
+    payments: [settled({ amount_cents: 5000, settled_at: at('2026-11-02T00:00:00Z') })],
+    transfers: [sendLeg({ speed: 'standard', completed_at: at('2026-11-10T00:00:00Z') })],
+    deposits: [deposit({ submitted_at: at('2026-11-20T00:00:00Z') })],
+  });
+  assert.deepEqual(result.cost_basis.provider_minimums, { deposit_cents: 100000, transfer_cents: 50000 });
+  assert.equal(result.cost_basis.rates[0].checkalt_monthly_minimum_cents, 100000);
+  assert.equal(result.cost_basis.rates[0].moov_monthly_minimum_cents, 50000);
+  assert.ok(result.cost_basis.notes.some((note) => /monthly minimums .* not included in provider cost or profit/.test(note)));
+  assert.equal(result.cost_basis.notes.some((note) => /top-up|minimum applies/.test(note)), false);
+  assert.deepEqual(Object.keys(result.cost_basis), ['estimated', 'rates', 'provider_minimums', 'notes']);
+  assert.equal(result.totals.checkalt_cost_cents, 68);
+  assert.equal(result.totals.moov_cost_cents, 25);
+  assert.equal(result.totals.provider_cost_cents, 93);
+  assert.equal(result.totals.profit_cents, 5000 - 93);
+  assert.equal(result.totals.moov_minimum_topup_cents, 0);
+  assert.deepEqual(result.months.map((m) => [m.month, m.provider_cost_cents, m.moov_minimum_topup_cents]), [['2026-11', 93, 0]]);
+  // No shortfall, minimum or top-up amount appears on any row.
+  for (const row of [result.totals, ...result.months, ...result.tenants]) {
+    for (const [key, value] of Object.entries(row)) {
+      if (typeof value === 'number') assert.ok(Math.abs(value) < 49000 || key === 'volume_cents', `${key} ${value}`);
+    }
+  }
+  // Nothing to read: the minimums are still only information.
+  const empty = await pnlPayload(null, { environment: 'production', now: NOW });
+  assert.deepEqual(empty.cost_basis.provider_minimums, { deposit_cents: 100000, transfer_cents: 50000 });
+  assert.equal(empty.totals.provider_cost_cents, 0);
+  assert.equal(empty.totals.moov_minimum_topup_cents, 0);
+  assert.equal(empty.totals.profit_cents, 0);
+});
+
+test('the owner\'s November 2026 shape: 22 checks and 7 completed bank payouts cost their per-item fees only', async () => {
+  const { result } = await pnl({
+    payments: [settled({ amount_cents: 27100, settled_at: at('2026-11-12T00:00:00Z') })],
+    deposits: Array.from({ length: 22 }, (_, i) => deposit({
+      id: `nov-check-${i}`, check_intake_item_id: `nov-item-${i}`, checkalt_reference: `nov-ref-${i}`, submitted_at: at('2026-11-03T00:00:00Z'),
+    })),
+    transfers: [
+      ...Array.from({ length: 4 }, (_, i) => sendLeg({ id: `nov-next-${i}`, speed: 'standard', amount_cents: 500000, completed_at: at('2026-11-10T00:00:00Z') })),
+      ...Array.from({ length: 3 }, (_, i) => sendLeg({ id: `nov-same-${i}`, speed: 'same_day', amount_cents: 500000, completed_at: at('2026-11-18T00:00:00Z') })),
+    ],
+  });
+  const november = month(result, '2026-11');
+  assert.deepEqual(result.months.map((m) => m.month), ['2026-11']);
+  assert.equal(november.check_count, 22);
+  assert.equal(november.payout_count, 7);
+  assert.deepEqual([november.next_day_count, november.same_day_count], [4, 3]);
+  assert.equal(november.checkalt_cost_cents, 22 * 68);
+  assert.equal(november.moov_cost_cents, 4 * 25 + 3 * 40);
+  assert.equal(november.provider_cost_cents, 22 * 68 + 4 * 25 + 3 * 40);
+  assert.equal(november.provider_cost_cents, 1716);
+  assert.ok(november.provider_cost_cents < 50000);
+  assert.equal(november.moov_minimum_topup_cents, 0);
+  assert.equal(november.profit_cents, 27100 - 1716);
+  assert.deepEqual(result.totals, (({ month: _month, ...rest }) => rest)(november));
+  assert.equal(tenantRow(result, TENANT).provider_cost_cents, 1716);
+  assert.equal(tenantRow(result, TENANT).profit_cents, 27100 - 1716);
 });
 
 test('the window starts on the first day of the month 11 months back, also on the 29th to the 31st', async () => {
@@ -733,7 +804,9 @@ test('response shape: every key the panel reads is still there, with the new fie
     deposits: [deposit({ submitted_at: at('2026-11-20T00:00:00Z') })],
   });
   const OLD = ['fees_cents', 'transfer_fees_cents', 'provider_cost_cents', 'volume_cents', 'transfer_count', 'revenue_cents', 'profit_cents'];
-  const NEW = ['checkalt_cost_cents', 'moov_cost_cents', 'check_count', 'payout_count', 'next_day_count', 'same_day_count'];
+  // The last two are the two cost columns under names that do not name a provider.
+  const NEW = ['checkalt_cost_cents', 'moov_cost_cents', 'check_count', 'payout_count', 'next_day_count', 'same_day_count',
+    'check_processing_cost_cents', 'disbursement_cost_cents'];
   assert.deepEqual(Object.keys(result), ['since', 'until', 'totals', 'months', 'tenants', 'cost_basis', 'sources_unavailable']);
   assert.deepEqual(Object.keys(result.totals), [...OLD, ...NEW, 'moov_minimum_topup_cents']);
   assert.deepEqual(Object.keys(result.months[0]), ['month', ...OLD, ...NEW, 'moov_minimum_topup_cents']);
@@ -752,7 +825,7 @@ test('response shape: every key the panel reads is still there, with the new fie
   assert.deepEqual(result.cost_basis.rates, PROVIDER_COST_RATES.map((row) => ({ ...row })));
   assert.ok(Array.isArray(result.cost_basis.notes) && result.cost_basis.notes.length > 0);
   // User-facing text never names the payment provider.
-  for (const note of result.cost_basis.notes) assert.equal(/moov/i.test(note), false, note);
+  for (const note of result.cost_basis.notes) assert.equal(/moov|check ?alt/i.test(note), false, note);
   // The panel's own row type is unchanged and still satisfied.
   const panel = fs.readFileSync(path.join(ROOT, 'src/components/admin/PlatformTreasuryPanel.tsx'), 'utf8');
   for (const key of OLD) assert.match(panel, new RegExp(`\\b${key}: number;`), key);

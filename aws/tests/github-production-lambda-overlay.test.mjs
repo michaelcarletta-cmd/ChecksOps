@@ -175,7 +175,22 @@ const PLATFORM_PNL_APPLIED_BYTES = PLATFORM_PNL_COLLECTED.members['providers/par
 // apply; PLATFORM_PNL_COLLECTED_RELS names the row in either state.
 const PLATFORM_PNL_COLLECTED_APPLIED_REL = 'aws/tests/fixtures/production-platform-pnl-collected-applied-manifest-2026-11-26.json';
 const PLATFORM_PNL_COLLECTED_RELS = [PLATFORM_PNL_COLLECTED_REL, PLATFORM_PNL_COLLECTED_APPLIED_REL];
-const platformPnlCollectedRecordPre = (plan) => {
+// Platform Finance P&L provider cost from per-item fees only (2026-11-26, planning only): the member REPLACE again, from
+// the bytes the P&L from collected money apply put live (production run 45744634576). Tests of that workstream read the
+// row as it stood before this plan (platformPnlPerItemCostPre, which the two helpers below apply first), and
+// PLATFORM_PNL_COLLECTED_APPLIED_BYTES (this plan's live_sha256) stands for main's bytes there.
+const PLATFORM_PNL_PER_ITEM_COST_REL = 'aws/tests/fixtures/production-platform-pnl-per-item-cost-manifest-2026-11-26.json';
+const PLATFORM_PNL_PER_ITEM_COST = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_PER_ITEM_COST_REL), 'utf8'));
+const PLATFORM_PNL_COLLECTED_APPLIED_BYTES = PLATFORM_PNL_PER_ITEM_COST.members['providers/parity/platform-finance.mjs'].live_sha256;
+const platformPnlPerItemCostPre = (plan) => {
+  for (const [name, entry] of Object.entries(PLATFORM_PNL_PER_ITEM_COST.members)) {
+    if (plan.members[name]?.manifest !== PLATFORM_PNL_PER_ITEM_COST_REL) continue;
+    plan.members[name] = { ...plan.members[name], accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+  }
+  return plan;
+};
+const platformPnlCollectedRecordPre = (plan0) => {
+  const plan = platformPnlPerItemCostPre(plan0);
   const record = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_COLLECTED_APPLIED_REL), 'utf8'));
   for (const [name, entry] of Object.entries(record.members)) {
     if (plan.members[name]?.manifest !== PLATFORM_PNL_COLLECTED_APPLIED_REL) continue;
@@ -3328,7 +3343,9 @@ test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expec
   // The row has moved on to the P&L from collected money REPLACE (2026-11-26, planning only) from the bytes this
   // plan applied: the row is read as it stood before that plan, and those applied bytes stand for main's.
   // (Applied 2026-11-26, production run 45744634576: the applied record is read back to the plan it applied.)
-  const collectedMovedOn = PLATFORM_PNL_COLLECTED_RELS.includes(PLAN.members[MEMBER].manifest);
+  // (The row has since moved on again, to the per-item provider cost REPLACE, 2026-11-26, planning only: that plan is
+  // read back first.)
+  const collectedMovedOn = PLATFORM_PNL_COLLECTED_RELS.includes(platformPnlPerItemCostPre(structuredClone(PLAN)).members[MEMBER].manifest);
   const onMain = sha(`aws/functions/api/${MEMBER}`);
   const row = platformPnlCollectedPre(structuredClone(PLAN)).members[MEMBER];
   assert.equal(row.operation, 'replace');
@@ -3342,6 +3359,8 @@ test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expec
   // The bytes this plan applied were the P&L from collected money REPLACE's expected live bytes: READY for it as it
   // stood before its apply (production run 45744634576), and main's bytes ALREADY_ACCEPTED.
   const beforeCollectedApply = platformPnlCollectedRecordPre(structuredClone(PLAN));
+  // (Replayed with main's bytes, as other replays are: the guard accepts only main's bytes.)
+  beforeCollectedApply.members[MEMBER] = { ...beforeCollectedApply.members[MEMBER], accepted_sha256: onMain };
   const done = await run(inspect, { root: ROOT, plan: beforeCollectedApply, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
   if (collectedMovedOn) {
     assert.equal(beforeCollectedApply.members[MEMBER].expected_live_sha256, LIVE);
@@ -11415,7 +11434,13 @@ test('Platform Finance P&L from collected money (2026-11-26, planning only): pro
   const MEMBER = 'providers/parity/platform-finance.mjs';
   const PREVIOUS_REL = 'aws/tests/fixtures/production-platform-pnl-applied-manifest-2026-10-23.json';
   const manifest = PLATFORM_PNL_COLLECTED;
+  // The row has moved on to the per-item provider cost REPLACE (2026-11-26, planning only) from the bytes this plan
+  // applied (production run 45744634576): the row is read as it stood before that plan (rowBeforePerItem), and those
+  // applied bytes (accepted) stand for main's.
+  const perItemMovedOn = PLAN.members[MEMBER].manifest === PLATFORM_PNL_PER_ITEM_COST_REL;
   const onMain = sha(`aws/functions/api/${MEMBER}`);
+  const accepted = perItemMovedOn ? PLATFORM_PNL_COLLECTED_APPLIED_BYTES : onMain;
+  const rowBeforePerItem = platformPnlPerItemCostPre(structuredClone(PLAN)).members[MEMBER];
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS_REL), 'utf8'));
   const applied = previous.members[MEMBER].accepted_sha256;
   assert.equal(manifest.workstream_id, 'production-platform-pnl-collected');
@@ -11431,24 +11456,27 @@ test('Platform Finance P&L from collected money (2026-11-26, planning only): pro
   assert.match(previous.notes, /production apply run 40001351087 /);
   assert.match(previous.notes, /VERIFIED, 5b1ccfdb live/);
   assert.equal(previous.members[MEMBER].live_sha256, applied);
-  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: onMain, operation: 'replace', previous_manifest: PREVIOUS_REL } });
-  assert.notEqual(onMain, applied);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS_REL } });
+  assert.notEqual(accepted, applied);
   // No hold: no SQL before it.
   // Applied 2026-11-26 (production run 45744634576): the row expects main's bytes and names the applied record, which
   // chains to this planning manifest; read the row back as it stood before the apply.
   const record = JSON.parse(fs.readFileSync(path.join(ROOT, PLATFORM_PNL_COLLECTED_APPLIED_REL), 'utf8'));
-  const beforeApply = { ...PLAN.members[MEMBER], expected_live_sha256: manifest.members[MEMBER].live_sha256, manifest: record.members[MEMBER].previous_manifest };
-  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_REL });
+  const beforeApply = { ...rowBeforePerItem, expected_live_sha256: manifest.members[MEMBER].live_sha256, manifest: record.members[MEMBER].previous_manifest };
+  assert.deepEqual(beforeApply, { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_REL });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
-  assert.ok(PLAN.notes.includes(`${MEMBER} REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`${MEMBER} REPLACE ${applied.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes(`Manifest ${PLATFORM_PNL_COLLECTED_REL}. Nothing deployed.`));
   // Inspect (as the row stood before the apply): the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other
   // bytes a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   const planBeforeApply = platformPnlCollectedRecordPre(structuredClone(PLAN));
   assert.deepEqual(planBeforeApply.members[MEMBER], beforeApply);
-  const ready = await run(inspect, { root: ROOT, plan: planBeforeApply, inspectLive: liveFor(MEMBER, { sha256: applied }) });
+  // (Replayed with main's bytes, as other replays are: the guard accepts only main's bytes.)
+  const replay = structuredClone(planBeforeApply);
+  replay.members[MEMBER] = { ...beforeApply, accepted_sha256: onMain };
+  const ready = await run(inspect, { root: ROOT, plan: replay, inspectLive: liveFor(MEMBER, { sha256: applied }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
@@ -11469,8 +11497,8 @@ test('Platform Finance P&L from collected money (2026-11-26, planning only): pro
   assert.equal(record.deploy_authorized, false);
   assert.match(record.authorization, /^Record only \(2026-11-26\)/);
   assert.equal(record.live_lambda, 'checksops-production-prep-api');
-  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: PLATFORM_PNL_COLLECTED_REL } });
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_APPLIED_REL });
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: PLATFORM_PNL_COLLECTED_REL } });
+  assert.deepEqual(rowBeforePerItem, { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: null, manifest: PLATFORM_PNL_COLLECTED_APPLIED_REL });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) }),
@@ -11487,4 +11515,68 @@ test('Platform Finance P&L from collected money (2026-11-26, planning only): pro
     assert.ok(record.notes.includes(text), text);
   }
   assert.ok(PLAN.notes.includes(`Recorded in ${PLATFORM_PNL_COLLECTED_APPLIED_REL}. The row expects the applied bytes and names the Platform Finance P&L from collected money applied record.`));
+});
+
+test('Platform Finance P&L provider cost from per-item fees only (2026-11-26, planning only): providers/parity/platform-finance.mjs REPLACE from the bytes production run 45744634576 applied, no SQL', async () => {
+  const MEMBER = 'providers/parity/platform-finance.mjs';
+  const PREVIOUS_REL = PLATFORM_PNL_COLLECTED_APPLIED_REL;
+  const manifest = PLATFORM_PNL_PER_ITEM_COST;
+  const onMain = sha(`aws/functions/api/${MEMBER}`);
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS_REL), 'utf8'));
+  const applied = previous.members[MEMBER].accepted_sha256;
+  assert.equal(manifest.workstream_id, 'production-platform-pnl-per-item-cost');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-26\)\. Planning only/);
+  assert.equal(manifest.live_lambda, 'checksops-production-prep-api');
+  for (const text of ['Show 2 column for provider costs, one for disbursements ( $0.25 and $0.40) and one for check processing ($0.68).',
+    'The minimum for Check Alt is $1000 and Moov is $500 but we still charge our fees and collect profit based on the fees above',
+    'apply no monthly minimum', 'provider_cost_cents = checkalt_cost_cents + moov_cost_cents', 'profit_cents = revenue_cents - provider_cost_cents',
+    'check_processing_cost_cents', 'disbursement_cost_cents', 'moov_minimum_topup_cents stays on months and totals', 'always 0',
+    'checkalt_monthly_minimum_cents 100000', 'moov_monthly_minimum_cents 50000', 'provider_minimums', 'no key is removed', '45744634576',
+    'read-only production overlay inspect must confirm', 'No frontend change', 'No release-lock change', 'Nothing deployed.']) {
+    assert.ok(manifest.notes.includes(text), text);
+  }
+  // From the bytes the P&L from collected money apply put live (VERIFIED, production run 45744634576) to main's bytes.
+  assert.match(previous.notes, /apply run 45744634576 /);
+  assert.match(previous.notes, /read dee78f11 live, VERIFIED/);
+  assert.equal(previous.members[MEMBER].live_sha256, applied);
+  assert.equal(applied, PLATFORM_PNL_COLLECTED_APPLIED_BYTES);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: applied, accepted_sha256: onMain, operation: 'replace', previous_manifest: PREVIOUS_REL } });
+  assert.notEqual(onMain, applied);
+  // No hold: no SQL before it.
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: applied, sql_before: null, manifest: PLATFORM_PNL_PER_ITEM_COST_REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
+  assert.ok(manifest.notes.includes(`${MEMBER} REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`${MEMBER} REPLACE ${applied.slice(0, 8)} -> ${onMain.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`Manifest ${PLATFORM_PNL_PER_ITEM_COST_REL}. Nothing deployed.`));
+  // Read back, the row is the applied record's.
+  assert.deepEqual(platformPnlPerItemCostPre(structuredClone(PLAN)).members[MEMBER],
+    { operation: 'replace', accepted_sha256: applied, expected_live_sha256: applied, sql_before: null, manifest: PREVIOUS_REL });
+  // Inspect: the applied bytes are READY, main's bytes ALREADY_ACCEPTED, any other bytes a reconciliation stop.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: applied }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED');
+  const accuracyBytes = PLATFORM_PNL_APPLIED_BYTES;
+  const preAccuracyBytes = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-platform-pnl-manifest-2026-10-23.json'), 'utf8')).members[MEMBER].live_sha256;
+  for (const older of [accuracyBytes, preAccuracyBytes, 'c'.repeat(64)]) {
+    assert.notEqual(older, applied);
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: older }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      older,
+    );
+  }
+  // The read model still precedes the production handler that imports it, and imports nothing new.
+  assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('providers/production/platform-finance.mjs'));
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.deepEqual(localImports(source, MEMBER).sort(), ['data.mjs', 'provider-secrets.mjs', 'providers/parity/caller.mjs', 'providers/parity/moov-client.mjs', 'sandbox-credentials.mjs']);
+  // No monthly minimum is computed any more: the top-up key is the constant 0 and the minimums are only named in the rates.
+  assert.match(source, /moov_minimum_topup_cents: 0 \}/);
+  for (const gone of ['topupByMonth', 'firstPayoutMonth', 'pnlNextMonth']) assert.equal(source.includes(gone), false, gone);
+  for (const key of ['check_processing_cost_cents', 'disbursement_cost_cents', 'checkalt_monthly_minimum_cents: 100000', 'moov_monthly_minimum_cents: 50000', 'provider_minimums']) {
+    assert.ok(source.includes(key), key);
+  }
 });
