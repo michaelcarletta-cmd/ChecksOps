@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { RefreshCw, Wallet, TrendingUp, TrendingDown, DollarSign, Landmark } from "lucide-react";
+import { AlertTriangle, RefreshCw, Wallet, TrendingUp, TrendingDown, DollarSign, Landmark } from "lucide-react";
 
 type Bucket = {
   fees_cents: number;
@@ -16,6 +16,30 @@ type Bucket = {
   transfer_count: number;
   revenue_cents: number;
   profit_cents: number;
+  // Provider cost in its two parts. The provider-named keys are the same values under the
+  // response's older names and are read only as a fallback.
+  check_processing_cost_cents?: number;
+  disbursement_cost_cents?: number;
+  checkalt_cost_cents?: number;
+  moov_cost_cents?: number;
+  check_count?: number;
+  payout_count?: number;
+  next_day_count?: number;
+  same_day_count?: number;
+};
+
+type CostRates = {
+  effective_from?: string;
+  checkalt_per_check_cents?: number;
+  moov_next_day_cents?: number;
+  moov_same_day_cents?: number;
+};
+
+type CostBasis = {
+  estimated?: boolean;
+  rates?: CostRates[];
+  provider_minimums?: { deposit_cents?: number; transfer_cents?: number };
+  notes?: string[];
 };
 
 type TreasuryResponse = {
@@ -41,6 +65,8 @@ type TreasuryResponse = {
     totals: Bucket;
     months: (Bucket & { month: string })[];
     tenants: (Bucket & { tenant_id: string; tenant_name: string })[];
+    cost_basis?: CostBasis;
+    sources_unavailable?: string[];
   };
 };
 
@@ -59,6 +85,72 @@ const monthLabel = (m: string) => {
     year: "numeric",
   });
 };
+
+const isAmount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** A cost part, or null when the response does not carry it (shown as a dash, never as $0). */
+const checkCost = (b?: Bucket | null) =>
+  isAmount(b?.check_processing_cost_cents)
+    ? b.check_processing_cost_cents
+    : isAmount(b?.checkalt_cost_cents)
+      ? b.checkalt_cost_cents
+      : null;
+const disbursementCost = (b?: Bucket | null) =>
+  isAmount(b?.disbursement_cost_cents)
+    ? b.disbursement_cost_cents
+    : isAmount(b?.moov_cost_cents)
+      ? b.moov_cost_cents
+      : null;
+const partMoney = (cents: number | null) => (cents === null ? "—" : money(cents));
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const payoutCount = (b?: Bucket | null) =>
+  isAmount(b?.payout_count) ? b.payout_count : Number(b?.transfer_count ?? 0);
+
+/** A per-item rate: under a dollar in cents, otherwise as money. */
+const rateLabel = (cents: number) => (cents >= 0 && cents < 100 ? `${cents}¢` : money(cents));
+
+/** The rate row in force today; a date before the first row takes the first row. */
+const currentRates = (rates?: CostRates[]) => {
+  if (!Array.isArray(rates) || !rates.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  let picked = rates[0];
+  for (const row of rates) {
+    if (row?.effective_from && row.effective_from <= today) picked = row;
+  }
+  return picked ?? null;
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  tenants: "organizations",
+  collected_revenue: "collected revenue",
+  payouts: "payouts",
+  check_deposits: "check processing",
+  test_account_flag: "the test organization filter",
+};
+const sourceLabel = (source: string) => SOURCE_LABELS[source] ?? String(source).replace(/[-_]/g, " ");
+
+/** The check and disbursement counts behind a row's cost, as muted sub-lines. */
+function CostCells({ row }: { row: Bucket }) {
+  const speeds = [
+    isAmount(row.next_day_count) ? `${row.next_day_count} next day` : null,
+    isAmount(row.same_day_count) ? `${row.same_day_count} same day` : null,
+  ].filter(Boolean);
+  return (
+    <>
+      <TableCell className="text-right">
+        {partMoney(checkCost(row))}
+        {isAmount(row.check_count) && (
+          <p className="text-xs text-muted-foreground">{plural(row.check_count, "check", "checks")}</p>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        {partMoney(disbursementCost(row))}
+        {speeds.length > 0 && <p className="text-xs text-muted-foreground">{speeds.join(" · ")}</p>}
+      </TableCell>
+    </>
+  );
+}
 
 /**
  * The platform's own balance and profit & loss — the master-merchant mirror of
@@ -102,6 +194,24 @@ export function PlatformTreasuryPanel() {
   const totals = pnl?.totals;
   const margin =
     totals && totals.revenue_cents > 0 ? (totals.profit_cents / totals.revenue_cents) * 100 : 0;
+  const totalCheckCost = checkCost(totals);
+  const totalDisbursementCost = disbursementCost(totals);
+  const hasCostSplit = totalCheckCost !== null || totalDisbursementCost !== null;
+  const unavailable = Array.isArray(pnl?.sources_unavailable) ? pnl.sources_unavailable : [];
+  const minimums = pnl?.cost_basis?.provider_minimums;
+  const minimumParts = [
+    isAmount(minimums?.deposit_cents) ? `check processing ${money(minimums.deposit_cents)}` : null,
+    isAmount(minimums?.transfer_cents) ? `disbursements ${money(minimums.transfer_cents)}` : null,
+  ].filter(Boolean);
+  const rates = currentRates(pnl?.cost_basis?.rates);
+  const disbursementRates = [
+    isAmount(rates?.moov_next_day_cents) ? `${rateLabel(rates.moov_next_day_cents)} next-day` : null,
+    isAmount(rates?.moov_same_day_cents) ? `${rateLabel(rates.moov_same_day_cents)} same-day` : null,
+  ].filter(Boolean);
+  const rateParts = [
+    isAmount(rates?.checkalt_per_check_cents) ? `${rateLabel(rates.checkalt_per_check_cents)} per check` : null,
+    disbursementRates.length ? `${disbursementRates.join(" / ")} per disbursement` : null,
+  ].filter(Boolean);
 
   return (
     <div className="space-y-6">
@@ -179,6 +289,18 @@ export function PlatformTreasuryPanel() {
       </Card>
 
       {/* Profit & loss */}
+      {unavailable.length > 0 && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-500"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Some figures could not be loaded: {unavailable.map(sourceLabel).join(", ")}. Amounts that depend on
+            them may show as $0.00 or be incomplete — do not read them as final.
+          </p>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -187,7 +309,7 @@ export function PlatformTreasuryPanel() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{money(totals?.revenue_cents ?? 0)}</div>
-            <p className="text-xs text-muted-foreground">Platform fees billed to organizations</p>
+            <p className="text-xs text-muted-foreground">Collected from organizations</p>
           </CardContent>
         </Card>
         <Card>
@@ -197,7 +319,11 @@ export function PlatformTreasuryPanel() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{money(totals?.provider_cost_cents ?? 0)}</div>
-            <p className="text-xs text-muted-foreground">Money out to the payment rails</p>
+            <p className="text-xs text-muted-foreground">
+              {hasCostSplit
+                ? `Check processing ${partMoney(totalCheckCost)} · Disbursements ${partMoney(totalDisbursementCost)}`
+                : "Check processing and disbursements"}
+            </p>
           </CardContent>
         </Card>
         <Card className="border-primary/20 bg-primary/5">
@@ -208,7 +334,7 @@ export function PlatformTreasuryPanel() {
           <CardContent>
             <div className="text-2xl font-bold text-primary">{money(totals?.profit_cents ?? 0)}</div>
             <div className="mt-1 flex items-center gap-2">
-              <p className="text-xs text-muted-foreground">Revenue less rail cost</p>
+              <p className="text-xs text-muted-foreground">Revenue less provider cost</p>
               <Badge variant="outline" className="h-4 py-0 font-mono text-[10px]">
                 {margin.toFixed(1)}%
               </Badge>
@@ -223,16 +349,30 @@ export function PlatformTreasuryPanel() {
           <CardContent>
             <div className="text-2xl font-bold">{money(totals?.volume_cents ?? 0)}</div>
             <p className="text-xs text-muted-foreground">
-              {totals?.transfer_count ?? 0} transfers moved
+              {plural(payoutCount(totals), "payout", "payouts")} completed
             </p>
           </CardContent>
         </Card>
       </div>
 
+      {(rateParts.length > 0 || minimumParts.length > 0) && (
+        <div className="space-y-1 text-xs text-muted-foreground">
+          {rateParts.length > 0 && (
+            <p>Provider cost is estimated from per-item rates: {rateParts.join("; ")}.</p>
+          )}
+          {minimumParts.length > 0 && (
+            <p>
+              Provider monthly minimums — {minimumParts.join(", ")} — are not included in provider cost or
+              profit.
+            </p>
+          )}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Monthly profit &amp; loss</CardTitle>
-          <CardDescription>Last 12 months of money in and money out across all organizations.</CardDescription>
+          <CardDescription>Last 12 months: collected revenue, provider cost per item, and completed payouts.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {pnl?.months?.length ? (
@@ -241,7 +381,8 @@ export function PlatformTreasuryPanel() {
                 <TableRow>
                   <TableHead>Month</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Provider cost</TableHead>
+                  <TableHead className="text-right">Check processing</TableHead>
+                  <TableHead className="text-right">Disbursements</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
                   <TableHead className="text-right">Volume</TableHead>
                 </TableRow>
@@ -251,19 +392,22 @@ export function PlatformTreasuryPanel() {
                   <TableRow key={m.month}>
                     <TableCell>{monthLabel(m.month)}</TableCell>
                     <TableCell className="text-right">{money(m.revenue_cents)}</TableCell>
-                    <TableCell className="text-right">{money(m.provider_cost_cents)}</TableCell>
+                    <CostCells row={m} />
                     <TableCell
                       className={`text-right font-medium ${m.profit_cents >= 0 ? "text-emerald-500" : "text-rose-500"}`}
                     >
                       {money(m.profit_cents)}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">{money(m.volume_cents)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {money(m.volume_cents)}
+                      <p className="text-xs">{plural(payoutCount(m), "payout", "payouts")}</p>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           ) : (
-            <p className="text-sm text-muted-foreground">No billed activity in the last 12 months yet.</p>
+            <p className="text-sm text-muted-foreground">No collected revenue, checks or payouts in the last 12 months yet.</p>
           )}
         </CardContent>
       </Card>
@@ -271,7 +415,7 @@ export function PlatformTreasuryPanel() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Profit by organization</CardTitle>
-          <CardDescription>Which organizations contribute the platform's earnings.</CardDescription>
+          <CardDescription>Collected revenue, provider cost and completed payouts per organization over the same 12 months.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {pnl?.tenants?.length ? (
@@ -280,9 +424,10 @@ export function PlatformTreasuryPanel() {
                 <TableRow>
                   <TableHead>Organization</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Provider cost</TableHead>
+                  <TableHead className="text-right">Check processing</TableHead>
+                  <TableHead className="text-right">Disbursements</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
-                  <TableHead className="text-right">Transfers</TableHead>
+                  <TableHead className="text-right">Volume</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -290,13 +435,16 @@ export function PlatformTreasuryPanel() {
                   <TableRow key={t.tenant_id}>
                     <TableCell className="max-w-[220px] truncate">{t.tenant_name}</TableCell>
                     <TableCell className="text-right">{money(t.revenue_cents)}</TableCell>
-                    <TableCell className="text-right">{money(t.provider_cost_cents)}</TableCell>
+                    <CostCells row={t} />
                     <TableCell
                       className={`text-right font-medium ${t.profit_cents >= 0 ? "text-emerald-500" : "text-rose-500"}`}
                     >
                       {money(t.profit_cents)}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">{t.transfer_count}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {money(t.volume_cents)}
+                      <p className="text-xs">{plural(payoutCount(t), "payout", "payouts")}</p>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
