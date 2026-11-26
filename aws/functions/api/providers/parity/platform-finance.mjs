@@ -415,10 +415,17 @@ export const PNL_EXCLUDED_TRANSFER_STATUSES = Object.freeze(['ready', 'failed', 
 /**
  * What the providers charge ChecksOps. Owner, 2026-11-25/26: "Check alt charges $0.68 per
  * check." "Moov charges $500 minimum. They charge $0.25 for next day disbursement and $0.40
- * for same day". Confirmed with the owner: the $500 minimum is per calendar month; the
- * $0.25 / $0.40 apply to payouts to recipients only (not fee collection pulls, not wallet
- * funding); the top-up to the minimum is not split by tenant and is its own line on the
- * month and on the total. No overheads (AWS and the like) are counted.
+ * for same day". Confirmed with the owner: the $0.25 / $0.40 apply to payouts to recipients
+ * only (not fee collection pulls, not wallet funding). No overheads (AWS and the like) are
+ * counted.
+ *
+ * Owner, 2026-11-26, after reading the production page: "Show 2 column for provider costs,
+ * one for disbursements ( $0.25 and $0.40) and one for check processing ($0.68). The minimum
+ * for Check Alt is $1000 and Moov is $500 but we still charge our fees and collect profit
+ * based on the fees above". So provider cost and profit are the per-item fees only. The two
+ * monthly minimums (checkalt_monthly_minimum_cents, moov_monthly_minimum_cents) are recorded
+ * here for information and are NOT applied: they are never added to a cost or taken from
+ * profit, on a month, a total or an organization.
  *
  * Dated rows, oldest first: a rate change is a new row with its effective_from (UTC day),
  * never an edit of an old one. An item is priced by the row in force on its own date.
@@ -429,6 +436,8 @@ export const PROVIDER_COST_RATES = Object.freeze([
     checkalt_per_check_cents: 68,
     moov_next_day_cents: 25,
     moov_same_day_cents: 40,
+    // Informational only, not applied (owner 2026-11-26).
+    checkalt_monthly_minimum_cents: 100000,
     moov_monthly_minimum_cents: 50000,
   }),
 ]);
@@ -540,11 +549,6 @@ const pnlTimeOf = (value) => {
   return (value instanceof Date ? value : new Date(value)).getTime();
 };
 
-const pnlNextMonth = (month) => {
-  const [year, index] = month.split('-').map(Number);
-  return new Date(Date.UTC(year, index, 1)).toISOString().slice(0, 7);
-};
-
 const pnlBucket = () => ({
   revenue_cents: 0,
   checkalt_cost_cents: 0,
@@ -560,11 +564,18 @@ const pnlBucket = () => ({
  * The row the panel reads. The keys it already had keep their place with the new meaning:
  * fees_cents is the collected revenue, transfer_fees_cents is 0 (no per-transfer fee is
  * collected apart from the settled obligations) and transfer_count is the payout count.
- * topupCents is null on tenant rows: the monthly minimum is not attributed to a tenant.
+ *
+ * Provider cost is the per-item fees only, in two parts: checkalt_cost_cents (check
+ * processing, 68c per check) and moov_cost_cents (disbursements, 25c / 40c per completed bank
+ * leg). check_processing_cost_cents and disbursement_cost_cents are the same two values under
+ * names that do not name a provider, for the screen's two cost columns.
+ *
+ * moov_minimum_topup_cents is kept on months and totals (withTopupKey) so the response keys
+ * stay as they were, and is always 0: the providers' monthly minimums are not part of
+ * provider cost or profit (owner 2026-11-26). Tenant rows never carried the key.
  */
-function pnlShape(bucket, topupCents = null) {
-  const moov = bucket.moov_cost_cents + (topupCents || 0);
-  const providerCost = bucket.checkalt_cost_cents + moov;
+function pnlShape(bucket, withTopupKey = false) {
+  const providerCost = bucket.checkalt_cost_cents + bucket.moov_cost_cents;
   return {
     fees_cents: bucket.revenue_cents,
     transfer_fees_cents: 0,
@@ -574,26 +585,35 @@ function pnlShape(bucket, topupCents = null) {
     revenue_cents: bucket.revenue_cents,
     profit_cents: bucket.revenue_cents - providerCost,
     checkalt_cost_cents: bucket.checkalt_cost_cents,
-    moov_cost_cents: moov,
+    moov_cost_cents: bucket.moov_cost_cents,
     check_count: bucket.check_count,
     payout_count: bucket.payout_count,
     next_day_count: bucket.next_day_count,
     same_day_count: bucket.same_day_count,
-    ...(topupCents === null ? {} : { moov_minimum_topup_cents: topupCents }),
+    check_processing_cost_cents: bucket.checkalt_cost_cents,
+    disbursement_cost_cents: bucket.moov_cost_cents,
+    ...(withTopupKey ? { moov_minimum_topup_cents: 0 } : {}),
   };
 }
 
-function pnlCostBasis() {
+function pnlCostBasis(at) {
+  const current = providerCostRatesAt(at);
   return {
     estimated: true,
     rates: PROVIDER_COST_RATES.map((row) => ({ ...row })),
+    // Informational: what the providers' monthly minimums are on the window's last day. Not
+    // applied anywhere and no shortfall is computed.
+    provider_minimums: {
+      deposit_cents: current.checkalt_monthly_minimum_cents,
+      transfer_cents: current.moov_monthly_minimum_cents,
+    },
     notes: [
       'Provider cost is an estimate from the rates above, not the provider invoices.',
       'Revenue is money collected: settled tenant billing obligations by settlement date; the $1.00 bank verification debits are not revenue.',
       'Volume and payout count are completed payouts to recipients, each counted once; the legs of one payout add up to its amount.',
       'Payout fee: one per completed send leg that is an ACH credit to a bank, by delivery speed; a leg to a wallet has none.',
       'Check fee: one per check submitted for deposit, counted once at its first submission.',
-      'The monthly minimum applies from the first month with a completed payout in the window through the current month; its top-up is not attributed to any organization.',
+      'Provider cost is the check fees plus the payout fees. The providers\' monthly minimums are shown for information only: they are not included in provider cost or profit.',
       'No overheads are counted.',
     ],
   };
@@ -641,10 +661,10 @@ export async function pnlPayload(client, { environment = null, now = new Date() 
     return {
       since: sinceIso,
       until: untilIso,
-      totals: pnlShape(pnlBucket(), 0),
+      totals: pnlShape(pnlBucket(), true),
       months: [],
       tenants: [],
-      cost_basis: pnlCostBasis(),
+      cost_basis: pnlCostBasis(window.until),
       sources_unavailable: [...PNL_SOURCES],
     };
   }
@@ -726,7 +746,6 @@ export async function pnlPayload(client, { environment = null, now = new Date() 
   }
 
   const payoutFirstLeg = new Map();
-  let firstPayoutMonth = null;
   for (const leg of legs || []) {
     if (!PNL_SEND_LEG_ROLES.includes(leg.leg_role)) continue;
     if (!pnlTransferIsCompleted(leg)) continue;
@@ -743,8 +762,6 @@ export async function pnlPayload(client, { environment = null, now = new Date() 
       if (speed === 'same_day') bucket.same_day_count += 1;
       if (speed === 'next_day') bucket.next_day_count += 1;
     }
-    const month = pnlMonthOf(at);
-    if (firstPayoutMonth === null || month < firstPayoutMonth) firstPayoutMonth = month;
     const key = pnlPayoutKey(leg);
     const first = payoutFirstLeg.get(key);
     if (!first || pnlTimeOf(at) < pnlTimeOf(first.at)) payoutFirstLeg.set(key, { at, tenantId: leg.tenant_id });
@@ -774,20 +791,11 @@ export async function pnlPayload(client, { environment = null, now = new Date() 
     }
   }
 
-  // The monthly minimum: from the first month with a completed payout through the current
-  // month, never for a month before the payout provider was in use.
-  const topupByMonth = new Map();
-  if (firstPayoutMonth) {
-    const currentMonth = pnlMonthOf(window.until);
-    for (let month = firstPayoutMonth; month <= currentMonth; month = pnlNextMonth(month)) {
-      const minimum = providerCostRatesAt(`${month}-01T00:00:00Z`).moov_monthly_minimum_cents;
-      topupByMonth.set(month, Math.max(0, minimum - bump(byMonth, month).moov_cost_cents));
-    }
-  }
-
+  // No monthly minimum is applied (owner 2026-11-26): a month, an organization and the total
+  // cost only their own per-item fees, so the organizations' provider cost adds up to the total.
   const months = [...byMonth.entries()]
     .sort(([left], [right]) => (left < right ? -1 : 1))
-    .map(([month, bucket]) => ({ month, ...pnlShape(bucket, topupByMonth.get(month) ?? 0) }));
+    .map(([month, bucket]) => ({ month, ...pnlShape(bucket, true) }));
   const tenantRows = [...byTenant.entries()]
     .map(([id, bucket]) => ({ tenant_id: id, tenant_name: nameById.get(id) ?? 'Unassigned', ...pnlShape(bucket) }))
     .sort((left, right) => right.revenue_cents - left.revenue_cents);
@@ -795,14 +803,14 @@ export async function pnlPayload(client, { environment = null, now = new Date() 
   for (const bucket of byMonth.values()) {
     for (const key of Object.keys(sum)) sum[key] += bucket[key];
   }
-  const totals = pnlShape(sum, [...topupByMonth.values()].reduce((acc, cents) => acc + cents, 0));
+  const totals = pnlShape(sum, true);
   return {
     since: sinceIso,
     until: untilIso,
     totals,
     months,
     tenants: tenantRows,
-    cost_basis: pnlCostBasis(),
+    cost_basis: pnlCostBasis(window.until),
     sources_unavailable: unavailable,
   };
 }
